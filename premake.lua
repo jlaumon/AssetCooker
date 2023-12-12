@@ -10,12 +10,14 @@ solution "AssetCooker"
         symbols "On"
         editandcontinue "On"
         dpiawareness "HighPerMonitor"
+		cppdialect "C++20"
         
         defines
         {
             "_CRT_SECURE_NO_WARNINGS",
             "STR_DEFINE_STR32",
             "STR_SUPPORT_STD_STRING=0",
+			"IMGUI_USER_CONFIG=<ImGuiConfig.h>"
         }
 
         filter { "toolset:msc*" }
@@ -26,7 +28,7 @@ solution "AssetCooker"
             }
 
         filter { "configurations:Debug" }
-            
+            defines "ASSERTS_ENABLED"
 
         filter {}
         
