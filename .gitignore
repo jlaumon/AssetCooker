@@ -1,0 +1,5 @@
+.vs/
+obj/
+imgui.ini
+bin/
+enc_temp_folder/
