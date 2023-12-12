@@ -1,12 +1,12 @@
-solution "EmptyProject"
+solution "AssetCooker"
 	
 	platforms { "x64" }
 	configurations { "Debug", "Release" }
-	startproject "EmptyProject"
+	startproject "AssetCooker"
 
-	project "EmptyProject"
+	project "AssetCooker"
 
-        kind "ConsoleApp"
+        kind "WindowedApp"
         symbols "On"
         editandcontinue "On"
         dpiawareness "HighPerMonitor"
