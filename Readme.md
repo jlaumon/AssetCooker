@@ -1,5 +1,1 @@
-- Get the .zip from github
-- Change project name in premake.lua
-- Run init_repo.sh to init a git repo and get all the submodules (can use git bash)
-- Change imgui branch to docking
-- Run premake.bat
+Work in progress - nothing to see.
