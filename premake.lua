@@ -49,6 +49,8 @@ solution "AssetCooker"
             "thirdparty/Str/**.cpp",
             "thirdparty/Str/**.natvis",
             "thirdparty/icons/**.h",
+            "thirdparty/unordered_dense/include/ankerl/unordered_dense.h",
+            "thirdparty/WindowsHModular/include/**.h",
         }
 		
 		includedirs 
@@ -57,6 +59,8 @@ solution "AssetCooker"
             "thirdparty",
             "thirdparty/imgui",
             "thirdparty/imgui/backends",
+            "thirdparty/unordered_dense/include",
+			"thirdparty/WindowsHModular/include",
         }
         
         links
