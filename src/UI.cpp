@@ -1,8 +1,8 @@
+#include "App.h"
+#include "UI.h"
 
-#include <UI.h>
-#include <App.h>
-#include <imgui/imgui.h>
-#include <imgui_impl_dx11.h>
+#include "imgui.h"
+#include "imgui_impl_dx11.h"
 
 ImGuiStyle gStyle               = {};
 
@@ -11,11 +11,11 @@ struct UIScale
 	static constexpr float cMin = 0.4f;
 	static constexpr float cMax = 3.0f;
 
-	float FromDPI      = 1.0f;
-	float FromSettings = 1.0f;
-	bool  NeedUpdate   = true;
+	float mFromDPI      = 1.0f;
+	float mFromSettings = 1.0f;
+	bool  mNeedUpdate   = true;
 
-	float GetFinalScale() const { return FromDPI * FromSettings; }
+	float GetFinalScale() const { return mFromDPI * mFromSettings; }
 };
 
 UIScale gUIScale;
@@ -24,11 +24,11 @@ UIScale gUIScale;
 // Set the DPI scale.
 void gUISetDPIScale(float inDPIScale)
 {
-	if (inDPIScale == gUIScale.FromDPI)
+	if (inDPIScale == gUIScale.mFromDPI)
 		return;
 
-	gUIScale.FromDPI = inDPIScale;
-	gUIScale.NeedUpdate = true;
+	gUIScale.mFromDPI = inDPIScale;
+	gUIScale.mNeedUpdate = true;
 }
 
 
@@ -36,19 +36,19 @@ void gUISetDPIScale(float inDPIScale)
 void gUISetScale(float inScale)
 {
 	float scale = gClamp(inScale, UIScale::cMin, UIScale::cMax);
-	if (scale == gUIScale.FromSettings)
+	if (scale == gUIScale.mFromSettings)
 		return;
 
-	gUIScale.FromSettings = scale;
-	gUIScale.NeedUpdate   = true;
+	gUIScale.mFromSettings = scale;
+	gUIScale.mNeedUpdate   = true;
 }
 
 
 void gUIUpdate()
 {
-	if (gUIScale.NeedUpdate)
+	if (gUIScale.mNeedUpdate)
 	{
-		gUIScale.NeedUpdate = false;
+		gUIScale.mNeedUpdate = false;
 
 		ImGui::GetStyle() = gStyle;
 		ImGui::GetStyle().ScaleAllSizes(gUIScale.GetFinalScale());
@@ -84,7 +84,7 @@ void gUIDrawMainMenuBar()
 
 		if (ImGui::BeginMenu("Settings"))
 		{
-			float ui_scale = gUIScale.FromSettings;
+			float ui_scale = gUIScale.mFromSettings;
 			if (ImGui::DragFloat("UI Scale", &ui_scale, 0.01f, UIScale::cMin, UIScale::cMax, "%.1f"))
 				gUISetScale(ui_scale);
 
@@ -106,8 +106,10 @@ void gUIDrawMain()
 		ImGuiWindowFlags_NoResize | 
 		ImGuiWindowFlags_NoTitleBar | 
 		ImGuiWindowFlags_NoFocusOnAppearing | 
-		ImGuiWindowFlags_NoBringToFrontOnFocus | 
-		ImGuiWindowFlags_MenuBar);
+		ImGuiWindowFlags_NoBringToFrontOnFocus);
 
 	ImGui::End();
+
+	gApp.mLog.Draw();
+
 }

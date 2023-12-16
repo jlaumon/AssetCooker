@@ -1,22 +1,43 @@
-#include <App.h>
+#include "App.h"
+#include "Debug.h"
 
-bool gExitRequested = false;
-bool gExitReady = false;
+#include "win32/window.h"
 
-void gRequestExit()
+void App::Init(void* inHwnd)
 {
-	gExitRequested = true;
+	mMainWindowHwnd = inHwnd;
+}
+
+
+void App::RequestExit()
+{
+	mExitRequested = true;
 
 	// At the moment we're ready immediately, but in the future we'll need to save cooking state which might take a long time.
-	gExitReady = true;
+	mExitReady = true;
 }
 
-bool gIsExitRequested()
+bool App::IsExitRequested()
 {
-	return gExitRequested;
+	return mExitRequested;
 }
 
-bool gIsExitReady()
+bool App::IsExitReady()
 {
-	return gExitReady;
+	return mExitReady;
+}
+
+
+void App::FatalError(const std::string& inMessage)
+{
+	// Make sure a single thread triggers the pop-up.
+	static std::mutex blocker;
+	blocker.lock();
+
+	if (gIsDebuggerAttached())
+		breakpoint;
+	else
+		MessageBoxA(mMainWindowHwnd, inMessage.c_str(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
+
+	exit(1);
 }

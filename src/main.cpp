@@ -12,8 +12,10 @@
 #include <d3d11.h>
 #include <tchar.h>
 
-#include <UI.h>
-#include <App.h>
+#include "UI.h"
+#include "App.h"
+#include "Debug.h"
+#include "FileSystem.h"
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -43,13 +45,11 @@ int WinMain(
 	::RegisterClassExW(&wc);
 	HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui DirectX11 Example", WS_OVERLAPPEDWINDOW, 100, 100, 1600, 1600, nullptr, nullptr, wc.hInstance, nullptr);
 
+	gApp.Init(hwnd);
+
 	// Initialize Direct3D
 	if (!CreateDeviceD3D(hwnd))
-	{
-		CleanupDeviceD3D();
-		::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-		return 1;
-	}
+		gApp.FatalError("Failed to create D3D device - " + GetLastErrorString());
 
 	// Show the window
 	::ShowWindow(hwnd, SW_SHOWDEFAULT);
@@ -109,8 +109,11 @@ int WinMain(
 	// Our state
 	bool show_demo_window = true;
 
+	FileRepo repo;
+	repo.Init("C:/");
+
 	// Main loop
-	while (!gIsExitReady())
+	while (!gApp.IsExitReady())
 	{
 		// Poll and handle messages (inputs, window resize, etc.)
 		// See the WndProc() function below for our to dispatch events to the Win32 backend.
@@ -120,7 +123,7 @@ int WinMain(
 			::TranslateMessage(&msg);
 			::DispatchMessage(&msg);
 		}
-		if (gIsExitReady())
+		if (gApp.IsExitReady())
 			break;
 
 		// Handle window resize (we don't resize directly in the WM_SIZE handler)
@@ -263,7 +266,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		::PostQuitMessage(0);
 		[[fallthrough]];
 	case WM_QUIT:
-		gRequestExit();
+		gApp.RequestExit();
 		return 0;
 	case WM_DPICHANGED:
 
