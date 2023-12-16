@@ -3,3 +3,8 @@ obj/
 imgui.ini
 bin/
 enc_temp_folder/
+imgui_log.txt
+AssetCooker.sln
+AssetCooker.vcxproj
+AssetCooker.vcxproj.filters
+AssetCooker.vcxproj.user
