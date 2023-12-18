@@ -10,13 +10,13 @@ enum class LogType : uint8
 
 struct Log
 {
-	static constexpr std::string_view cErrorTag = "[error]";
+	static constexpr StringView  cErrorTag = "[error]";
 
-	void Add(std::string_view inString, LogType inType = LogType::Normal);
+	void Add(StringView inString, LogType inType = LogType::Normal);
 	void Clear();
 	void Draw();
 	
-	std::vector<std::string_view> mLines;
-	StringPool                    mStringPool;
-	ImGuiTextFilter               mFilter;
+	std::vector<StringView> mLines;
+	StringPool              mStringPool;
+	ImGuiTextFilter         mFilter;
 };

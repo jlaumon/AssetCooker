@@ -1,8 +1,7 @@
 #pragma once
-#include "Core.h"
-#include "memory"
-#include <span>
+#include "Strings.h"
 #include <vector>
+#include <memory>
 
 // Simple linear allocator for strings.
 struct StringPool
@@ -12,7 +11,7 @@ struct StringPool
 	size_t                               mLastChunkSize     = 0;
 	size_t                               mLastChunkCapacity = 0;
 
-	std::span<char> Allocate(size_t inSize)
+	MutStringView Allocate(size_t inSize)
 	{
 		// Add one for the null terminator.
 		size_t alloc_size = inSize + 1;
@@ -39,12 +38,12 @@ struct StringPool
 		return { str, inSize };
 	}
 
-	std::string_view AllocateCopy(std::string_view inString)
+	MutStringView AllocateCopy(StringView inString)
 	{
-		auto span = Allocate(inString.size());
+		auto storage = Allocate(inString.size());
 
-		inString.copy(span.data(), inString.size());
+		gAppend(storage, inString);
 
-		return { span.data(), span.size() };
+		return storage;
 	}
 };

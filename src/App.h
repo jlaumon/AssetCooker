@@ -7,7 +7,7 @@
 
 constexpr const char* cAppName = "Asset Cooker";
 
-
+// Manages the initialization and life time of the application.
 struct App
 {
 	void Init(void* inHwnd);
@@ -16,7 +16,7 @@ struct App
 	bool IsExitRequested();
 	bool IsExitReady();
 
-	void FatalError(const std::string& inMessage);
+	void FatalError(StringView inMessage);
 
 	Log   mLog;
 	void* mMainWindowHwnd = nullptr;

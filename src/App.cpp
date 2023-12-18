@@ -28,8 +28,10 @@ bool App::IsExitReady()
 }
 
 
-void App::FatalError(const std::string& inMessage)
+void App::FatalError(StringView inMessage)
 {
+	gAssert(gIsNullTerminated(inMessage));
+
 	// Make sure a single thread triggers the pop-up.
 	static std::mutex blocker;
 	blocker.lock();
@@ -37,7 +39,7 @@ void App::FatalError(const std::string& inMessage)
 	if (gIsDebuggerAttached())
 		breakpoint;
 	else
-		MessageBoxA(mMainWindowHwnd, inMessage.c_str(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
+		MessageBoxA(mMainWindowHwnd, inMessage.data(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
 
 	exit(1);
 }

@@ -2,9 +2,9 @@
 
 #include "imgui.h"
 
-void Log::Add(std::string_view inString, LogType inType)
+void Log::Add(StringView inString, LogType inType)
 {
-	// TODO: split into lines otherwise can't use imgui clipper
+	// TODO: check inString for end of lines and split it, otherwise can't use imgui clipper
 	// TODO: add date/time (optionally)
 
 	size_t alloc_size = inString.size();
@@ -12,22 +12,17 @@ void Log::Add(std::string_view inString, LogType inType)
 	if (inType == LogType::Error)
 		alloc_size += cErrorTag.size();
 
-	auto  storage = mStringPool.Allocate(alloc_size);
-	char* ptr     = storage.data();
+	auto line_storage = mStringPool.Allocate(alloc_size);
+	auto line_ptr     = line_storage;
 
 	if (inType == LogType::Error)
-	{
-		cErrorTag.copy(ptr, cErrorTag.size());
-		ptr += cErrorTag.size();
-	}
+		line_ptr = gAppend(line_ptr, cErrorTag);
 
-	inString.copy(ptr, inString.size());
-	ptr += inString.size();
+	line_ptr = gAppend(line_ptr, inString);
 
-	// StringPool always allocates one more char for the \0.
-	gAssert(ptr == storage.data() + storage.size() && *ptr == 0);
+	gAssert(line_ptr.empty()); // Should have allocated exactly what's needed.
 
-	mLines.push_back({ storage.data(), storage.size() });
+	mLines.push_back(line_storage);
 }
 
 
@@ -74,7 +69,7 @@ void Log::Draw()
 			{
 				for (int line_no = clipper.DisplayStart; line_no < clipper.DisplayEnd; line_no++)
 				{
-					std::string_view line = mLines[line_no];
+					StringView line = mLines[line_no];
 					ImGui::TextUnformatted(line.data(), line.data() + line.size());
 				}
 			}

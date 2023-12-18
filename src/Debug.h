@@ -1,7 +1,7 @@
 #pragma once
-#include <string>
+#include "Strings.h"
 
 bool gIsDebuggerAttached();
 
 // Get last error as a string.
-std::string GetLastErrorString();
+String GetLastErrorString();
