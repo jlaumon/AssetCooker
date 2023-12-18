@@ -11,6 +11,8 @@ solution "AssetCooker"
         editandcontinue "On"
         dpiawareness "HighPerMonitor"
 		cppdialect "C++20"
+		exceptionhandling "Off"
+		flags "MultiProcessorCompile"
         
         defines
         {
