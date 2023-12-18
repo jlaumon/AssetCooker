@@ -58,7 +58,7 @@ template <  class Key,
 			class KeyEqual = std::equal_to<Key>,
 			class AllocatorOrContainer = std::allocator<std::pair<Key, T>>,
 			class Bucket =  ankerl::unordered_dense::bucket_type::standard>
-using hash_map = ankerl::unordered_dense::map<Key, T, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
+using HashMap = ankerl::unordered_dense::map<Key, T, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
 
 template <  class Key,
 			class T,
@@ -66,23 +66,23 @@ template <  class Key,
 			class KeyEqual = std::equal_to<Key>,
 			class AllocatorOrContainer = std::allocator<std::pair<Key, T>>,
 			class Bucket = ankerl::unordered_dense::bucket_type::standard>
-using segmented_hash_map = ankerl::unordered_dense::segmented_map<Key, T, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
+using SegmentedHashMap = ankerl::unordered_dense::segmented_map<Key, T, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
 
 template <  class Key,
 			class Hash = ankerl::unordered_dense::hash<Key>,
 			class KeyEqual = std::equal_to<Key>,
 			class AllocatorOrContainer = std::allocator<Key>,
 			class Bucket = ankerl::unordered_dense::bucket_type::standard>
-using set = ankerl::unordered_dense::set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
+using HashSet = ankerl::unordered_dense::set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
 
 template <  class Key,
 			class Hash = ankerl::unordered_dense::hash<Key>,
 			class KeyEqual = std::equal_to<Key>,
 			class AllocatorOrContainer = std::allocator<Key>,
 			class Bucket = ankerl::unordered_dense::bucket_type::standard>
-using segmented_hash_set = ankerl::unordered_dense::segmented_set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
+using SegmentedHashSet = ankerl::unordered_dense::segmented_set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
 
 template <	typename T,
 			typename Allocator = std::allocator<T>,
 			size_t MaxSegmentSizeBytes = 4096>
-using segmented_vector = ankerl::unordered_dense::segmented_vector<T, Allocator, MaxSegmentSizeBytes>;
+using SegmentedVector = ankerl::unordered_dense::segmented_vector<T, Allocator, MaxSegmentSizeBytes>;
