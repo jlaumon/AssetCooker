@@ -12,7 +12,10 @@ struct Log
 {
 	static constexpr StringView  cErrorTag = "[error]";
 
+	// TODO: Support formatting directly here. Use std::vformat_to and make StringPool support std::back_inserter
+
 	void Add(StringView inString, LogType inType = LogType::Normal);
+	void AddError(StringView inString) { Add(inString, LogType::Error); }
 	void Clear();
 	void Draw();
 	

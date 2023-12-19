@@ -19,7 +19,7 @@
 struct DeferDummy {};
 template <class F> struct Deferrer { F f; ~Deferrer() { f(); } };
 template <class F> Deferrer<F> operator*(DeferDummy, F f) { return {f}; }
-#define defer auto TOKEN_PASTE(deferred, __LINE__) = defer_dummy{} *[&]()
+#define defer auto TOKEN_PASTE(deferred, __LINE__) = DeferDummy{} *[&]()
 
 // Inherit to disallow copies.
 struct NoCopy
@@ -86,3 +86,17 @@ template <	typename T,
 			typename Allocator = std::allocator<T>,
 			size_t MaxSegmentSizeBytes = 4096>
 using SegmentedVector = ankerl::unordered_dense::segmented_vector<T, Allocator, MaxSegmentSizeBytes>;
+
+// Hash helper to hash entire structs.
+// Only use on structs/classes that don't contain any padding.
+template <typename taType>
+struct MemoryHasher
+{
+	using is_avalanching = void; // mark class as high quality avalanching hash
+
+    uint64 operator()(const taType& inValue) const noexcept
+	{
+		static_assert(std::has_unique_object_representations_v<taType>);
+        return ankerl::unordered_dense::detail::wyhash::hash(&inValue, sizeof(inValue));
+    }
+};

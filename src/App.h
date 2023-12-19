@@ -18,10 +18,13 @@ struct App
 
 	void FatalError(StringView inMessage);
 
-	Log   mLog;
-	void* mMainWindowHwnd = nullptr;
-	bool  mExitRequested  = false;
-	bool  mExitReady      = false;
+	void Log(StringView inMessage)		{ mLog.Add(inMessage); }
+	void LogError(StringView inMessage)	{ mLog.Add(inMessage, LogType::Error); }
+
+	struct Log mLog;
+	void*      mMainWindowHwnd = nullptr;
+	bool       mExitRequested  = false;
+	bool       mExitReady      = false;
 };
 
 inline App gApp;
