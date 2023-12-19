@@ -10,17 +10,17 @@ void Log::Add(StringView inString, LogType inType)
 	size_t alloc_size = inString.size();
 
 	if (inType == LogType::Error)
-		alloc_size += cErrorTag.size();
+		alloc_size += cErrorTag.size() + 1;
 
 	auto line_storage = mStringPool.Allocate(alloc_size);
 	auto line_ptr     = line_storage;
 
 	if (inType == LogType::Error)
-		line_ptr = gAppend(line_ptr, cErrorTag);
+		line_ptr = gAppend(line_ptr, cErrorTag, " ");
 
 	line_ptr = gAppend(line_ptr, inString);
 
-	gAssert(line_ptr.empty()); // Should have allocated exactly what's needed.
+	gAssert(line_ptr.size() == 1 && line_ptr[0] == 0); // Should have allocated exactly what's needed, only the null terminator is left.
 
 	mLines.push_back(line_storage);
 }
@@ -30,6 +30,24 @@ void Log::Clear()
 {
 	mLines.clear();
 	mStringPool = {};
+}
+
+
+static void sDrawLine(StringView inLine)
+{
+	ImVec4 color;
+    bool has_color = false;
+	if (inLine.starts_with(Log::cErrorTag))
+	{
+		color     = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+		has_color = true;
+	}
+
+    if (has_color)
+        ImGui::PushStyleColor(ImGuiCol_Text, color);
+    ImGui::TextUnformatted(inLine.data(), inLine.data() + inLine.size());
+    if (has_color)
+        ImGui::PopStyleColor();
 }
 
 
@@ -58,7 +76,7 @@ void Log::Draw()
 			for (auto line : mLines)
 			{
 				if (mFilter.PassFilter(line.data(), line.data() + line.size()))
-					ImGui::TextUnformatted(line.data(), line.data() + line.size());
+					sDrawLine(line);
 			}
 		}
 		else
@@ -69,8 +87,7 @@ void Log::Draw()
 			{
 				for (int line_no = clipper.DisplayStart; line_no < clipper.DisplayEnd; line_no++)
 				{
-					StringView line = mLines[line_no];
-					ImGui::TextUnformatted(line.data(), line.data() + line.size());
+					sDrawLine(mLines[line_no]);
 				}
 			}
 			clipper.End();

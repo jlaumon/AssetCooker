@@ -1,6 +1,7 @@
 #include "App.h"
 #include "UI.h"
 
+#include "FileSystem.h"
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
 
@@ -91,6 +92,14 @@ void gUIDrawMainMenuBar()
 			ImGui::EndMenu();
 		}
 
+		if (ImGui::BeginMenu("Debug"))
+		{
+			ImGui::MenuItem("Log Scan Activity", nullptr, &gApp.mLogScanActivity);
+			ImGui::MenuItem("Log Disk Activity", nullptr, &gApp.mLogDiskActivity);
+
+			ImGui::EndMenu();
+		}
+
 		ImGui::EndMainMenuBar();
 	}
 }
@@ -110,6 +119,5 @@ void gUIDrawMain()
 
 	ImGui::End();
 
-	gApp.mLog.Draw();
-
+	gApp.DrawLog();
 }

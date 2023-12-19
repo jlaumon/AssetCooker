@@ -18,13 +18,19 @@ struct App
 
 	void FatalError(StringView inMessage);
 
-	void Log(StringView inMessage)		{ mLog.Add(inMessage); }
-	void LogError(StringView inMessage)	{ mLog.Add(inMessage, LogType::Error); }
+	void Log(StringView inMessage, LogType inType = LogType::Normal);
+	void LogError(StringView inMessage)									{ Log(inMessage, LogType::Error); }
 
+	void DrawLog();
+
+	void*      mMainWindowHwnd  = nullptr;
+	bool       mExitRequested   = false;
+	bool       mExitReady       = false;
+	bool       mLogScanActivity = false;
+	bool       mLogDiskActivity = false;
+private:
+	std::mutex mLogMutex;
 	struct Log mLog;
-	void*      mMainWindowHwnd = nullptr;
-	bool       mExitRequested  = false;
-	bool       mExitReady      = false;
 };
 
 inline App gApp;

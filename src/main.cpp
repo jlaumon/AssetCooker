@@ -109,8 +109,11 @@ int WinMain(
 	// Our state
 	bool show_demo_window = true;
 
-	FileRepo repo;
-	repo.Init("C:/");
+	gApp.mLogScanActivity = true;
+
+	gFileSystem.AddRepo("Source", "C:/");
+
+	gFileSystem.StartMonitoring();
 
 	// Main loop
 	while (!gApp.IsExitReady())
@@ -134,7 +137,6 @@ int WinMain(
 			g_ResizeWidth = g_ResizeHeight = 0;
 			CreateRenderTarget();
 		}
-
 
 		gUIUpdate();
 
@@ -164,6 +166,8 @@ int WinMain(
 
 		g_pSwapChain->Present(1, 0); // Present with vsync
 	}
+
+	gFileSystem.StopMonitoring();
 
 	// Cleanup
 	ImGui_ImplDX11_Shutdown();

@@ -32,10 +32,10 @@ struct StringPool
 		char* str = mChunks.back().get() + mLastChunkSize;
 		mLastChunkSize += alloc_size;
 
-		// Put the null terminator.
+		// Put the null terminator preemptively.
 		str[inSize] = 0;
 
-		return { str, inSize };
+		return { str, alloc_size };
 	}
 
 	MutStringView AllocateCopy(StringView inString)

@@ -113,64 +113,75 @@ static uint16 sFindExtensionPos(uint16 inNamePos, StringView inPath)
 
 FileInfo::FileInfo(FileID inID, StringView inPath, FileRefNumber inRefNumber, bool inIsDirectory)
 	: mID(inID)
+	, mIsDirectory(inIsDirectory)
 	, mNamePos(sFindNamePos(inPath))
 	, mExtensionPos(sFindExtensionPos(mNamePos, inPath))
 	, mRefNumber(inRefNumber)
 	, mPath(inPath)
-	, mIsDirectory(inIsDirectory)
 {
 
 }
 
 
-
-void FileRepo::Init(StringView inRootPath)
+	 
+FileRepo::FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath)
 {
-	StringView root_path = gNormalizePath(mStringPool.AllocateCopy(inRootPath));
+	// Store the index and short name.
+	mIndex     = inIndex;
+	mShortName = mStringPool.AllocateCopy(inShortName);
 
-	if (root_path.size() < 3 || !gIsAlpha(root_path[0]) || !gStartsWith(root_path.substr(1), R"(:\)"))
-		gApp.FatalError(std::format("Failed to init FileRepo {} - Root Path should start with a drive letter.", root_path));
+	// Check and store the root path.
+	{
+		StringView root_path = gNormalizePath(mStringPool.AllocateCopy(inRootPath));
 
-	// Remove the trailing slash.
-	if (gEndsWith(root_path, "\\"))
-		root_path.remove_suffix(1);
+		if (root_path.size() < 3 || !gIsAlpha(root_path[0]) || !gStartsWith(root_path.substr(1), R"(:\)"))
+			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Root Path should start with a drive letter.", mShortName, root_path));
 
-	mRootPath         = root_path;
+		// Remove the trailing slash.
+		if (gEndsWith(root_path, "\\"))
+			root_path.remove_suffix(1);
+
+		mRootPath = root_path;
+	}
+
 	char drive_letter = mRootPath[0];
 
 	// Get a handle to the drive.
 	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
 	mDriveHandle = CreateFileA(std::format(R"(\\.\{}:)", drive_letter).c_str(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-	if (mDriveHandle == INVALID_HANDLE_VALUE)
+	if (!mDriveHandle.IsValid())
 		gApp.FatalError(std::format(R"(Failed to get handle to {}:\ - )", drive_letter) + GetLastErrorString());
 
-	USN_JOURNAL_DATA_V0 journal_data;
-	uint32				available_bytes;
-	if (!DeviceIoControl(mDriveHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &available_bytes, nullptr))
-		gApp.FatalError(std::format(R"(Failed to get USN journal for {}:\ - )", drive_letter) + GetLastErrorString());
-
-	gApp.mLog.Add(std::format(R"(Opened USN journal for {}:\. Max size: {})", drive_letter, gFormatSizeInBytes(journal_data.MaximumSize)));
-
+	//USN_JOURNAL_DATA_V0 journal_data;
+	//uint32				available_bytes;
+	//if (!DeviceIoControl(mDriveHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &available_bytes, nullptr))
+	//	gApp.FatalError(std::format(R"(Failed to get USN journal for {}:\ - )", drive_letter) + GetLastErrorString());
+	//gApp.Log(std::format(R"(Opened USN journal for {}:\. Max size: {})", drive_letter, gFormatSizeInBytes(journal_data.MaximumSize)));
 
 	// Get a handle to the root path.
-	mRootDirHandle = CreateFileA(mRootPath.data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
-	if (mRootDirHandle == INVALID_HANDLE_VALUE)
-		gApp.FatalError(std::format(R"(Failed to get handle to {} - )", mRootPath) + GetLastErrorString());
+	OwnedHandle root_dir_handle = CreateFileA(mRootPath.data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+	if (!root_dir_handle.IsValid())
+		gApp.FatalError(std::format("Failed to get handle to {}\\ - ", mRootPath) + GetLastErrorString());
 
 	// Get the FileReferenceNumber of the root dir.
 	FILE_ID_INFO file_info;
-	if (!GetFileInformationByHandleEx(mRootDirHandle, FileIdInfo, &file_info, sizeof(file_info)))
-		gApp.FatalError(std::format("Failed to get FileReferenceNumber for {} - ", mRootPath) + GetLastErrorString());
+	if (!GetFileInformationByHandleEx(root_dir_handle, FileIdInfo, &file_info, sizeof(file_info)))
+		gApp.FatalError(std::format("Failed to get FileReferenceNumber for {}\\ - ", mRootPath) + GetLastErrorString());
 
-	FileRefNumber file_ref_number = file_info.FileId;
+	// The root directory file info has an empty path (relative to mRootPath).
+	FileInfo& root_dir = AddFile(FileRefNumber(file_info.FileId), "", true);
 
-	FileInfo& root_dir = AddFile(FileRefNumber(file_info.FileId), mRootPath, true);
-	ScanDirectory(root_dir.mID);
+	gApp.Log(std::format("Initialized FileRepo {}\\", mRootPath));
+
+	// Start scanning the repo.
+	QueueScanDirectory(root_dir.mID);
 }
 
 
 FileInfo& FileRepo::AddFile(FileRefNumber inRefNumber, StringView inPath, bool inIsDirectory)
 {
+	std::lock_guard lock(mFilesMutex);
+
 	// Check if we already know this file.
 	auto [it, inserted] = mFilesByRefNumber.insert({ inRefNumber, {} });
 	if (inserted)
@@ -191,8 +202,22 @@ void FileRepo::ScanFile(FileID inFileID)
 
 void FileRepo::ScanDirectory(FileID inFileID)
 {
-	FileInfo&   dir        = GetFile(inFileID);
+	FileInfo& dir = GetFile(inFileID);
+	gAssert(dir.IsDirectory());
+
+	if (gApp.mLogScanActivity)
+		gApp.Log(std::format("Scanning directory {}\\{}", mRootPath, dir.mPath));
+
 	OwnedHandle dir_handle = OpenFileByRefNumber(dir.mRefNumber);
+
+	if (!dir_handle.IsValid())
+	{
+		// TODO: depending on error, we should probably re-queue for scan
+		if (gApp.mLogScanActivity)
+			gApp.LogError(std::format("Failed to open directory {}\\{}", mRootPath, dir.mPath));
+		return;
+	}
+
 
 	if (mScanDirBuffer == nullptr)
 		mScanDirBuffer = std::make_unique<uint8[]>(cScanDirBufferSize);
@@ -211,17 +236,19 @@ void FileRepo::ScanDirectory(FileID inFileID)
 			if (GetLastError() == ERROR_NO_MORE_FILES)
 				break; // Finished iterating, exit the loop.
 
-			gApp.FatalError(std::format("Enumerating directory {} failed - ", dir.mPath) + GetLastErrorString());
+			gApp.FatalError(std::format("Enumerating directory {}\\{} failed - ", mRootPath, dir.mPath) + GetLastErrorString());
 		}
 
 		// Next time keep iterating instead of restarting.
 		file_info_class = FileIdExtdDirectoryInfo;
 
 		// Iterate on entries in the buffer.
-		for (PFILE_ID_EXTD_DIR_INFO entry = (PFILE_ID_EXTD_DIR_INFO)mScanDirBuffer.get();
-			entry->NextEntryOffset != 0; 
-			entry = (PFILE_ID_EXTD_DIR_INFO)((uint8*)entry + entry->NextEntryOffset))
+		PFILE_ID_EXTD_DIR_INFO entry = (PFILE_ID_EXTD_DIR_INFO)mScanDirBuffer.get();
+		do
 		{
+			// Defer iterating to the next entry so that we can use continue.
+			defer { entry = (PFILE_ID_EXTD_DIR_INFO)((uint8*)entry + entry->NextEntryOffset); };
+
 			// Convert the filename to utf-8.
 			// TODO: test with a tiny buffer to make it fail.
 			char file_name_buffer[1024];
@@ -231,7 +258,7 @@ void FileRepo::ScanDirectory(FileID inFileID)
 			// If it fails, ignore the file.
 			if (file_name.empty())
 			{
-				gApp.LogError(std::format("Failed to convert a file name to utf-8 in directory {}", dir.mPath));
+				gApp.LogError(std::format("Failed to convert a file name to utf-8 in directory {}\\{}", mRootPath, dir.mPath));
 				gAssert(false); // Investigate why that would happen.
 				continue;
 			}
@@ -241,9 +268,17 @@ void FileRepo::ScanDirectory(FileID inFileID)
 				continue;
 
 			// Build the path of the file.
-			path = dir.mPath;
-			path += '\\';
-			path += file_name;
+			// If there's a parent dir path (ie. it's not the root dir), concatenate it.
+			if (!dir.mPath.empty())
+			{
+				path = dir.mPath;
+				path += '\\';
+				path += file_name;
+			}
+			else
+			{
+				path = file_name;
+			}
 
 			// Check if it's a directly.
 			const bool is_directory = (entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
@@ -251,10 +286,55 @@ void FileRepo::ScanDirectory(FileID inFileID)
 			// Add (or get) the file info.
 			FileInfo& file = AddFile(FileRefNumber(entry->FileId), path, is_directory);
 
+			if (gApp.mLogScanActivity)
+				gApp.Log(std::format("\tFound {}{}", file.GetName(), file.IsDirectory() ? " (dir)" : ""));
+
 			// TODO: read more attributes
-		}
+
+			if (is_directory)
+				QueueScanDirectory(file.mID);
+
+		} while (entry->NextEntryOffset != 0);
 	}
 }
+
+void FileRepo::QueueScanDirectory(FileID inFileID)
+{
+	{
+		std::lock_guard lock(mScanDirQueueMutex);
+		mScanDirQueue.push_back(inFileID);
+	}
+
+	// Make sure the scanning thread is awake.
+	gFileSystem.KickScanDirectoryThread();
+}
+
+
+bool FileRepo::ProcessScanDirectoryQueue()
+{
+	// How many directory to process in one go.
+	constexpr int cDirectoryScanPerCall = 10;
+
+	for (int i = 0; i < cDirectoryScanPerCall; ++i)
+	{
+		FileID dir_id;
+
+		{
+			std::lock_guard lock(mScanDirQueueMutex);
+
+			if (mScanDirQueue.empty())
+				return false;
+
+			dir_id = mScanDirQueue.back();
+			mScanDirQueue.pop_back();
+		}
+
+		ScanDirectory(dir_id);
+	}
+
+	return true;
+}
+
 
 OwnedHandle FileRepo::OpenFileByRefNumber(FileRefNumber inRefNumber) const
 {
@@ -265,10 +345,63 @@ OwnedHandle FileRepo::OpenFileByRefNumber(FileRefNumber inRefNumber) const
 
 	constexpr DWORD flags_and_attributes = 0
 		| FILE_FLAG_BACKUP_SEMANTICS	// Required to open directories.
-		//| FILE_FLAG_SEQUENTIAL_SCAN	 // Helps prefetching if we only read sequentially.
+		//| FILE_FLAG_SEQUENTIAL_SCAN	 // Helps prefetching if we only read sequentially. Useful if we want to hash the files?
 	;
 
+	// TODO: error checking, some errors are probably ok and some aren't
 	OwnedHandle handle = OpenFileById(mDriveHandle, &file_id_descriptor, FILE_GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, flags_and_attributes);
-	if (handle != INVALID_HANDLE_VALUE)
-		return handle;
+
+	return handle;
+}
+
+
+void FileSystem::StartMonitoring()
+{
+	// Start the directory scan thread.
+	mScanDirThread = std::jthread(std::bind_front(&FileSystem::ScanDirectoryThread, this));
+}
+
+void FileSystem::StopMonitoring()
+{
+	mScanDirThread.request_stop();
+	KickScanDirectoryThread();
+	mScanDirThread.join();
+}
+
+
+void FileSystem::AddRepo(StringView inShortName, StringView inRootPath)
+{
+	gAssert(!mScanDirThread.joinable()); // Can't add repos once the threads are started, it's not thread safe!
+
+	mRepos.emplace_back((uint32)mRepos.size(), inShortName, inRootPath);
+}
+
+
+void FileSystem::KickScanDirectoryThread()
+{
+	mScanDirThreadSignal.release();
+}
+
+
+void FileSystem::ScanDirectoryThread(std::stop_token inStopToken)
+{
+	while (!inStopToken.stop_requested())
+	{
+		// Wait until we know there's work to do.
+		mScanDirThreadSignal.acquire();
+
+		// Check every repo.
+		for (auto& repo : mRepos)
+		{
+			// Process the queue.
+			while (repo.ProcessScanDirectoryQueue())
+			{
+				if (inStopToken.stop_requested())
+					break;
+			}
+
+			if (inStopToken.stop_requested())
+				break;
+		}
+	}
 }

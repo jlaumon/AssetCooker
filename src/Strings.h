@@ -7,7 +7,14 @@
 #include <string>
 #include <format>
 
-// StringView class. Basically a std::span<const char>.
+
+// Mutable StringView. Size includes the null-terminator.
+using MutStringView = std::span<char>;
+
+// Mutable String. Allocates its own memory; size doesn't include the null-terminator.
+using String		= std::string;
+
+// StringView class. Size doesn't include the null-terminator.
 // Not just a std::string_view because an implicit constructor from MutStringView.
 struct StringView : public std::string_view
 {
@@ -21,17 +28,17 @@ struct StringView : public std::string_view
 	constexpr StringView& operator=(const StringView&)	= default;
 	constexpr StringView& operator=(StringView&&)		= default;
 
-	// Add constructor from std::span<char> (MutStringView) and std::string_view.
-	constexpr StringView(std::span<char> inString)		: std::string_view(inString.data(), inString.size()) {}
+	// Add implicit constructors from std::string_view, String and MutStringView.
 	constexpr StringView(std::string_view inString)		: std::string_view(inString) {}
-	constexpr StringView(const std::string& inString)	: std::string_view(inString) {}
+	constexpr StringView(const String& inString)		: std::string_view(inString) {}
+	constexpr StringView(MutStringView inString)		: std::string_view(inString.data(), inString.size())
+	{
+		// Don't include the null terminator if there's one.
+		if (!empty() && back() == 0)
+			remove_suffix(1);
+	}
 };
 
-// Mutable StringView.
-using MutStringView = std::span<char>;
-
-// MutableString. Allocates its own memory.
-using String		= std::string;
 
 // Return true if inString starts with inStart.
 constexpr bool gStartsWith(StringView inString, StringView inStart)
@@ -49,16 +56,31 @@ constexpr bool gEndsWith(StringView inString, StringView inEnd)
 constexpr bool gIsAlpha(char inChar) { return inChar >= 'A' && inChar < 'z'; }
 
 // Copy a string into a potentially larger one, and return a MutStringView for what remains.
-// eg. gAppend(gAppend(buffer, "hello"), "world") will write "helloworld" into buffer.
+// eg. next = gAppend(buffer, "hello") will write "hello" into buffer, and next will point after "hello".
 constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr)
 {
-	gAssert(inStr.size() <= ioDest.size());
+	// Assert if destination isn't large enough, but still make sure we don't overflow.
+	size_t dest_available_size = ioDest.size() - 1; // Keep 1 for null terminator.
+	gAssert(inStr.size() <= dest_available_size);
+	size_t copy_size = gMin(inStr.size(), dest_available_size);
 
-	for (size_t i = 0; i < inStr.size(); i++)
+	for (size_t i = 0; i < copy_size; i++)
 		ioDest[i] = inStr[i];
 
-	return { ioDest.data() + inStr.size(), ioDest.size() - inStr.size() };
+	// Add a null-terminator.
+	ioDest[copy_size] = 0;
+
+	return { ioDest.data() + copy_size, ioDest.size() - copy_size };
 }
+
+// Copy multiple string into a potentially larger one, and return a MutStringView for what remains.
+// eg. gAppend(buffer, "hello", "world") will write "helloworld" into buffer.
+template <class ...taArgs>
+constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr, taArgs... inArgs)
+{
+	return gAppend(gAppend(ioDest, inStr), inArgs...);
+}
+
 
 // Return true if this string view is null-terminated.
 // All strings allocated should ALWAYS be null-terminated, this is just checking if this is a sub-string view.
