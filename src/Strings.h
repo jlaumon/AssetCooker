@@ -55,6 +55,7 @@ constexpr bool gEndsWith(StringView inString, StringView inEnd)
 // Return true if characters is an alphabetical letter.
 constexpr bool gIsAlpha(char inChar) { return inChar >= 'A' && inChar < 'z'; }
 
+// TODO: rename to gStringCopy? gAppend is misleading since it writes at the beginning, not the end
 // Copy a string into a potentially larger one, and return a MutStringView for what remains.
 // eg. next = gAppend(buffer, "hello") will write "hello" into buffer, and next will point after "hello".
 constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr)
@@ -81,12 +82,17 @@ constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr, ta
 	return gAppend(gAppend(ioDest, inStr), inArgs...);
 }
 
+// Return a pointer to the end of a string view. StringView::end returns an iterator, and that's often annoying.
+constexpr const char* gEndPtr(StringView inString)
+{
+	return inString.data() + inString.size();
+}
 
 // Return true if this string view is null-terminated.
 // All strings allocated should ALWAYS be null-terminated, this is just checking if this is a sub-string view.
 constexpr bool gIsNullTerminated(StringView inString)
 {
-	return *(inString.data() + inString.size()) == 0;
+	return *gEndPtr(inString) == 0;
 }
 
 // Formatter for StringView.

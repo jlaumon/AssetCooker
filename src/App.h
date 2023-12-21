@@ -7,6 +7,13 @@
 
 constexpr const char* cAppName = "Asset Cooker";
 
+enum class LogLevel : uint8
+{
+	None,
+	Normal,
+	Verbose,
+};
+
 // Manages the initialization and life time of the application.
 struct App
 {
@@ -26,8 +33,8 @@ struct App
 	void*      mMainWindowHwnd  = nullptr;
 	bool       mExitRequested   = false;
 	bool       mExitReady       = false;
-	bool       mLogScanActivity = false;
-	bool       mLogDiskActivity = false;
+	LogLevel   mLogScanActivity = LogLevel::None;
+	LogLevel   mLogDiskActivity = LogLevel::None;
 private:
 	std::mutex mLogMutex;
 	struct Log mLog;

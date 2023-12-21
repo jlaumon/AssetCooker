@@ -5,8 +5,18 @@
 #include "win32/misc.h"
 #include "win32/file.h"
 #include "win32/io.h"
+#include "win32/threads.h"
 
 #include <format>
+#include <optional>
+#include <array>
+
+// These are not exactly the max path length allowed by Windows in all cases, but should be good enough.
+constexpr size_t cMaxPathSizeInBytesUTF16 = 32768 * sizeof(wchar_t);
+constexpr size_t cMaxPathSizeInBytesUTF8  = 32768 * 3ull;	// UTF8 can use up to 6 bytes per character, but let's suppose 3 is good enough on average.
+
+using PathBufferUTF16 = std::array<char, cMaxPathSizeInBytesUTF16>;
+using PathBufferUTF8  = std::array<char, cMaxPathSizeInBytesUTF8>;
 
 constexpr size_t operator ""_B(size_t inValue)	 { return inValue; }
 constexpr size_t operator ""_KiB(size_t inValue) { return inValue * 1024; }
@@ -38,22 +48,79 @@ constexpr MutStringView gNormalizePath(MutStringView ioPath)
 	return ioPath;
 }
 
-// Convert wide char string to utf8. Return an empty string on failure.
-MutStringView gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer)
+// Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
+std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer)
 {
-	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), ioBuffer.data(), (int)ioBuffer.size(), nullptr, nullptr);
+	// If a null terminator is included in the source, WideCharToMultiByte will also add it in the destination.
+	// Otherwise we'll need to add it manually.
+	bool source_is_null_terminated = (!inWString.empty() && inWString.back() == 0);
 
-	if (written_bytes == 0)
-		return {}; // Failed to convert.
+	int available_bytes = (int)ioBuffer.size();
 
-	if (written_bytes == (int)ioBuffer.size())
-		return {}; // Might be cropped, consider failed.
+	// If we need to add a null terminator, reserve 1 byte for it.
+	if (source_is_null_terminated)
+		available_bytes--;
 
-	// Don't count the null terminator in the result string view (if there's one).
-	if (ioBuffer[written_bytes] == 0)
-		written_bytes--;
+	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), ioBuffer.data(), available_bytes, nullptr, nullptr);
+
+	if (written_bytes == 0 && !inWString.empty())
+		return std::nullopt; // Failed to convert.
+
+	if (written_bytes == available_bytes)
+		return std::nullopt; // Might be cropped, consider failed.
+
+	// If there isn't a null terminator, add it.
+	if (!source_is_null_terminated)
+		ioBuffer[written_bytes + 1] = 0;
+	else
+		gAssert(ioBuffer[written_bytes] == 0); // Should already have a null terminator.
 
 	return ioBuffer.subspan(0, written_bytes);
+}
+
+
+// Set the name of the current thread.
+void gSetCurrentThreadName(const wchar_t* inName)
+{
+	SetThreadDescription(GetCurrentThread(), inName);
+}
+
+
+String gUSNReasonToString(uint32 inReason)
+{
+	String str;
+
+	if (inReason & USN_REASON_DATA_OVERWRITE				) str += "DATA_OVERWRITE | ";
+	if (inReason & USN_REASON_DATA_EXTEND					) str += "DATA_EXTEND | ";
+	if (inReason & USN_REASON_DATA_TRUNCATION				) str += "DATA_TRUNCATION | ";
+	if (inReason & USN_REASON_NAMED_DATA_OVERWRITE			) str += "NAMED_DATA_OVERWRITE | ";
+	if (inReason & USN_REASON_NAMED_DATA_EXTEND				) str += "NAMED_DATA_EXTEND | ";
+	if (inReason & USN_REASON_NAMED_DATA_TRUNCATION			) str += "NAMED_DATA_TRUNCATION | ";
+	if (inReason & USN_REASON_FILE_CREATE					) str += "FILE_CREATE | ";
+	if (inReason & USN_REASON_FILE_DELETE					) str += "FILE_DELETE | ";
+	if (inReason & USN_REASON_EA_CHANGE						) str += "EA_CHANGE | ";
+	if (inReason & USN_REASON_SECURITY_CHANGE				) str += "SECURITY_CHANGE | ";
+	if (inReason & USN_REASON_RENAME_OLD_NAME				) str += "RENAME_OLD_NAME | ";
+	if (inReason & USN_REASON_RENAME_NEW_NAME				) str += "RENAME_NEW_NAME | ";
+	if (inReason & USN_REASON_INDEXABLE_CHANGE				) str += "INDEXABLE_CHANGE | ";
+	if (inReason & USN_REASON_BASIC_INFO_CHANGE				) str += "BASIC_INFO_CHANGE | ";
+	if (inReason & USN_REASON_HARD_LINK_CHANGE				) str += "HARD_LINK_CHANGE | ";
+	if (inReason & USN_REASON_COMPRESSION_CHANGE			) str += "COMPRESSION_CHANGE | ";
+	if (inReason & USN_REASON_ENCRYPTION_CHANGE				) str += "ENCRYPTION_CHANGE | ";
+	if (inReason & USN_REASON_OBJECT_ID_CHANGE				) str += "OBJECT_ID_CHANGE | ";
+	if (inReason & USN_REASON_REPARSE_POINT_CHANGE			) str += "REPARSE_POINT_CHANGE | ";
+	if (inReason & USN_REASON_STREAM_CHANGE					) str += "STREAM_CHANGE | ";
+	if (inReason & USN_REASON_TRANSACTED_CHANGE				) str += "TRANSACTED_CHANGE | ";
+	if (inReason & USN_REASON_INTEGRITY_CHANGE				) str += "INTEGRITY_CHANGE | ";
+	if (inReason & USN_REASON_DESIRED_STORAGE_CLASS_CHANGE	) str += "DESIRED_STORAGE_CLASS_CHANGE | ";
+	if (inReason & USN_REASON_CLOSE							) str += "CLOSE | ";
+
+	if (str.empty())
+		str = "None";
+	else
+		str.resize(str.size() - 3); // Remove " | "
+
+	return str;
 }
 
 
@@ -152,11 +219,20 @@ FileRepo::FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath
 	if (!mDriveHandle.IsValid())
 		gApp.FatalError(std::format(R"(Failed to get handle to {}:\ - )", drive_letter) + GetLastErrorString());
 
-	//USN_JOURNAL_DATA_V0 journal_data;
-	//uint32				available_bytes;
-	//if (!DeviceIoControl(mDriveHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &available_bytes, nullptr))
-	//	gApp.FatalError(std::format(R"(Failed to get USN journal for {}:\ - )", drive_letter) + GetLastErrorString());
-	//gApp.Log(std::format(R"(Opened USN journal for {}:\. Max size: {})", drive_letter, gFormatSizeInBytes(journal_data.MaximumSize)));
+	// Query the USN journal to get its ID.
+	USN_JOURNAL_DATA_V0 journal_data;
+	uint32				unused;
+	if (!DeviceIoControl(mDriveHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &unused, nullptr))
+		gApp.FatalError(std::format(R"(Failed to query USN journal for {}:\ - )", drive_letter) + GetLastErrorString());
+
+	// Store the jorunal ID.
+	mUSNJournalID = journal_data.UsnJournalID;
+
+	// Store the current USN.
+	// TODO: we should read that from saved stated instead.
+	mNextUSN = journal_data.NextUsn;
+
+	gApp.Log(std::format(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", drive_letter, mUSNJournalID, gFormatSizeInBytes(journal_data.MaximumSize)));
 
 	// Get a handle to the root path.
 	OwnedHandle root_dir_handle = CreateFileA(mRootPath.data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
@@ -174,56 +250,126 @@ FileRepo::FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath
 	gApp.Log(std::format("Initialized FileRepo {}\\", mRootPath));
 
 	// Start scanning the repo.
-	QueueScanDirectory(root_dir.mID);
+	QueueScanDirectory(root_dir.mRefNumber);
 }
 
 
 FileInfo& FileRepo::AddFile(FileRefNumber inRefNumber, StringView inPath, bool inIsDirectory)
 {
+	gAssert(inPath.empty() || inPath[0] != '\\'); // Paths should not start by a slash.
+
 	std::lock_guard lock(mFilesMutex);
 
-	// Check if we already know this file.
-	auto [it, inserted] = mFilesByRefNumber.insert({ inRefNumber, {} });
-	if (inserted)
-	{
-		FileID    new_file_id = { mIndex, (uint32)mFiles.size() };
-		FileInfo& new_file    = mFiles.emplace_back(new_file_id, mStringPool.AllocateCopy(inPath), inRefNumber, inIsDirectory);
+	// Prepare a new FileID in case this file wasn't already added.
+	FileID new_file_id = { mIndex, (uint32)mFiles.size() };
 
-		it->second = &new_file;
+	// Try to insert it into the hashmap.
+	auto [it, inserted] = mFilesByRefNumber.insert({ inRefNumber, new_file_id });
+	if (inserted)
+		// The file wasn't already known, add it to the list.
+		return mFiles.emplace_back(new_file_id, mStringPool.AllocateCopy(inPath), inRefNumber, inIsDirectory);
+	else
+		// The file was known, return it.
+		return GetFile(it->second);
+}
+
+FileID FileRepo::FindFile(FileRefNumber inRefNumber) const
+{
+	std::lock_guard lock(mFilesMutex);
+
+	auto it = mFilesByRefNumber.find(inRefNumber);
+	if (it != mFilesByRefNumber.end())
+		return it->second;
+
+	return {};
+}
+
+// Return the path if it's an already known file.
+std::optional<StringView> FileRepo::FindPath(FileRefNumber inRefNumber) const
+{
+	std::lock_guard lock(mFilesMutex);
+
+	auto it = mFilesByRefNumber.find(inRefNumber);
+	if (it != mFilesByRefNumber.end())
+		return GetFile(it->second).mPath;
+
+	return {};
+}
+
+
+static std::optional<StringView> sBuildFilePath(StringView inParentDirPath, std::wstring_view inFileNameW, MutStringView ioBuffer)
+{
+	MutStringView file_path = ioBuffer;
+
+	// Add the parent dir if there's one (can be empty for the root dir).
+	if (!inParentDirPath.empty())
+		ioBuffer = gAppend(ioBuffer, inParentDirPath, "\\");
+
+	std::optional file_name = gWideCharToUtf8(inFileNameW, ioBuffer);
+	if (!file_name)
+	{
+		// Failed for some reason. Buffer too small?
+		gAssert(false); // Investigate.
+
+		return std::nullopt;
 	}
 
-	return *it->second;
+	return StringView{ file_path.data(), gEndPtr(*file_name) };
 }
 
-void FileRepo::ScanFile(FileID inFileID)
+
+void FileRepo::ScanDirectory(FileRefNumber inRefNumber, std::span<uint8> ioBuffer)
 {
-
-}
-
-void FileRepo::ScanDirectory(FileID inFileID)
-{
-	FileInfo& dir = GetFile(inFileID);
-	gAssert(dir.IsDirectory());
-
-	if (gApp.mLogScanActivity)
-		gApp.Log(std::format("Scanning directory {}\\{}", mRootPath, dir.mPath));
-
-	OwnedHandle dir_handle = OpenFileByRefNumber(dir.mRefNumber);
-
+	OwnedHandle dir_handle = OpenFileByRefNumber(inRefNumber);
 	if (!dir_handle.IsValid())
 	{
 		// TODO: depending on error, we should probably re-queue for scan
-		if (gApp.mLogScanActivity)
-			gApp.LogError(std::format("Failed to open directory {}\\{}", mRootPath, dir.mPath));
+		if (gApp.mLogScanActivity >= LogLevel::Normal)
+			gApp.LogError(std::format("Failed to open directory {} - {}", FindPath(inRefNumber).value_or(std::format("{}", inRefNumber)), GetLastErrorString()));
 		return;
 	}
 
+	FileID dir_id = FindFile(inRefNumber);
+	if (!dir_id.IsValid())
+	{
+		// PFILE_NAME_INFO contains the filename without the drive letter and column in front (ie. without the C:).
+		PathBufferUTF16 wpath_buffer;
+		PFILE_NAME_INFO file_name_info = (PFILE_NAME_INFO)wpath_buffer.data();
+		if (!GetFileInformationByHandleEx(dir_handle, FileNameInfo, file_name_info, wpath_buffer.size()))
+		{
+			gApp.LogError(std::format("Failed to get directoy path for {} - {}", inRefNumber, GetLastErrorString()));
+			return;
+		}
+		std::wstring_view wpath = { file_name_info->FileName, file_name_info->FileNameLength / 2 };
 
-	if (mScanDirBuffer == nullptr)
-		mScanDirBuffer = std::make_unique<uint8[]>(cScanDirBufferSize);
+		PathBufferUTF8 path_buffer;
+		std::optional opt_path = gWideCharToUtf8(wpath, path_buffer);
+		if (!opt_path)
+		{
+			gApp.LogError(std::format("Failed to get directoy path for {} - {}", inRefNumber, GetLastErrorString()));
+			return;
+		}
 
-	// Prepare a buffer for the paths. It'll grow more if necessary.
-	String path; path.reserve(512);
+		StringView path			= opt_path->substr(1);	// Skip initial slash.
+		StringView root_path	= mRootPath.substr(3);	// Skip drive and slash (eg. "C:/").
+
+		// Check if this file is in the rooth path.
+		if (!path.starts_with(root_path))
+			return; // Not in this repo, ignore.
+
+		// Only keep the path after the root path and the following slash.
+		path = path.substr(root_path.size() + 1);
+
+		// Add the directory.
+		dir_id = AddFile(inRefNumber, path, true).mID;
+	}
+
+	FileInfo& dir = GetFile(dir_id);
+	gAssert(dir.IsDirectory());
+
+	if (gApp.mLogScanActivity >= LogLevel::Normal)
+		gApp.Log(std::format("Scanning directory {}\\{}", mRootPath, dir.mPath));
+
 
 	// First GetFileInformationByHandleEx call needs a different value to make it "restart".
 	FILE_INFO_BY_HANDLE_CLASS file_info_class = FileIdExtdDirectoryRestartInfo;
@@ -231,7 +377,7 @@ void FileRepo::ScanDirectory(FileID inFileID)
 	while (true)
 	{
 		// Fill the scan buffer with content to iterate.
-		if (!GetFileInformationByHandleEx(dir_handle, file_info_class, mScanDirBuffer.get(), cScanDirBufferSize))
+		if (!GetFileInformationByHandleEx(dir_handle, file_info_class, ioBuffer.data(), ioBuffer.size()))
 		{
 			if (GetLastError() == ERROR_NO_MORE_FILES)
 				break; // Finished iterating, exit the loop.
@@ -243,81 +389,90 @@ void FileRepo::ScanDirectory(FileID inFileID)
 		file_info_class = FileIdExtdDirectoryInfo;
 
 		// Iterate on entries in the buffer.
-		PFILE_ID_EXTD_DIR_INFO entry = (PFILE_ID_EXTD_DIR_INFO)mScanDirBuffer.get();
+		PFILE_ID_EXTD_DIR_INFO entry = (PFILE_ID_EXTD_DIR_INFO)ioBuffer.data();
+		bool last_entry = false;
 		do
 		{
 			// Defer iterating to the next entry so that we can use continue.
-			defer { entry = (PFILE_ID_EXTD_DIR_INFO)((uint8*)entry + entry->NextEntryOffset); };
+			defer
+			{
+				if (entry->NextEntryOffset == 0)
+					last_entry = true;
+				entry = (PFILE_ID_EXTD_DIR_INFO)((uint8*)entry + entry->NextEntryOffset);
+			};
 
-			// Convert the filename to utf-8.
-			// TODO: test with a tiny buffer to make it fail.
-			char file_name_buffer[1024];
-			// Note: FileNameLength is in bytes so need to divide by 2 to get the number of wchar (WTF Microsoft).
-			StringView file_name = gWideCharToUtf8({ entry->FileName, entry->FileNameLength / 2 }, file_name_buffer);
+			std::wstring_view wfilename = { entry->FileName, entry->FileNameLength / 2 };
+
+			// Ignore current/parent dir.
+			if (wfilename == L"." || wfilename == L"..")
+				continue;
+
+			// Build the file path.
+			PathBufferUTF8 path_buffer;
+			std::optional path = sBuildFilePath(dir.mPath, wfilename, path_buffer);
 
 			// If it fails, ignore the file.
-			if (file_name.empty())
+			if (!path)
 			{
-				gApp.LogError(std::format("Failed to convert a file name to utf-8 in directory {}\\{}", mRootPath, dir.mPath));
+				gApp.LogError(std::format("Failed to build the path of a file in directory {}\\{}", mRootPath, dir.mPath));
 				gAssert(false); // Investigate why that would happen.
 				continue;
 			}
 
-			// Ignore current/parent dir.
-			if (file_name == "." || file_name == "..")
-				continue;
-
-			// Build the path of the file.
-			// If there's a parent dir path (ie. it's not the root dir), concatenate it.
-			if (!dir.mPath.empty())
-			{
-				path = dir.mPath;
-				path += '\\';
-				path += file_name;
-			}
-			else
-			{
-				path = file_name;
-			}
-
-			// Check if it's a directly.
+			// Check if it's a directory.
 			const bool is_directory = (entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
 			// Add (or get) the file info.
-			FileInfo& file = AddFile(FileRefNumber(entry->FileId), path, is_directory);
+			FileInfo& file = AddFile(FileRefNumber(entry->FileId), *path, is_directory);
 
-			if (gApp.mLogScanActivity)
+			if (gApp.mLogScanActivity >= LogLevel::Verbose)
 				gApp.Log(std::format("\tFound {}{}", file.GetName(), file.IsDirectory() ? " (dir)" : ""));
 
 			// TODO: read more attributes
 
 			if (is_directory)
-				QueueScanDirectory(file.mID);
+				QueueScanDirectory(file.mRefNumber);
 
-		} while (entry->NextEntryOffset != 0);
+		} while (!last_entry);
+
+		if (false && gApp.mLogScanActivity >= LogLevel::Verbose)
+		{
+			// Print how much of the buffer was used, to help sizing that buffer.
+			// Seems most folders need <1 KiB but saw one that used 30 KiB.
+			uint8* buffer_end = (uint8*)entry->FileName + entry->FileNameLength;
+			gApp.Log(std::format("Used {} of {} buffer.", gFormatSizeInBytes(buffer_end - ioBuffer.data()), gFormatSizeInBytes(ioBuffer.size())));
+		}
 	}
 }
 
-void FileRepo::QueueScanDirectory(FileID inFileID)
+
+void FileRepo::QueueScanDirectory(FileRefNumber inRefNumber)
 {
 	{
 		std::lock_guard lock(mScanDirQueueMutex);
-		mScanDirQueue.push_back(inFileID);
+		mScanDirQueue.insert(inRefNumber);
 	}
 
-	// Make sure the scanning thread is awake.
+	// Tell the scanning thread there's work to do.
 	gFileSystem.KickScanDirectoryThread();
 }
 
 
-bool FileRepo::ProcessScanDirectoryQueue()
+bool FileRepo::IsInScanDirectoryQueue(FileRefNumber inRefNumber) const
+{
+	std::lock_guard lock(mScanDirQueueMutex);
+	return mScanDirQueue.contains(inRefNumber);
+}
+
+
+bool FileRepo::ProcessScanDirectoryQueue(std::span<uint8> ioBuffer)
 {
 	// How many directory to process in one go.
 	constexpr int cDirectoryScanPerCall = 10;
 
 	for (int i = 0; i < cDirectoryScanPerCall; ++i)
 	{
-		FileID dir_id;
+		FileRefNumber dir_ref_number;
 
 		{
 			std::lock_guard lock(mScanDirQueueMutex);
@@ -325,11 +480,13 @@ bool FileRepo::ProcessScanDirectoryQueue()
 			if (mScanDirQueue.empty())
 				return false;
 
-			dir_id = mScanDirQueue.back();
-			mScanDirQueue.pop_back();
+			auto it = --mScanDirQueue.end();
+			dir_ref_number = *it;
+
+			mScanDirQueue.erase(it);
 		}
 
-		ScanDirectory(dir_id);
+		ScanDirectory(dir_ref_number, ioBuffer);
 	}
 
 	return true;
@@ -355,10 +512,122 @@ OwnedHandle FileRepo::OpenFileByRefNumber(FileRefNumber inRefNumber) const
 }
 
 
+// TODO: this is monitoring an entire drive, needs to be moved outisde of repo since several repos can be on the same drive 
+bool FileRepo::ProcessMonitorDirectory(std::span<uint8> ioBuffer)
+{
+	constexpr uint32 cInterestingReasons =	USN_REASON_FILE_CREATE |		// File was created.
+											USN_REASON_FILE_DELETE |		// File was deleted.
+											USN_REASON_DATA_OVERWRITE |		// File was modified.
+											USN_REASON_DATA_EXTEND |		// File was modified.
+											USN_REASON_DATA_TRUNCATION |	// File was modified.
+											USN_REASON_RENAME_NEW_NAME;		// File was renamed or moved (possibly to the recyle bin). That's essentially a delete and a create.
+
+	READ_USN_JOURNAL_DATA_V1 journal_data;
+	journal_data.StartUsn          = mNextUSN;
+	journal_data.ReasonMask        = cInterestingReasons | USN_REASON_CLOSE; 
+	journal_data.ReturnOnlyOnClose = true;			// Only get events when the file is closed (ie. USN_REASON_CLOSE is present). We don't care about earlier events.
+	journal_data.Timeout           = 0;				// Never wait.
+	journal_data.BytesToWaitFor    = 0;				// Never wait.
+	journal_data.UsnJournalID      = mUSNJournalID;	// The journal we're querying.
+	journal_data.MinMajorVersion   = 3;				// Doc says it needs to be 3 to use 128-bit file identifiers (ie. FileRefNumbers).
+	journal_data.MaxMajorVersion   = 3;				// Don't want to support anything else.
+	
+	// Note: Use FSCTL_READ_UNPRIVILEGED_USN_JOURNAL to make that work without admin rights.
+	uint32 available_bytes;
+	if (!DeviceIoControl(mDriveHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioBuffer.data(), (uint32)ioBuffer.size(), &available_bytes, nullptr))
+	{
+		// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
+		gApp.FatalError(std::format("Failed to read USN journal for {}:\\ - ", mRootPath[0]) + GetLastErrorString());
+	}
+
+	std::span<uint8> available_buffer = ioBuffer.subspan(0, available_bytes);
+
+	USN next_usn = *(USN*)available_buffer.data();
+	available_buffer = available_buffer.subspan(sizeof(USN));
+
+	if (next_usn == mNextUSN)
+	{
+		// Nothing happened.
+		return false;
+	}
+
+	// Update the USN for next time.
+	mNextUSN = next_usn;
+
+	while (!available_buffer.empty())
+	{
+		const USN_RECORD_V3* record = (USN_RECORD_V3*)available_buffer.data();
+
+		// Defer iterating to the next record so that we can use continue.
+		defer { available_buffer = available_buffer.subspan(record->RecordLength); };
+
+		// We get all events where USN_REASON_CLOSE is present, but we don't care about all of them.
+		if ((record->Reason & cInterestingReasons) == 0)
+			continue;
+
+		if (record->Reason & (USN_REASON_FILE_DELETE | USN_REASON_RENAME_NEW_NAME))
+		{
+			// If the file is in the repo, mark it as deleted.
+			FileID file_id = FindFile(record->FileReferenceNumber);
+			if (file_id.IsValid())
+			{
+				FileInfo& file = GetFile(file_id);
+				file.mExists   = false;
+
+				// If it's a directory, also mark all the file inside as deleted.
+				if (file.IsDirectory())
+				{
+					// TODO
+				}
+			}
+
+		}
+
+		if (record->Reason & (USN_REASON_FILE_CREATE | USN_REASON_RENAME_NEW_NAME))
+		{
+			// Add the file.
+
+			// If it's a directory, scan it to add all the files inside.
+
+		}
+		else
+		{
+			// The file was just modified, update the file USN.
+			FileID file_id = FindFile(record->FileReferenceNumber);
+			if (file_id.IsValid())
+			{
+				FileInfo& file = GetFile(file_id);
+				file.mUSN = record->Usn;
+			}
+		}
+
+		if (gApp.mLogDiskActivity >= LogLevel::Normal)
+		{
+			FileID file_id = FindFile(record->FileReferenceNumber);
+			if (file_id.IsValid())
+			{
+				gApp.Log(std::format(R"(File {}. Reason: {})", GetFile(file_id).mPath, gUSNReasonToString(record->Reason)));
+			}
+		}
+	}
+
+	if (false && gApp.mLogDiskActivity >= LogLevel::Verbose)
+	{
+		// Print how much of the buffer was used, to help sizing that buffer.
+		gApp.Log(std::format("Used {} of {} buffer.", gFormatSizeInBytes(available_bytes), gFormatSizeInBytes(ioBuffer.size())));
+	}
+
+	return true;
+}
+
+
 void FileSystem::StartMonitoring()
 {
 	// Start the directory scan thread.
 	mScanDirThread = std::jthread(std::bind_front(&FileSystem::ScanDirectoryThread, this));
+
+	// Start the directory monitor thread.
+	mMonitorDirThread = std::jthread(std::bind_front(&FileSystem::MonitorDirectoryThread, this));
 }
 
 void FileSystem::StopMonitoring()
@@ -371,6 +640,9 @@ void FileSystem::StopMonitoring()
 
 void FileSystem::AddRepo(StringView inShortName, StringView inRootPath)
 {
+	// TODO: add path validation/normalization here instead of in FileRepo
+	// TODO: check if this rooth path is inside another repo, or contains another repo (not allowed!)
+
 	gAssert(!mScanDirThread.joinable()); // Can't add repos once the threads are started, it's not thread safe!
 
 	mRepos.emplace_back((uint32)mRepos.size(), inShortName, inRootPath);
@@ -385,16 +657,30 @@ void FileSystem::KickScanDirectoryThread()
 
 void FileSystem::ScanDirectoryThread(std::stop_token inStopToken)
 {
+	gSetCurrentThreadName(L"Scan Directory Thread");
+
+	// Allocate a working buffer for scanning.
+	static constexpr size_t cBufferSize = 64 * 1024ull;
+	uint8* buffer_ptr  = (uint8*)malloc(cBufferSize);
+	defer { free(buffer_ptr); };
+
+	std::span buffer = { buffer_ptr, cBufferSize };
+
 	while (!inStopToken.stop_requested())
 	{
 		// Wait until we know there's work to do.
 		mScanDirThreadSignal.acquire();
 
+		if (mInitialScan)
+		{
+			gApp.Log("Starting initial scan.");
+		}
+
 		// Check every repo.
 		for (auto& repo : mRepos)
 		{
 			// Process the queue.
-			while (repo.ProcessScanDirectoryQueue())
+			while (repo.ProcessScanDirectoryQueue(buffer))
 			{
 				if (inStopToken.stop_requested())
 					break;
@@ -402,6 +688,66 @@ void FileSystem::ScanDirectoryThread(std::stop_token inStopToken)
 
 			if (inStopToken.stop_requested())
 				break;
+		}
+
+		if (mInitialScan)
+		{
+			gApp.Log("Initial scan complete.");
+			mInitialScan = false;
+
+			// Let the monitor thread know the inital scan is finished..
+			KickMonitorDirectoryThread();
+		}
+	}
+}
+
+
+void FileSystem::KickMonitorDirectoryThread()
+{
+	mMonitorDirThreadSignal.release();
+}
+
+
+void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
+{
+	gSetCurrentThreadName(L"Monitor Directory Thread");
+	using namespace std::chrono_literals;
+
+	// Allocate a working buffer for querying the USN journal.
+	static constexpr size_t cBufferSize = 64 * 1024ull;
+	uint8* buffer_ptr  = (uint8*)malloc(cBufferSize);
+	defer { free(buffer_ptr); };
+
+	std::span buffer = { buffer_ptr, cBufferSize };
+
+	// Wait for the initial scan to finish.
+	while (mInitialScan)
+		mMonitorDirThreadSignal.acquire();
+
+	while (!inStopToken.stop_requested())
+	{
+		bool any_work_done = false;
+
+		// Check every repo.
+		for (auto& repo : mRepos)
+		{
+			// Process the queue.
+			while (repo.ProcessMonitorDirectory(buffer))
+			{
+				any_work_done = true;
+
+				if (inStopToken.stop_requested())
+					break;
+			}
+
+			if (inStopToken.stop_requested())
+				break;
+		}
+
+		if (!any_work_done)
+		{
+			// Wait for some time before checking the USN journals again (unless we're being signaled).
+			std::ignore = mMonitorDirThreadSignal.try_acquire_for(1s);
 		}
 	}
 }

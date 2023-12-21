@@ -16,6 +16,7 @@ String GetLastErrorString()
 	if (error == ERROR_SUCCESS)
 		return {};
 
+	// TODO: there is usually a \r\n at the end, remove it!
 	char  buffer[512];
 	DWORD buffer_len = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error,
 									  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buffer, sizeof(buffer) - 1, nullptr);

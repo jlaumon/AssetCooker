@@ -109,7 +109,8 @@ int WinMain(
 	// Our state
 	bool show_demo_window = true;
 
-	gApp.mLogScanActivity = true;
+	gApp.mLogScanActivity = LogLevel::Verbose;
+	gApp.mLogDiskActivity = LogLevel::Verbose;
 
 	gFileSystem.AddRepo("Source", "C:/");
 
