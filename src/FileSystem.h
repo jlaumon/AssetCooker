@@ -100,9 +100,10 @@ struct FileInfo : NoCopy
 	auto operator <=>(const FileInfo& inOther) const { return mID <=> inOther.mID; }	// Comparing the ID is enough.
 };
 
+struct FileDrive;
+
 
 // Top level container for files.
-// TODO: rename to root something?
 struct FileRepo : NoCopy
 {
 	static constexpr size_t cFilePerSegment = 4096;
@@ -110,7 +111,7 @@ struct FileRepo : NoCopy
 	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID, FileRefNumber::Hasher>;
 	using FileRefNumberSet = HashSet<FileRefNumber, FileRefNumber::Hasher>;
 
-	FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath);
+	FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath, FileDrive& inDrive);
 	~FileRepo() = default;
 
 	FileInfo&		AddFile(FileRefNumber inRefNumber, StringView inPath, bool inIsDirectory);
@@ -121,33 +122,35 @@ struct FileRepo : NoCopy
 	std::optional<StringView>	FindPath(FileRefNumber inRefNumber) const;	// Return the path if it's an already known file.
 
 	OwnedHandle OpenFileByRefNumber(FileRefNumber inRefNumber) const;
-	void        ScanDirectory(FileRefNumber inRefNumber, std::span<uint8> ioBuffer);
-
-	void        QueueScanDirectory(FileRefNumber inRefNumber);
-	bool        IsInScanDirectoryQueue(FileRefNumber inRefNumber) const;
-	bool		ProcessScanDirectoryQueue(std::span<uint8> ioBuffer);	// Process some items from the queue. Return false if the queue is empty.
+	void        ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> ioBuffer);
 
 	bool		ProcessMonitorDirectory(std::span<uint8> ioBuffer);		// Check if files changed and queue scans for them. Return false if there were no changes.
 
-
-
 	uint32                    mIndex = 0;        // The index of this repo.
 	StringView                mShortName;		 // A named used for display.
-	StringView                mRootPath;         // Absolute path to the repo. No trailing slash.
-	OwnedHandle               mDriveHandle;      // Handle to the drive, needed to open files with ref numbers.
-	uint64                    mUSNJournalID = 0; // Journal ID, needed to query the USN journal.
+	StringView                mRootPath;         // Absolute path to the repo. Ends with a slash.
+	FileDrive&				  mDrive;			 // The drive this repo is on.
+	FileID                    mRootDirID;		 // The FileID of the root dir.
 
-	USN						  mNextUSN = 0;
-
-	FilesSegmentedVector	  mFiles;            // All the files.
+	FilesSegmentedVector	  mFiles;            // All the files in this repo.
 	FilesByRefNumberMap       mFilesByRefNumber; // Map to find files by ref number.
 	mutable std::mutex		  mFilesMutex;
 
 	StringPool                mStringPool;       // Pool for storing all the paths.
-
-	FileRefNumberSet	mScanDirQueue;
-	mutable std::mutex	mScanDirQueueMutex;
 };
+
+
+struct FileDrive : NoCopy
+{
+	FileDrive(char inDriveLetter);
+
+	char                      mLetter  = 'C';
+	OwnedHandle               mHandle;				// Handle to the drive, needed to open files with ref numbers.
+	uint64                    mUSNJournalID = 0;	// Journal ID, needed to query the USN journal.
+	USN						  mNextUSN		= 0;
+	std::vector<FileRepo*>	  mRepos;
+};
+
 
 struct FileSystem : NoCopy
 {
@@ -156,23 +159,21 @@ struct FileSystem : NoCopy
 	void StartMonitoring();		// Only call after adding all repos.
 	void StopMonitoring();
 
-
 	const FileInfo& GetFile(FileID inFileID) const	{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 	FileInfo&		GetFile(FileID inFileID)		{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 
-	void			KickScanDirectoryThread();
 	void			KickMonitorDirectoryThread();
-	void			ScanDirectoryThread(std::stop_token inStopToken);
+private:
+	void            InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer);
 	void			MonitorDirectoryThread(std::stop_token inStopToken);
 
-	SegmentedVector<FileRepo> mRepos;
-	bool					  mInitialScan = true;
+	FileDrive&		GetOrAddDrive(char inDriveLetter);
 
-	std::jthread             mScanDirThread;
-	std::binary_semaphore    mScanDirThreadSignal = std::binary_semaphore(1);
+	SegmentedVector<FileRepo> mRepos;
+	SegmentedVector<FileDrive> mDrives;					// All the drives that have at least one repo on them.
 
 	std::jthread             mMonitorDirThread;
-	std::binary_semaphore    mMonitorDirThreadSignal = std::binary_semaphore(1);
+	std::binary_semaphore    mMonitorDirThreadSignal = std::binary_semaphore(0);
 };
 
 inline FileSystem gFileSystem;

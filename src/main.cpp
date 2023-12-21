@@ -39,6 +39,9 @@ int WinMain(
   int       nShowCmd
 )
 {
+	// TODO link static runtime to avoid having to install vcredist
+
+	// TODO move that inside App
 	// Create application window
 	ImGui_ImplWin32_EnableDpiAwareness();
 	WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
