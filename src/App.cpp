@@ -60,7 +60,7 @@ void App::Log(StringView inMessage, LogType inType/* = LogType::Normal*/)
 
 	// Add an end of line character.
 	char message_buffer[4096];
-	gAppend(message_buffer, inMessage, "\n\0");
+	gConcat(message_buffer, inMessage, "\n\0");
 
 	// Write the message to the output.
 	OutputDebugStringA(message_buffer);

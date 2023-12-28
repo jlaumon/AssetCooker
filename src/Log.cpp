@@ -16,7 +16,10 @@ void Log::Add(StringView inString, LogType inType)
 	auto line_ptr     = line_storage;
 
 	if (inType == LogType::Error)
-		line_ptr = gAppend(line_ptr, cErrorTag, " ");
+	{
+		line_ptr = gAppend(line_ptr, cErrorTag);
+		line_ptr = gAppend(line_ptr, " ");
+	}
 
 	line_ptr = gAppend(line_ptr, inString);
 

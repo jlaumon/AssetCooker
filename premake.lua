@@ -53,6 +53,7 @@ solution "AssetCooker"
             "thirdparty/icons/**.h",
             "thirdparty/unordered_dense/include/ankerl/unordered_dense.h",
             "thirdparty/WindowsHModular/include/**.h",
+            "thirdparty/xxHash/*.h",
         }
 		
 		includedirs 
@@ -63,6 +64,7 @@ solution "AssetCooker"
             "thirdparty/imgui/backends",
             "thirdparty/unordered_dense/include",
 			"thirdparty/WindowsHModular/include",
+			"thirdparty/xxHash"
         }
         
         links
