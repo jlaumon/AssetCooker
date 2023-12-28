@@ -9,5 +9,13 @@ Cpp11BracedListStyle: 'false'
 PointerAlignment: Left
 TabWidth: '4'
 UseTab: ForContinuationAndIndentation
-
+ColumnLimit: 180
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
+AllowShortFunctionsOnASingleLine: All
+AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
+AlignConsecutiveMacros: AcrossEmptyLinesAndComments
+AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
+AllowShortBlocksOnASingleLine: Always
 ...
