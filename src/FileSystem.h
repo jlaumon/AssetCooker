@@ -6,6 +6,14 @@
 #include <semaphore>
 #include <optional>
 
+// Forward declarations.
+struct FileID;
+struct FileInfo;
+struct FileRepo;
+struct FileDrive;
+struct FileSystem;
+
+
 static constexpr int cFileRepoIndexBits = 6;
 static constexpr int cFileIndexBits     = 26;
 
@@ -60,14 +68,6 @@ struct FileRefNumber
 };
 static_assert(sizeof(FileRefNumber) == 16);
 
-// Formatter for FileRefNumber.
-template <> struct std::formatter<FileRefNumber> : std::formatter<std::string_view>
-{
-	auto format(FileRefNumber inRefNumber, format_context& ioCtx) const
-	{
-		return std::format_to(ioCtx.out(), "0x{:X}{:016X}", inRefNumber.mData[1], inRefNumber.mData[0]);
-	}
-};
 
 
 // Wrapper for a 128-bits hash value.
@@ -112,26 +112,25 @@ enum class FileType : int
 struct FileInfo : NoCopy
 {
 	const FileID     mID;               // Our ID for this file.
-	const uint16     mIsDirectory : 1;  // Is this a directory or a file.
 	const uint16     mNamePos     : 15; // Position in the path of the start of the file name (after the last '/').
 	const uint16     mExtensionPos;     // Position in the path of the first '.' in the file name.
 	const StringView mPath;             // Path relative to the root directory.
 	const Hash128    mPathHash;			// Case-insensitive hash of the path.
 
+	bool             mIsDirectory;      // Is this a directory or a file. Note: might change if file is deleted then a directory of the same name is created.
 	FileRefNumber    mRefNumber;        // File ID used by Windows. Can change when the file is deleted and re-created.
 	USN              mUSN = 0;          // Identifier of the last change to this file.
 
-	void             MarkDeleted() { mRefNumber = FileRefNumber::cInvalid(); }
-
 	bool             IsDeleted() const { return !mRefNumber.IsValid(); }
 	bool             IsDirectory() const { return mIsDirectory != 0; }
+	FileType         GetType() const { return mIsDirectory ? FileType::Directory : FileType::File; }
 	StringView       GetName() const { return mPath.substr(mNamePos); }
 	StringView       GetExtension() const { return mPath.substr(mExtensionPos); }
+	const FileRepo&  GetRepo() const;
 
 	FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType inType, FileRefNumber inRefNumber);
 };
 
-struct FileDrive;
 
 
 // Top level container for files.
@@ -145,6 +144,7 @@ struct FileRepo : NoCopy
 
 	FileInfo&		GetFile(FileID inFileID)		{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
 	FileInfo&                 GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
+	void                      MarkFileDeleted(FileInfo& inFile);
 
 	StringView                RemoveRootPath(StringView inFullPath);
 
@@ -170,7 +170,8 @@ struct FileDrive : NoCopy
 	FileRepo*   FindRepoForPath(StringView inFullPath);                                                  // Return nullptr if not in any repo.
 
 	OwnedHandle               OpenFileByRefNumber(FileRefNumber inRefNumber) const;
-	std::optional<StringView> GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer);                    // Get the path of this file, omitting the drive letter part.
+	std::optional<StringView> GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const;  // Get the full path of this file, including the drive letter part.
+	USN                       GetUSN(const OwnedHandle& inFileHandle) const;
 
 	char                      mLetter = 'C';
 	OwnedHandle               mHandle;           // Handle to the drive, needed to open files with ref numbers.
@@ -218,4 +219,36 @@ private:
 	std::binary_semaphore    mMonitorDirThreadSignal = std::binary_semaphore(0);
 };
 
+
 inline FileSystem gFileSystem;
+
+
+inline const FileRepo& FileInfo::GetRepo() const
+{
+	return gFileSystem.GetRepo(mID);
+}
+
+
+// Formatter for FileRefNumber.
+template <> struct std::formatter<FileRefNumber> : std::formatter<std::string_view>
+{
+	auto format(FileRefNumber inRefNumber, format_context& ioCtx) const
+	{
+		return std::format_to(ioCtx.out(), "0x{:X}{:016X}", inRefNumber.mData[1], inRefNumber.mData[0]);
+	}
+};
+
+
+
+// Formatter for FileInfo.
+template <> struct std::formatter<FileInfo> : std::formatter<std::string_view>
+{
+	auto format(const FileInfo& inFileInfo, format_context& ioCtx) const
+	{
+		return std::format_to(ioCtx.out(), "{:9} {}:{}", 
+			inFileInfo.IsDirectory() ? "Directory" : "File", 
+			inFileInfo.GetRepo().mShortName,
+			inFileInfo.mPath);
+	}
+};
+

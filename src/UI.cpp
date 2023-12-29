@@ -94,8 +94,7 @@ void gUIDrawMainMenuBar()
 
 		if (ImGui::BeginMenu("Debug"))
 		{
-			ImGui::MenuItem("Log Scan Activity", nullptr, &gApp.mLogScanActivity);
-			ImGui::MenuItem("Log Disk Activity", nullptr, &gApp.mLogDiskActivity);
+			ImGui::MenuItem("Log FileSystem Activity", nullptr, &gApp.mLogFSActivity);
 
 			ImGui::EndMenu();
 		}

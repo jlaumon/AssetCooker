@@ -272,7 +272,6 @@ FileInfo::FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType 
 
 }
 
-
 	 
 FileRepo::FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath, FileDrive& inDrive)
 	: mDrive(inDrive)
@@ -332,7 +331,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 				if (file.mRefNumber != inRefNumber)
 				{
 					if (file.mRefNumber.IsValid())
-						gApp.LogError(std::format("File {}{} chandged ref number unexpectedly (missed event?)", mRootPath, file.mPath));
+						gApp.LogError(std::format("{} chandged ref number unexpectedly (missed event?)", file));
 
 					file.mRefNumber = inRefNumber;
 				}
@@ -356,7 +355,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 			if (previous_file_id != actual_file_id || GetFile(previous_file_id).mPathHash != path_hash)
 			{
 				// Mark the old file as deleted, and add the new one instead.
-				GetFile(previous_file_id).MarkDeleted();
+				MarkFileDeleted(GetFile(previous_file_id));
 			}
 		}
 	}
@@ -369,9 +368,27 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 	else
 	{
 		// The file was known, return it.
-		return GetFile(actual_file_id);
+		FileInfo& file = GetFile(actual_file_id);
+
+		if (file.GetType() != inType)
+		{
+			// TODO we could support changing the file type if we make sure to update any list of all directories
+			gApp.FatalError("A file was turned into a directory (or vice versa). This is not supported yet.");
+		}
+
+		return file;
 	}
 }
+
+void FileRepo::MarkFileDeleted(FileInfo& inFile)
+{
+	// TODO: not great to access these internals, maybe find a better way?
+	std::lock_guard lock(gFileSystem.mFilesMutex);
+
+	gFileSystem.mFilesByRefNumber.erase(inFile.mRefNumber);
+	inFile.mRefNumber = FileRefNumber::cInvalid();
+}
+
 
 
 StringView FileRepo::RemoveRootPath(StringView inFullPath)
@@ -420,13 +437,13 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 	if (!dir_handle.IsValid())
 	{
 		// TODO: depending on error, we should probably re-queue for scan
-		if (gApp.mLogScanActivity >= LogLevel::Normal)
-			gApp.LogError(std::format("Failed to open directory {} - {}", dir.mPath, GetLastErrorString()));
+		if (gApp.mLogFSActivity >= LogLevel::Normal)
+			gApp.LogError(std::format("Failed to open {} - {}", dir, GetLastErrorString()));
 		return;
 	}
 
-	if (gApp.mLogScanActivity >= LogLevel::Normal)
-		gApp.Log(std::format("Scanning directory {}{}", mRootPath, dir.mPath));
+	if (gApp.mLogFSActivity >= LogLevel::Normal)
+		gApp.Log(std::format("Added {}", dir));
 
 
 	// First GetFileInformationByHandleEx call needs a different value to make it "restart".
@@ -440,7 +457,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			if (GetLastError() == ERROR_NO_MORE_FILES)
 				break; // Finished iterating, exit the loop.
 
-			gApp.FatalError(std::format("Enumerating directory {}{} failed - ", mRootPath, dir.mPath) + GetLastErrorString());
+			gApp.FatalError(std::format("Enumerating {} failed - ", dir) + GetLastErrorString());
 		}
 
 		// Next time keep iterating instead of restarting.
@@ -472,7 +489,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			// If it fails, ignore the file.
 			if (!path)
 			{
-				gApp.LogError(std::format("Failed to build the path of a file in directory {}{}", mRootPath, dir.mPath));
+				gApp.LogError(std::format("Failed to build the path of a file in {}", dir));
 				gAssert(false); // Investigate why that would happen.
 				continue;
 			}
@@ -483,17 +500,30 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			// Add (or get) the file info.
 			FileInfo& file = GetOrAddFile(*path, is_directory ? FileType::Directory : FileType::File, entry->FileId);
 
-			if (gApp.mLogScanActivity >= LogLevel::Verbose)
-				gApp.Log(std::format("\tFound {}{}", file.GetName(), file.IsDirectory() ? " (dir)" : ""));
+			if (gApp.mLogFSActivity >= LogLevel::Verbose)
+				gApp.Log(std::format("Added {}", file));
 
-			// TODO: read more attributes
+			// TODO: read more attributes?
 
-			if (is_directory)
+			// Update the USN.
+			{
+				OwnedHandle file_handle = mDrive.OpenFileByRefNumber(file.mRefNumber);
+				if (!dir_handle.IsValid())
+				{
+					// TODO: depending on error, we should probably re-queue for scan
+					if (gApp.mLogFSActivity>= LogLevel::Normal)
+						gApp.LogError(std::format("Failed to open {} - {}", file, GetLastErrorString()));
+				}
+
+				file.mUSN = mDrive.GetUSN(file_handle);
+			}
+			
+			if (file.IsDirectory())
 				ioScanQueue.push_back(file.mID);
 
 		} while (!last_entry);
 
-		if (false && gApp.mLogScanActivity >= LogLevel::Verbose)
+		if (false && gApp.mLogFSActivity >= LogLevel::Verbose)
 		{
 			// Print how much of the buffer was used, to help sizing that buffer.
 			// Seems most folders need <1 KiB but saw one that used 30 KiB.
@@ -524,7 +554,7 @@ OwnedHandle FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber) const
 }
 
 
-std::optional<StringView> FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer)
+std::optional<StringView> FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const
 {
 	// Get the full path as utf16.
 	// PFILE_NAME_INFO contains the filename without the drive letter and column in front (ie. without the C:).
@@ -534,9 +564,30 @@ std::optional<StringView> FileDrive::GetFullPath(const OwnedHandle& inFileHandle
 		return {};
 
 	std::wstring_view wpath = { file_name_info->FileName, file_name_info->FileNameLength / 2 };
-	return gWideCharToUtf8(wpath, ioBuffer);
+
+	// Write the drive part.
+	ioBuffer[0] = mLetter;
+	ioBuffer[1] = ':';
+
+	// Write the path part.
+	std::optional path_part = gWideCharToUtf8(wpath, ioBuffer.subspan(2));
+	if (!path_part)
+		return {};
+
+	return StringView{ ioBuffer.data(), gEndPtr(*path_part) };
 }
 
+
+USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
+{
+	PathBufferUTF16 buffer;
+	DWORD available_bytes = 0;
+	if (!DeviceIoControl(inFileHandle, FSCTL_READ_FILE_USN_DATA, nullptr, 0, buffer.data(), buffer.size() * sizeof(buffer[0]), &available_bytes, nullptr))
+		gApp.FatalError("Failed to get USN data"); // TODO add file path to message
+
+	USN_RECORD_V3* record = (USN_RECORD_V3*)buffer.data();
+	return record->Usn;	
+}
 
 
 bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<uint8> ioDirScanBuffer)
@@ -598,17 +649,33 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 
 		if (record->Reason & (USN_REASON_FILE_DELETE | USN_REASON_RENAME_NEW_NAME))
 		{
-			// TODO: do we actually need to check the path here? I think no, if that file was moved before being deleted, this FileInfo would be deleted anyway
 			// If the file is in a repo, mark it as deleted.
 			FileInfo* file = gFileSystem.FindFile(record->FileReferenceNumber);
 			if (file)
 			{
-				file->MarkDeleted();
+				FileRepo& repo = gFileSystem.GetRepo(file->mID);
+
+				repo.MarkFileDeleted(*file);
+
+				if (gApp.mLogFSActivity >= LogLevel::Verbose)
+					gApp.Log(std::format("Deleted {}", *file));
 
 				// If it's a directory, also mark all the file inside as deleted.
 				if (file->IsDirectory())
 				{
-					// TODO
+					PathBufferUTF8 dir_path_buffer;
+					StringView     dir_path = gConcat(dir_path_buffer, file->mPath, "\\");
+
+					for (FileInfo& file : repo.mFiles)
+					{
+						if (gStartsWith(file.mPath, dir_path))
+						{
+							repo.MarkFileDeleted(file);
+
+							if (gApp.mLogFSActivity >= LogLevel::Verbose)
+								gApp.Log(std::format("Deleted {}", file));
+						}
+					}
 				}
 			}
 
@@ -653,6 +720,11 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 					while (!scan_queue.empty())
 						repo->ScanDirectory(scan_queue, ioDirScanBuffer);
 				}
+				else
+				{
+					if (gApp.mLogFSActivity >= LogLevel::Verbose)
+						gApp.Log(std::format("Added {})", file));
+				}
 			}
 		}
 		else
@@ -661,21 +733,15 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 			FileInfo* file = gFileSystem.FindFile(record->FileReferenceNumber);
 			if (file)
 			{
-				file->mUSN = record->Usn;
-			}
-		}
+				if (gApp.mLogFSActivity >= LogLevel::Verbose)
+					gApp.Log(std::format("Modified {}", *file));
 
-		if (gApp.mLogDiskActivity >= LogLevel::Normal)
-		{
-			FileID file_id = gFileSystem.FindFileID(record->FileReferenceNumber);
-			if (file_id.IsValid())
-			{
-				gApp.Log(std::format(R"(File {}. Reason: {})", gFileSystem.GetFile(file_id).mPath, gUSNReasonToString(record->Reason)));
+				file->mUSN = record->Usn;
 			}
 		}
 	}
 
-	if (false && gApp.mLogDiskActivity >= LogLevel::Verbose)
+	if (false && gApp.mLogFSActivity >= LogLevel::Verbose)
 	{
 		// Print how much of the buffer was used, to help sizing that buffer.
 		gApp.Log(std::format("Used {} of {} buffer.", gFormatSizeInBytes(available_bytes), gFormatSizeInBytes(ioUSNBuffer.size())));
@@ -687,7 +753,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 
 FileRepo* FileDrive::FindRepoForPath(StringView inFullPath)
 {
-	gAssert(!inFullPath.empty() && inFullPath[0] == '\\'); // Full paths should always not start by a slash.
+	gAssert(inFullPath[0] == mLetter);
 
 	for (FileRepo* repo : mRepos)
 	{

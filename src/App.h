@@ -33,8 +33,7 @@ struct App
 	void*      mMainWindowHwnd  = nullptr;
 	bool       mExitRequested   = false;
 	bool       mExitReady       = false;
-	LogLevel   mLogScanActivity = LogLevel::None;
-	LogLevel   mLogDiskActivity = LogLevel::None;
+	LogLevel   mLogFSActivity = LogLevel::None;
 private:
 	std::mutex mLogMutex;
 	struct Log mLog;
