@@ -1,13 +1,14 @@
 #include "FileSystem.h"
 #include "App.h"
 #include "Debug.h"
-#include "xxHash/xxh3.h"
+#include "Ticks.h"
 
 #include "win32/misc.h"
 #include "win32/file.h"
 #include "win32/io.h"
 #include "win32/threads.h"
 
+#include "xxHash/xxh3.h"
 
 #include <format>
 #include <optional>
@@ -282,7 +283,7 @@ FileRepo::FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath
 	FileInfo& root_dir = GetOrAddFile("", FileType::Directory, file_info.FileId);
 	mRootDirID = root_dir.mID;
 
-	gApp.Log(std::format("Initialized FileRepo {}", mRootPath));
+	gApp.Log(std::format("Initialized FileRepo {} as {}:", mRootPath, mShortName));
 }
 
 
@@ -871,41 +872,6 @@ FileDrive::FileDrive(char inDriveLetter)
 	gApp.Log(std::format(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize)));
 }
 
-// TODO move elsewhere
-int64 gGetTickCount()
-{
-	LARGE_INTEGER counter;
-	QueryPerformanceCounter(&counter);
-	return counter.QuadPart;
-}
-
-
-int64 gTicksToNanoSeconds(int64 inTicks)
-{
-	struct Initializer
-	{
-		Initializer()
-		{
-			LARGE_INTEGER frequency;
-			QueryPerformanceFrequency(&frequency);
-
-			mTicksPerSecond = frequency.QuadPart;
-		}
-
-		int64 mTicksPerSecond;
-	};
-
-	static Initializer init;
-	
-	return inTicks * 1'000'000'000 / init.mTicksPerSecond;
-}
-
-
-double gTicksToSeconds(int64 inTicks)
-{
-	int64 ns = gTicksToNanoSeconds(inTicks);
-	return (double)ns / 1'000'000'000.0;
-}
 
 
 void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer)
