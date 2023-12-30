@@ -43,6 +43,12 @@ using uint32 = unsigned long;
 using int64  = signed long long;
 using uint64 = unsigned long long;
 
+// Litterals for memory sizes.
+constexpr size_t operator ""_B(size_t inValue)	 { return inValue; }
+constexpr size_t operator ""_KiB(size_t inValue) { return inValue * 1024; }
+constexpr size_t operator ""_MiB(size_t inValue) { return inValue * 1024 * 1024; }
+constexpr size_t operator ""_GiB(size_t inValue) { return inValue * 1024 * 1024 * 1024; }
+
 // Basic functions.
 template <typename T> constexpr T gMin(T inA, T inB)				{ return inA < inB ? inA : inB; }
 template <typename T> constexpr T gMax(T inA, T inB)				{ return inB < inA ? inA : inB; }
@@ -100,3 +106,4 @@ struct MemoryHasher
         return ankerl::unordered_dense::detail::wyhash::hash(&inValue, sizeof(inValue));
     }
 };
+

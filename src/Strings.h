@@ -117,3 +117,22 @@ template <> struct std::formatter<StringView> : std::formatter<std::string_view>
 		return std::formatter<std::string_view>::format(std::string_view(inStringView.data(), inStringView.size()), ioCtx);
 	}
 };
+
+// Helper type to format sizes in bytes.
+enum class SizeInBytes : size_t;
+
+// Formatter for SizeInBytes.
+template <> struct std::formatter<SizeInBytes> : std::formatter<std::string_view>
+{
+	auto format(SizeInBytes inBytes, format_context& ioCtx) const
+	{
+		if ((size_t)inBytes < 10_KiB)
+			return std::format_to(ioCtx.out(), "{} B", (size_t)inBytes);
+		else if ((size_t)inBytes < 10_MiB)
+			return std::format_to(ioCtx.out(), "{} KiB", (size_t)inBytes / 1_KiB);
+		else if ((size_t)inBytes < 10_GiB)
+			return std::format_to(ioCtx.out(), "{} MiB", (size_t)inBytes / 1_MiB);
+		else
+			return std::format_to(ioCtx.out(), "{} GiB", (size_t)inBytes / 1_GiB);
+	}
+};

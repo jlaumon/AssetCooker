@@ -21,23 +21,6 @@ constexpr size_t cMaxPathSizeUTF8  = 32768 * 3ull;	// UTF8 can use up to 6 bytes
 using PathBufferUTF16 = std::array<wchar_t, cMaxPathSizeUTF16>;
 using PathBufferUTF8  = std::array<char, cMaxPathSizeUTF8>;
 
-constexpr size_t operator ""_B(size_t inValue)	 { return inValue; }
-constexpr size_t operator ""_KiB(size_t inValue) { return inValue * 1024; }
-constexpr size_t operator ""_MiB(size_t inValue) { return inValue * 1024 * 1024; }
-constexpr size_t operator ""_GiB(size_t inValue) { return inValue * 1024 * 1024 * 1024; }
-
-constexpr String gFormatSizeInBytes(size_t inBytes)
-{
-	if (inBytes < 10_KiB)
-		return std::format("{} B", inBytes);
-	else if (inBytes < 10_MiB)
-		return std::format("{} KiB", inBytes / 1_KiB);
-	else if (inBytes < 10_GiB)
-		return std::format("{} MiB", inBytes / 1_MiB);
-	else
-		return std::format("{} GiB", inBytes / 1_GiB);
-}
-
 
 // Replaces / by \.
 constexpr MutStringView gNormalizePath(MutStringView ioPath)
@@ -506,6 +489,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			// TODO: read more attributes?
 
 			// Update the USN.
+			// TODO: this is by far the slowest part, find another way?
 			{
 				OwnedHandle file_handle = mDrive.OpenFileByRefNumber(file.mRefNumber);
 				if (!dir_handle.IsValid())
@@ -528,7 +512,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			// Print how much of the buffer was used, to help sizing that buffer.
 			// Seems most folders need <1 KiB but saw one that used 30 KiB.
 			uint8* buffer_end = (uint8*)entry->FileName + entry->FileNameLength;
-			gApp.Log(std::format("Used {} of {} buffer.", gFormatSizeInBytes(buffer_end - ioBuffer.data()), gFormatSizeInBytes(ioBuffer.size())));
+			gApp.Log(std::format("Used {} of {} buffer.", SizeInBytes(buffer_end - ioBuffer.data()), SizeInBytes(ioBuffer.size())));
 		}
 	}
 }
@@ -744,7 +728,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 	if (false && gApp.mLogFSActivity >= LogLevel::Verbose)
 	{
 		// Print how much of the buffer was used, to help sizing that buffer.
-		gApp.Log(std::format("Used {} of {} buffer.", gFormatSizeInBytes(available_bytes), gFormatSizeInBytes(ioUSNBuffer.size())));
+		gApp.Log(std::format("Used {} of {} buffer.", SizeInBytes(available_bytes), SizeInBytes(ioUSNBuffer.size())));
 	}
 
 	return true;
@@ -884,14 +868,50 @@ FileDrive::FileDrive(char inDriveLetter)
 	// TODO: we should read that from saved stated instead.
 	mNextUSN = journal_data.NextUsn;
 
-	gApp.Log(std::format(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, gFormatSizeInBytes(journal_data.MaximumSize)));
+	gApp.Log(std::format(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize)));
 }
 
+// TODO move elsewhere
+int64 gGetTickCount()
+{
+	LARGE_INTEGER counter;
+	QueryPerformanceCounter(&counter);
+	return counter.QuadPart;
+}
+
+
+int64 gTicksToNanoSeconds(int64 inTicks)
+{
+	struct Initializer
+	{
+		Initializer()
+		{
+			LARGE_INTEGER frequency;
+			QueryPerformanceFrequency(&frequency);
+
+			mTicksPerSecond = frequency.QuadPart;
+		}
+
+		int64 mTicksPerSecond;
+	};
+
+	static Initializer init;
+	
+	return inTicks * 1'000'000'000 / init.mTicksPerSecond;
+}
+
+
+double gTicksToSeconds(int64 inTicks)
+{
+	int64 ns = gTicksToNanoSeconds(inTicks);
+	return (double)ns / 1'000'000'000.0;
+}
 
 
 void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer)
 {
 	gApp.Log("Starting initial scan.");
+	int64 ticks_start = gGetTickCount();
 
 	std::vector<FileID> scan_queue;
 	scan_queue.reserve(1024);
@@ -913,7 +933,15 @@ void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuf
 		} while (!scan_queue.empty());
 	}
 
-	gApp.Log("Initial scan complete.");
+	size_t total_files = 0;
+	{
+		std::lock_guard lock(mFilesMutex);
+		for (auto& repo : mRepos)
+			total_files += repo.mFiles.size();
+	}
+
+	gApp.Log(std::format("Initial scan complete ({} files in {:.2f} seconds).", 
+		total_files, gTicksToSeconds(gGetTickCount() - ticks_start)));
 }
 
 

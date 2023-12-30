@@ -57,7 +57,8 @@ static void sDrawLine(StringView inLine)
 void Log::Draw()
 {
 	ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin("Log"))
+	String title = std::format("Log ({})###Log", SizeInBytes(mStringPool.mChunks.size() * mStringPool.cChunkSize));
+	if (!ImGui::Begin(title.c_str()))
 	{
 		ImGui::End();
 		return;
