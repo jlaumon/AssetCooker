@@ -17,8 +17,6 @@ solution "AssetCooker"
         defines
         {
             "_CRT_SECURE_NO_WARNINGS",
-            "STR_DEFINE_STR32",
-            "STR_SUPPORT_STD_STRING=0",
 			"IMGUI_USER_CONFIG=<ImGuiConfig.h>"
         }
 
@@ -47,9 +45,6 @@ solution "AssetCooker"
             "thirdparty/imgui/backends/imgui_impl_dx11.h",
             "thirdparty/imgui/backends/imgui_impl_win32.cpp",
             "thirdparty/imgui/backends/imgui_impl_win32.h",
-            "thirdparty/Str/**.h",
-            "thirdparty/Str/**.cpp",
-            "thirdparty/Str/**.natvis",
             "thirdparty/icons/**.h",
             "thirdparty/unordered_dense/include/ankerl/unordered_dense.h",
             "thirdparty/WindowsHModular/include/**.h",
