@@ -257,13 +257,13 @@ FileInfo::FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType 
 }
 
 	 
-FileRepo::FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath, FileDrive& inDrive)
+FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, FileDrive& inDrive)
 	: mDrive(inDrive)
 {
-	// Store the index, short name and root path.
-	mIndex     = inIndex;
-	mShortName = mStringPool.AllocateCopy(inShortName);
-	mRootPath  = mStringPool.AllocateCopy(inRootPath);
+	// Store the index, name and root path.
+	mIndex    = inIndex;
+	mName     = mStringPool.AllocateCopy(inName);
+	mRootPath = mStringPool.AllocateCopy(inRootPath);
 
 	// Add this repo to the repo list in the drive.
 	mDrive.mRepos.push_back(this);
@@ -283,7 +283,7 @@ FileRepo::FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath
 	FileInfo& root_dir = GetOrAddFile("", FileType::Directory, file_info.FileId);
 	mRootDirID = root_dir.mID;
 
-	gApp.Log(std::format("Initialized FileRepo {} as {}:", mRootPath, mShortName));
+	gApp.Log(std::format("Initialized FileRepo {} as {}:", mRootPath, mName));
 }
 
 
@@ -789,27 +789,32 @@ FileInfo* FileSystem::FindFile(FileRefNumber inRefNumber)
 
 
 
-void FileSystem::AddRepo(StringView inShortName, StringView inRootPath)
+void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 {
-	gAssert(!mMonitorDirThread.joinable()); // Can't add repos once the threads have started, it's not thread safe!
+	gAssert(!IsMonitoringStarted()); // Can't add repos once the threads have started, it's not thread safe!
+
+	// Check that the name is unique.
+	for (auto& repo : mRepos)
+	{
+		if (repo.mName == inName)
+			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - There is already a repo with that name.", inName, inRootPath));
+	}
 
 	// Normalize the root path.
 	String root_path(inRootPath);
 	gNormalizePath(root_path);
 
 	// Validate it.
+	if (root_path.size() < 3 
+		|| !gIsAlpha(root_path[0]) 
+		|| !gStartsWith(root_path.substr(1), R"(:\)"))
 	{
-		if (root_path.size() < 3 
-			|| !gIsAlpha(root_path[0]) 
-			|| !gStartsWith(root_path.substr(1), R"(:\)"))
-		{
-			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Root Path should start with a drive letter (eg. D:/).", inShortName, inRootPath));
-		}
-
-		// Add a trailing slash if there isn't one.
-		if (!gEndsWith(root_path, "\\"))
-			root_path.append("\\");
+		gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Root Path should start with a drive letter (eg. D:/).", inName, inRootPath));
 	}
+
+	// Add a trailing slash if there isn't one.
+	if (!gEndsWith(root_path, "\\"))
+		root_path.append("\\");
 
 	// Check if it overlaps with other repos.
 	// TODO: test this
@@ -818,21 +823,19 @@ void FileSystem::AddRepo(StringView inShortName, StringView inRootPath)
 		if (gStartsWith(repo.mRootPath, root_path))
 		{
 			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Root Path is inside another FileRepo ({} {}).", 
-				inShortName, inRootPath, 
-				repo.mShortName, repo.mRootPath));
+				inName, inRootPath, 
+				repo.mName, repo.mRootPath));
 		}
 
 		if (gStartsWith(root_path, repo.mRootPath))
 		{
 			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Another FileRepo is inside its root path ({} {}).", 
-				inShortName, inRootPath, 
-				repo.mShortName, repo.mRootPath));
+				inName, inRootPath, 
+				repo.mName, repo.mRootPath));
 		}
 	}
 
-	//String root_path_no_drive = root_path.substr(3);
-
-	mRepos.emplace_back((uint32)mRepos.size(), inShortName, root_path, GetOrAddDrive(root_path[0]));
+	mRepos.emplace_back((uint32)mRepos.size(), inName, root_path, GetOrAddDrive(root_path[0]));
 }
 
 FileDrive& FileSystem::GetOrAddDrive(char inDriveLetter)

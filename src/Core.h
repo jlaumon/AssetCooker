@@ -92,9 +92,9 @@ template <  class Key,
 using SegmentedHashSet = ankerl::unordered_dense::segmented_set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
 
 template <	typename T,
-			typename Allocator = std::allocator<T>,
-			size_t MaxSegmentSizeBytes = 4096>
-using SegmentedVector = ankerl::unordered_dense::segmented_vector<T, Allocator, MaxSegmentSizeBytes>;
+			size_t MaxSegmentSizeElements = 1024,
+			typename Allocator = std::allocator<T>>
+using SegmentedVector = ankerl::unordered_dense::segmented_vector<T, Allocator, MaxSegmentSizeElements * sizeof(T)>;
 
 // Hash helper to hash entire structs.
 // Only use on structs/classes that don't contain any padding.

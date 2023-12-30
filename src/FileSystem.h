@@ -136,10 +136,7 @@ struct FileInfo : NoCopy
 // Top level container for files.
 struct FileRepo : NoCopy
 {
-	static constexpr size_t cFilePerSegment = 4096;
-	using FilesSegmentedVector = SegmentedVector<FileInfo, std::allocator<FileInfo>, sizeof(FileInfo) * cFilePerSegment>;
-
-	FileRepo(uint32 inIndex, StringView inShortName, StringView inRootPath, FileDrive& inDrive);
+	FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, FileDrive& inDrive);
 	~FileRepo() = default;
 
 	FileInfo&		GetFile(FileID inFileID)		{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
@@ -151,12 +148,12 @@ struct FileRepo : NoCopy
 	void                      ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> ioBuffer);
 
 	uint32                    mIndex = 0;        // The index of this repo.
-	StringView                mShortName;        // A named used for display.
+	StringView                mName;			 // A named used to identify the repo.
 	StringView                mRootPath;         // Absolute path to the repo. Starts with the drive letter, ends with a slash.
 	FileDrive&				  mDrive;			 // The drive this repo is on.
 	FileID                    mRootDirID;		 // The FileID of the root dir.
 
-	FilesSegmentedVector	  mFiles;            // All the files in this repo.
+	SegmentedVector<FileInfo, 4096> mFiles;      // All the files in this repo.
 
 	StringPool                mStringPool;       // Pool for storing all the paths.
 };
@@ -184,10 +181,12 @@ struct FileDrive : NoCopy
 
 struct FileSystem : NoCopy
 {
-	void AddRepo(StringView inShortName, StringView inRootPath);
+	void            AddRepo(StringView inName, StringView inRootPath);
 
-	void StartMonitoring();		// Only call after adding all repos.
-	void StopMonitoring();
+	void            StartMonitoring(); // Only call after adding all repos.
+	void            StopMonitoring();
+
+	bool            IsMonitoringStarted() const			{ return mMonitorDirThread.joinable(); }
 
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
@@ -247,7 +246,7 @@ template <> struct std::formatter<FileInfo> : std::formatter<std::string_view>
 	{
 		return std::format_to(ioCtx.out(), "{:9} {}:{}", 
 			inFileInfo.IsDirectory() ? "Directory" : "File", 
-			inFileInfo.GetRepo().mShortName,
+			inFileInfo.GetRepo().mName,
 			inFileInfo.mPath);
 	}
 };
