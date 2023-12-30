@@ -94,7 +94,18 @@ void gUIDrawMainMenuBar()
 
 		if (ImGui::BeginMenu("Debug"))
 		{
-			ImGui::MenuItem("Log FileSystem Activity", nullptr, &gApp.mLogFSActivity);
+			if (ImGui::BeginMenu("Log FileSystem Activity"))
+			{
+				const char* log_levels[] = { "None", "Basic", "Verbose" };
+				static_assert(gElemCount(log_levels) == (size_t)LogLevel::Verbose + 1);
+
+				int current_log_level = (int)gApp.mLogFSActivity;
+
+				if (ImGui::ListBox("##Verbosity", &current_log_level, log_levels, gElemCount(log_levels)))
+					gApp.mLogFSActivity = (LogLevel)current_log_level;
+
+				ImGui::EndMenu();
+			}
 
 			ImGui::EndMenu();
 		}

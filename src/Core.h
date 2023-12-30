@@ -54,6 +54,9 @@ template <typename T> constexpr T gMin(T inA, T inB)				{ return inA < inB ? inA
 template <typename T> constexpr T gMax(T inA, T inB)				{ return inB < inA ? inA : inB; }
 template <typename T> constexpr T gClamp(T inV, T inLow, T inHigh)	{ return (inV < inLow) ? inLow : (inHigh < inV) ? inHigh : inV; }
 
+template<typename taType, size_t taArraySize>
+constexpr size_t gElemCount(const taType (&inArray)[taArraySize]) { return taArraySize; }
+
 // Basic containers.
 #include "ankerl/unordered_dense.h"
 
