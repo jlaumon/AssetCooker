@@ -16,6 +16,7 @@
 #include "App.h"
 #include "Debug.h"
 #include "FileSystem.h"
+#include "CookingSystem.h"
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -114,9 +115,15 @@ int WinMain(
 
 	gApp.mLogFSActivity = LogLevel::Verbose;
 
-	gFileSystem.AddRepo("Source", "C:/");
+	// Add all repos.
+	gFileSystem.AddRepo("Source", R"(D:\test\)");
 
-	gFileSystem.StartMonitoring();
+	// Add all rules.
+
+	// If all is good, start adding files.
+	// TODO: otherwise make it clear there's a problem (pop-up the log?)
+	if (gCookingSystem.ValidateRules())
+		gFileSystem.StartMonitoring();
 
 	// Main loop
 	while (!gApp.IsExitReady())

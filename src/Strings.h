@@ -40,6 +40,11 @@ struct StringView : public std::string_view
 	}
 };
 
+// Return true if inString1 and inString2 are identical.
+constexpr bool gIsEqual(StringView inString1, StringView inString2)
+{
+	return inString1 == inString2;
+}
 
 // Return true if inString starts with inStart.
 constexpr bool gStartsWith(StringView inString, StringView inStart)
@@ -53,7 +58,17 @@ constexpr bool gEndsWith(StringView inString, StringView inEnd)
 	return std::string_view(inString.data(), inString.size()).ends_with(std::string_view(inEnd.data(), inEnd.size()));
 }
 
-// Return true if characters is an alphabetical letter.
+// Return true if inString1 and inString2 are identical (case-insensitive).
+bool gIsEqualCI(StringView inString1, StringView inString2);
+
+// Return true if inString starts with inStart (case-insensitive).
+bool gStartsWithCI(StringView inString, StringView inStart);
+
+// Return true if inString ends with inEnd (case-insensitive).
+bool gEndsWithCI(StringView inString, StringView inEnd);
+
+
+// Return true if inChar is an alphabetical letter.
 constexpr bool gIsAlpha(char inChar) { return inChar >= 'A' && inChar < 'z'; }
 
 
