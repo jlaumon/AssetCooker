@@ -6,6 +6,7 @@
 #include <string_view>
 #include <string>
 #include <format>
+#include <optional>
 
 
 // Mutable StringView. Size includes the null-terminator.
@@ -59,13 +60,13 @@ constexpr bool gEndsWith(StringView inString, StringView inEnd)
 }
 
 // Return true if inString1 and inString2 are identical (case-insensitive).
-bool gIsEqualCI(StringView inString1, StringView inString2);
+bool gIsEqualNoCase(StringView inString1, StringView inString2);
 
 // Return true if inString starts with inStart (case-insensitive).
-bool gStartsWithCI(StringView inString, StringView inStart);
+bool gStartsWithNoCase(StringView inString, StringView inStart);
 
 // Return true if inString ends with inEnd (case-insensitive).
-bool gEndsWithCI(StringView inString, StringView inEnd);
+bool gEndsWithNoCase(StringView inString, StringView inEnd);
 
 
 // Return true if inChar is an alphabetical letter.
@@ -151,3 +152,12 @@ template <> struct std::formatter<SizeInBytes> : std::formatter<std::string_view
 			return std::format_to(ioCtx.out(), "{} GiB", (size_t)inBytes / 1_GiB);
 	}
 };
+
+
+// Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
+std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer);
+
+// Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
+std::optional<std::wstring_view> gUtf8ToWideChar(StringView inString, std::span<wchar_t> ioBuffer);
+
+

@@ -46,66 +46,6 @@ constexpr bool gIsNormalized(StringView inPath)
 	return true;
 }
 
-// Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
-std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer)
-{
-	// If a null terminator is included in the source, WideCharToMultiByte will also add it in the destination.
-	// Otherwise we'll need to add it manually.
-	bool source_is_null_terminated = (!inWString.empty() && inWString.back() == 0);
-
-	int available_bytes = (int)ioBuffer.size();
-
-	// If we need to add a null terminator, reserve 1 byte for it.
-	if (source_is_null_terminated)
-		available_bytes--;
-
-	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), ioBuffer.data(), available_bytes, nullptr, nullptr);
-
-	if (written_bytes == 0 && !inWString.empty())
-		return std::nullopt; // Failed to convert.
-
-	if (written_bytes == available_bytes)
-		return std::nullopt; // Might be cropped, consider failed.
-
-	// If there isn't a null terminator, add it.
-	if (!source_is_null_terminated)
-		ioBuffer[written_bytes + 1] = 0;
-	else
-		gAssert(ioBuffer[written_bytes] == 0); // Should already have a null terminator.
-
-	return ioBuffer.subspan(0, written_bytes);
-}
-
-// Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
-std::optional<std::wstring_view> gUtf8ToWideChar(StringView inString, std::span<wchar_t> ioBuffer)
-{
-	// If a null terminator is included in the source, WideCharToMultiByte will also add it in the destination.
-	// Otherwise we'll need to add it manually.
-	bool source_is_null_terminated = (!inString.empty() && inString.back() == 0);
-
-	int available_bytes = (int)ioBuffer.size();
-
-	// If we need to add a null terminator, reserve 1 byte for it.
-	if (source_is_null_terminated)
-		available_bytes--;
-
-	int written_wchars = MultiByteToWideChar(CP_UTF8, 0, inString.data(), (int)inString.size(), ioBuffer.data(), available_bytes);
-
-	if (written_wchars == 0 && !inString.empty())
-		return std::nullopt; // Failed to convert.
-
-	if (written_wchars == available_bytes)
-		return std::nullopt; // Might be cropped, consider failed.
-
-	// If there isn't a null terminator, add it.
-	if (!source_is_null_terminated)
-		ioBuffer[written_wchars + 1] = 0;
-	else
-		gAssert(ioBuffer[written_wchars] == 0); // Should already have a null terminator.
-
-	return std::wstring_view{ ioBuffer.data(), (size_t)written_wchars };
-}
-
 
 // Hash the absolute path of a file in a case insensitive manner.
 // That's used to get a unique identifier for the file even if the file itself doesn't exist.
@@ -123,13 +63,13 @@ Hash128 gHashPath(StringView inRootPath, StringView inPath)
 	PathBufferUTF16 wpath_buffer;
 	std::optional wpath = gUtf8ToWideChar(abs_path, wpath_buffer);
 	if (!wpath)
-		gApp.FatalError(std::format("Failed to convert path {} to WideChar", inPath));
+		gApp.FatalError("Failed to convert path {} to WideChar", inPath);
 
 	// Convert it to uppercase.
 	PathBufferUTF16 uppercase_buffer;
 	int uppercase_size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, wpath->data(), (int)wpath->size(), uppercase_buffer.data(), uppercase_buffer.size() / 2, nullptr, nullptr, 0);
 	if (uppercase_size == 0)
-		gApp.FatalError(std::format("Failed to convert path {} to uppercase", inPath));
+		gApp.FatalError("Failed to convert path {} to uppercase", inPath);
 
 	std::wstring_view uppercase_wpath = { uppercase_buffer.data(), (size_t)uppercase_size };
 
@@ -272,18 +212,18 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 	// TODO: do we want to keep that handle to make sure the root isn't deleted?
 	OwnedHandle root_dir_handle = CreateFileA(mRootPath.data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 	if (!root_dir_handle.IsValid())
-		gApp.FatalError(std::format("Failed to get handle to {} - ", mRootPath) + GetLastErrorString());
+		gApp.FatalError("Failed to get handle to {} - {}", mRootPath, GetLastErrorString());
 
 	// Get the FileReferenceNumber of the root dir.
 	FILE_ID_INFO file_info;
 	if (!GetFileInformationByHandleEx(root_dir_handle, FileIdInfo, &file_info, sizeof(file_info)))
-		gApp.FatalError(std::format("Failed to get FileReferenceNumber for {} - ", mRootPath) + GetLastErrorString());
+		gApp.FatalError("Failed to get FileReferenceNumber for {} - {}", mRootPath, GetLastErrorString());
 
 	// The root directory file info has an empty path (relative to mRootPath).
 	FileInfo& root_dir = GetOrAddFile("", FileType::Directory, file_info.FileId);
 	mRootDirID = root_dir.mID;
 
-	gApp.Log(std::format("Initialized FileRepo {} as {}:", mRootPath, mName));
+	gApp.Log("Initialized FileRepo {} as {}:", mRootPath, mName);
 }
 
 
@@ -315,7 +255,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 				if (file.mRefNumber != inRefNumber)
 				{
 					if (file.mRefNumber.IsValid())
-						gApp.LogError(std::format("{} chandged ref number unexpectedly (missed event?)", file));
+						gApp.LogError("{} chandged ref number unexpectedly (missed event?)", file);
 
 					file.mRefNumber = inRefNumber;
 				}
@@ -422,12 +362,12 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 	{
 		// TODO: depending on error, we should probably re-queue for scan
 		if (gApp.mLogFSActivity >= LogLevel::Normal)
-			gApp.LogError(std::format("Failed to open {} - {}", dir, GetLastErrorString()));
+			gApp.LogError("Failed to open {} - {}", dir, GetLastErrorString());
 		return;
 	}
 
 	if (gApp.mLogFSActivity >= LogLevel::Normal)
-		gApp.Log(std::format("Added {}", dir));
+		gApp.Log("Added {}", dir);
 
 
 	// First GetFileInformationByHandleEx call needs a different value to make it "restart".
@@ -441,7 +381,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			if (GetLastError() == ERROR_NO_MORE_FILES)
 				break; // Finished iterating, exit the loop.
 
-			gApp.FatalError(std::format("Enumerating {} failed - ", dir) + GetLastErrorString());
+			gApp.FatalError("Enumerating {} failed - {}", dir, GetLastErrorString());
 		}
 
 		// Next time keep iterating instead of restarting.
@@ -473,7 +413,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			// If it fails, ignore the file.
 			if (!path)
 			{
-				gApp.LogError(std::format("Failed to build the path of a file in {}", dir));
+				gApp.LogError("Failed to build the path of a file in {}", dir);
 				gAssert(false); // Investigate why that would happen.
 				continue;
 			}
@@ -485,7 +425,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			FileInfo& file = GetOrAddFile(*path, is_directory ? FileType::Directory : FileType::File, entry->FileId);
 
 			if (gApp.mLogFSActivity >= LogLevel::Verbose)
-				gApp.Log(std::format("Added {}", file));
+				gApp.Log("Added {}", file);
 
 			// TODO: read more attributes?
 
@@ -497,7 +437,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 				{
 					// TODO: depending on error, we should probably re-queue for scan
 					if (gApp.mLogFSActivity>= LogLevel::Normal)
-						gApp.LogError(std::format("Failed to open {} - {}", file, GetLastErrorString()));
+						gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
 				}
 
 				file.mUSN = mDrive.GetUSN(file_handle);
@@ -513,7 +453,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			// Print how much of the buffer was used, to help sizing that buffer.
 			// Seems most folders need <1 KiB but saw one that used 30 KiB.
 			uint8* buffer_end = (uint8*)entry->FileName + entry->FileNameLength;
-			gApp.Log(std::format("Used {} of {} buffer.", SizeInBytes(buffer_end - ioBuffer.data()), SizeInBytes(ioBuffer.size())));
+			gApp.Log("Used {} of {} buffer.", SizeInBytes(buffer_end - ioBuffer.data()), SizeInBytes(ioBuffer.size()));
 		}
 	}
 }
@@ -599,7 +539,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 	if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioUSNBuffer.data(), (uint32)ioUSNBuffer.size(), &available_bytes, nullptr))
 	{
 		// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
-		gApp.FatalError(std::format("Failed to read USN journal for {}:\\ - ", mLetter) + GetLastErrorString());
+		gApp.FatalError("Failed to read USN journal for {}:\\ - {}", mLetter, GetLastErrorString());
 	}
 
 	std::span<uint8> available_buffer = ioUSNBuffer.subspan(0, available_bytes);
@@ -643,7 +583,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 				repo.MarkFileDeleted(*file);
 
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
-					gApp.Log(std::format("Deleted {}", *file));
+					gApp.Log("Deleted {}", *file);
 
 				// If it's a directory, also mark all the file inside as deleted.
 				if (file->IsDirectory())
@@ -658,7 +598,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 							repo.MarkFileDeleted(file);
 
 							if (gApp.mLogFSActivity >= LogLevel::Verbose)
-								gApp.Log(std::format("Deleted {}", file));
+								gApp.Log("Deleted {}", file);
 						}
 					}
 				}
@@ -673,7 +613,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 			if (!file_handle.IsValid())
 			{
 				// TODO: probably need to retry later or something depending on the error, or scan the parent dir instead? we can't just ignore it (unless it's because the file was deleted already)
-				gApp.LogError(std::format("Failed to open newly created file {} - {}", FileRefNumber(record->FileReferenceNumber), GetLastErrorString()));
+				gApp.LogError("Failed to open newly created file {} - {}", FileRefNumber(record->FileReferenceNumber), GetLastErrorString());
 				continue;
 			}
 
@@ -683,7 +623,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 			if (!full_path)
 			{
 				// TODO: same remark as failing to open
-				gApp.LogError(std::format("Failed to get path for newly created file {} - {}", FileRefNumber(record->FileReferenceNumber), GetLastErrorString()));
+				gApp.LogError("Failed to get path for newly created file {} - {}", FileRefNumber(record->FileReferenceNumber), GetLastErrorString());
 				continue;
 			}
 
@@ -708,7 +648,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 				else
 				{
 					if (gApp.mLogFSActivity >= LogLevel::Verbose)
-						gApp.Log(std::format("Added {})", file));
+						gApp.Log("Added {})", file);
 				}
 			}
 		}
@@ -719,7 +659,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 			if (file)
 			{
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
-					gApp.Log(std::format("Modified {}", *file));
+					gApp.Log("Modified {}", *file);
 
 				file->mUSN = record->Usn;
 			}
@@ -729,7 +669,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 	if (false && gApp.mLogFSActivity >= LogLevel::Verbose)
 	{
 		// Print how much of the buffer was used, to help sizing that buffer.
-		gApp.Log(std::format("Used {} of {} buffer.", SizeInBytes(available_bytes), SizeInBytes(ioUSNBuffer.size())));
+		gApp.Log("Used {} of {} buffer.", SizeInBytes(available_bytes), SizeInBytes(ioUSNBuffer.size()));
 	}
 
 	return true;
@@ -797,7 +737,7 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 	for (auto& repo : mRepos)
 	{
 		if (repo.mName == inName)
-			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - There is already a repo with that name.", inName, inRootPath));
+			gApp.FatalError("Failed to init FileRepo {} ({}) - There is already a repo with that name.", inName, inRootPath);
 	}
 
 	// Normalize the root path.
@@ -809,7 +749,7 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 		|| !gIsAlpha(root_path[0]) 
 		|| !gStartsWith(root_path.substr(1), R"(:\)"))
 	{
-		gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Root Path should start with a drive letter (eg. D:/).", inName, inRootPath));
+		gApp.FatalError("Failed to init FileRepo {} ({}) - Root Path should start with a drive letter (eg. D:/).", inName, inRootPath);
 	}
 
 	// Add a trailing slash if there isn't one.
@@ -822,16 +762,16 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 	{
 		if (gStartsWith(repo.mRootPath, root_path))
 		{
-			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Root Path is inside another FileRepo ({} {}).", 
+			gApp.FatalError("Failed to init FileRepo {} ({}) - Root Path is inside another FileRepo ({} {}).", 
 				inName, inRootPath, 
-				repo.mName, repo.mRootPath));
+				repo.mName, repo.mRootPath);
 		}
 
 		if (gStartsWith(root_path, repo.mRootPath))
 		{
-			gApp.FatalError(std::format("Failed to init FileRepo {} ({}) - Another FileRepo is inside its root path ({} {}).", 
+			gApp.FatalError("Failed to init FileRepo {} ({}) - Another FileRepo is inside its root path ({} {}).", 
 				inName, inRootPath, 
-				repo.mName, repo.mRootPath));
+				repo.mName, repo.mRootPath);
 		}
 	}
 
@@ -857,13 +797,13 @@ FileDrive::FileDrive(char inDriveLetter)
 	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
 	mHandle = CreateFileA(std::format(R"(\\.\{}:)", mLetter).c_str(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (!mHandle.IsValid())
-		gApp.FatalError(std::format(R"(Failed to get handle to {}:\ - )", mLetter) + GetLastErrorString());
+		gApp.FatalError(R"(Failed to get handle to {}:\ - {})", mLetter, GetLastErrorString());
 
 	// Query the USN journal to get its ID.
 	USN_JOURNAL_DATA_V0 journal_data;
 	uint32				unused;
 	if (!DeviceIoControl(mHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &unused, nullptr))
-		gApp.FatalError(std::format(R"(Failed to query USN journal for {}:\ - )", mLetter) + GetLastErrorString());
+		gApp.FatalError(R"(Failed to query USN journal for {}:\ - {})", mLetter, GetLastErrorString());
 
 	// Store the jorunal ID.
 	mUSNJournalID = journal_data.UsnJournalID;
@@ -872,7 +812,7 @@ FileDrive::FileDrive(char inDriveLetter)
 	// TODO: we should read that from saved stated instead.
 	mNextUSN = journal_data.NextUsn;
 
-	gApp.Log(std::format(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize)));
+	gApp.Log(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize));
 }
 
 
@@ -909,8 +849,8 @@ void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuf
 			total_files += repo.mFiles.size();
 	}
 
-	gApp.Log(std::format("Initial scan complete ({} files in {:.2f} seconds).", 
-		total_files, gTicksToSeconds(gGetTickCount() - ticks_start)));
+	gApp.Log("Initial scan complete ({} files in {:.2f} seconds).", 
+		total_files, gTicksToSeconds(gGetTickCount() - ticks_start));
 }
 
 

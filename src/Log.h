@@ -12,12 +12,24 @@ struct Log
 {
 	static constexpr StringView  cErrorTag = "[error]";
 
-	// TODO: Support formatting directly here. Use std::vformat_to and make StringPool support std::back_inserter
+	template<typename... taArgs> void Add(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
+	{
+		Add(LogType::Normal, inFmt, std::make_format_args(inArgs...));
+	}
 
-	void Add(StringView inString, LogType inType = LogType::Normal);
-	void AddError(StringView inString) { Add(inString, LogType::Error); }
+	template<typename... taArgs> void AddError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
+	{
+		Add(LogType::Error, inFmt, std::make_format_args(inArgs...));
+	}
+
+	// Returns the formatted string out of convenience.
+	StringView                      Add(LogType inType, std::string_view inFmt, std::format_args inArgs);
+
 	void Clear();
 	void Draw();
+
+	StringPool::ResizableStringView	StartLine(LogType inType);
+	void							FinishLine(StringPool::ResizableStringView& inLine);
 	
 	std::vector<StringView> mLines;
 	StringPool              mStringPool;

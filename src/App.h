@@ -23,12 +23,15 @@ struct App
 	bool IsExitRequested();
 	bool IsExitReady();
 
-	void FatalError(StringView inMessage);
+	template <class... taArgs> void FatalError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { FatalErrorV(inFmt.get(), std::make_format_args(inArgs...)); }
+	void                            FatalErrorV(std::string_view inFmt, std::format_args inArgs = {});
 
-	void Log(StringView inMessage, LogType inType = LogType::Normal);
-	void LogError(StringView inMessage)									{ Log(inMessage, LogType::Error); }
+	template <class... taArgs> void Log(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogV(inFmt.get(), std::make_format_args(inArgs...)); }
+	void                            LogV(std::string_view inFmt, std::format_args inArgs = {}, LogType inType = LogType::Normal);
+	template <class... taArgs> void LogError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogErrorV(inFmt.get(), std::make_format_args(inArgs...)); }
+	void                            LogErrorV(std::string_view inFmt, std::format_args inArgs = {}) { LogV(inFmt, inArgs, LogType::Error); }
 
-	void DrawLog();
+	void                            DrawLog();
 
 	void*      mMainWindowHwnd  = nullptr;
 	bool       mExitRequested   = false;

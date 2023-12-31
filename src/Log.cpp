@@ -2,30 +2,46 @@
 
 #include "imgui.h"
 
-void Log::Add(StringView inString, LogType inType)
+
+StringPool::ResizableStringView Log::StartLine(LogType inType)
 {
-	// TODO: check inString for end of lines and split it, otherwise can't use imgui clipper
+	auto resizable_str = mStringPool.CreateResizableString();
+
 	// TODO: add date/time (optionally)
-
-	size_t alloc_size = inString.size();
-
-	if (inType == LogType::Error)
-		alloc_size += cErrorTag.size() + 1;
-
-	auto line_storage = mStringPool.Allocate(alloc_size);
-	auto line_ptr     = line_storage;
-
 	if (inType == LogType::Error)
 	{
-		line_ptr = gAppend(line_ptr, cErrorTag);
-		line_ptr = gAppend(line_ptr, " ");
+		resizable_str.Append(cErrorTag);
+		resizable_str.Append(" ");
 	}
 
-	line_ptr = gAppend(line_ptr, inString);
+	return resizable_str;
+}
 
-	gAssert(line_ptr.size() == 1 && line_ptr[0] == 0); // Should have allocated exactly what's needed, only the null terminator is left.
 
-	mLines.push_back(line_storage);
+void Log::FinishLine(StringPool::ResizableStringView& inLine)
+{
+	StringView line = inLine.AsStringView();
+
+	// TODO: check inString for end of lines and split it, otherwise can't use imgui clipper
+	gAssert(gIsNullTerminated(line));
+
+	mLines.push_back(line);
+}
+
+
+StringView Log::Add(LogType inType, std::string_view inFmt, std::format_args inArgs)
+{
+	StringPool::ResizableStringView str = StartLine(inType);
+
+	size_t size_before_format = str.AsStringView().size();
+
+	std::vformat_to(std::back_inserter(str), inFmt, inArgs);
+
+	size_t size_after_format = str.AsStringView().size();
+
+	FinishLine(str);
+
+	return { str.mData + size_before_format, str.mData + size_after_format };
 }
 
 

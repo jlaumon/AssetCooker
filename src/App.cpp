@@ -29,41 +29,50 @@ bool App::IsExitReady()
 }
 
 
-void App::FatalError(StringView inMessage)
+void App::FatalErrorV(std::string_view inFmt, std::format_args inArgs)
 {
-	gAssert(gIsNullTerminated(inMessage));
-
 	// Make sure a single thread triggers the pop-up.
 	static std::mutex blocker;
 	blocker.lock();
 
 	// Log the error first.
-	LogError(inMessage);
+	LogErrorV(inFmt, inArgs);
 	
 	if (gIsDebuggerAttached())
 		breakpoint;
 	else
-		MessageBoxA(mMainWindowHwnd, inMessage.data(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
+		// TODO: use wide chars
+		MessageBoxA(mMainWindowHwnd, std::vformat(inFmt, inArgs).c_str(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
 
 	// TODO: will need to do a proper exit and save the database at some point...
 	exit(1);
 }
 
 
-void App::Log(StringView inMessage, LogType inType/* = LogType::Normal*/)
+void App::LogV(std::string_view inFmt, std::format_args inArgs, LogType inType)
 {
+	StringView formatted_str;
+
 	// Add to the in-memory log.
 	{
 		std::lock_guard lock(mLogMutex);
-		mLog.Add(inMessage, inType);
+		formatted_str = mLog.Add(inType, inFmt, inArgs);
 	}
 
-	// Add an end of line character.
-	char message_buffer[4096];
-	gConcat(message_buffer, inMessage, "\n\0");
+	// Convert to wide char to write to the debug output.
+	wchar_t message_buffer[4096];
+	auto wchar_message = gUtf8ToWideChar(formatted_str, message_buffer);
+	gAssert(wchar_message); // Buffer too small? Why would you log something that long?
 
-	// Write the message to the output.
-	OutputDebugStringA(message_buffer);
+	if (wchar_message && wchar_message->size() < gElemCount(message_buffer) - 2)
+	{
+		// Add an end of line and null terminator.
+		message_buffer[wchar_message->size() + 0] = L'\n';
+		message_buffer[wchar_message->size() + 1] = L'\0';
+
+		// Write the message to the output.
+		OutputDebugStringW(message_buffer);
+	}
 
 	// TODO: also log to a file
 }
