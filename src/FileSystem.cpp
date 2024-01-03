@@ -296,8 +296,14 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 	// Make sure the root path exists.
 	gCreateDirectoryRecursive(mRootPath);
 
+	// Convert the root path to wchars.
+	PathBufferUTF16 root_path_buffer;
+	std::optional   root_path_wchar = gUtf8ToWideChar(mRootPath, root_path_buffer);
+	if (!root_path_wchar)
+		gApp.FatalError("Failed to convert root path {} to WideChar", mRootPath);
+
 	// Get a handle to the root path.
-	mRootDirHandle = CreateFileA(mRootPath.data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+	mRootDirHandle = CreateFileW(root_path_wchar->data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 	if (!mRootDirHandle.IsValid())
 		gApp.FatalError("Failed to get handle to {} - {}", mRootPath, GetLastErrorString());
 
