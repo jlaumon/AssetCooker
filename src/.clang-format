@@ -1,10 +1,9 @@
 ﻿---
 BasedOnStyle: Microsoft
 AccessModifierOffset: '-4'
-AlignConsecutiveAssignments: 'true'
-AlignConsecutiveDeclarations: 'true'
+AlignConsecutiveAssignments: AcrossEmptyLines
+AlignConsecutiveDeclarations: AcrossEmptyLines
 AlignEscapedNewlines: Left
-AlignTrailingComments: 'true'
 Cpp11BracedListStyle: 'false'
 PointerAlignment: Left
 TabWidth: '4'
