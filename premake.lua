@@ -12,7 +12,11 @@ solution "AssetCooker"
         dpiawareness "HighPerMonitor"
 		cppdialect "C++20"
 		exceptionhandling "Off"
-		flags "MultiProcessorCompile"
+		flags 
+		{
+			"MultiProcessorCompile",
+			"FatalWarnings"
+		}
         
         defines
         {
