@@ -119,7 +119,7 @@ int WinMain(
 
 	// Add all repos.
 	gFileSystem.AddRepo("Source", R"(D:\test\)");
-	gFileSystem.AddRepo("Bin", R"(D:\output\test\)");
+	gFileSystem.AddRepo("Bin", u8R"(D:\output\tëst\)");
 
 	// Add all rules.
 	auto& copy_txt_rule = gCookingSystem.AddRule();

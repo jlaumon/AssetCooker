@@ -39,6 +39,15 @@ struct StringView : public std::string_view
 		if (!empty() && back() == 0)
 			remove_suffix(1);
 	}
+
+	// Implicit contructor from u8 literals. Is it a good idea? Who knows.
+	template<size_t taSize>
+	constexpr StringView(const char8_t (&inArray)[taSize])	: std::string_view((const char*)inArray, taSize)
+	{
+		// Don't include the null terminator if there's one.
+		if (!empty() && back() == 0)
+			remove_suffix(1);
+	}
 };
 
 
