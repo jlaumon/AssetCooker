@@ -47,7 +47,9 @@ int WinMain(
 	ImGui_ImplWin32_EnableDpiAwareness();
 	WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
 	::RegisterClassExW(&wc);
-	HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui DirectX11 Example", WS_OVERLAPPEDWINDOW, 100, 100, 1600, 1600, nullptr, nullptr, wc.hInstance, nullptr);
+	wchar_t name_buffer[128];
+	auto name_wchar = gUtf8ToWideChar(cAppName, name_buffer);
+	HWND hwnd = ::CreateWindowW(wc.lpszClassName, name_wchar.value_or(L"").data(), WS_OVERLAPPEDWINDOW, 100, 100, 1600, 1600, nullptr, nullptr, wc.hInstance, nullptr);
 
 	gApp.Init(hwnd);
 
