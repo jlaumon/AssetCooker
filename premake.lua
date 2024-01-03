@@ -38,6 +38,7 @@ solution "AssetCooker"
         
 		files 
 		{
+			"src/enable_utf8.manifest",
             "src/.clang-format",
 			"src/**.h",
             "src/**.cpp",

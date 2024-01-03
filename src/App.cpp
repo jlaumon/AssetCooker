@@ -1,12 +1,18 @@
 #include "App.h"
 #include "Debug.h"
-#include "win32/dbghelp.h"
 
+#include "win32/dbghelp.h"
+#include "win32/misc.h"
 #include "win32/window.h"
 
 void App::Init(void* inHwnd)
 {
 	mMainWindowHwnd = inHwnd;
+
+	// The application includes a manifest that should make the default code page be UTF8 (if at least Windows 10 1903).
+	// This in turn should mean that most ANSI win32 functions actually support UTF8.
+	// TODO: use A version of windows functions wherever possible
+	Log("UTF8 is {}.", GetACP() == CP_UTF8 ? "supported. Noice" : "not supported");
 }
 
 
