@@ -41,6 +41,17 @@ struct StringView : public std::string_view
 	}
 };
 
+
+template <> struct std::hash<StringView>
+{
+    using is_avalanching = void;
+    uint64 operator()(const StringView& inString) const
+	{
+        return ankerl::unordered_dense::detail::wyhash::hash(inString.data(), inString.size());
+    }
+};
+
+
 // Return true if inString1 and inString2 are identical.
 constexpr bool gIsEqual(StringView inString1, StringView inString2)
 {
@@ -100,7 +111,7 @@ constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr)
 }
 
 
-constexpr StringView gConcat(MutStringView ioDest, const StringView inStr)
+constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr)
 {
 	StringView remaining_buffer = gAppend(ioDest, inStr);
 
@@ -108,11 +119,11 @@ constexpr StringView gConcat(MutStringView ioDest, const StringView inStr)
 }
 
 // Copy multiple string into a potentially larger one, and return a MutStringView for what remains.
-// eg. gAppend(buffer, "hello", "world") will write "helloworld" into buffer.
+// eg. gConcat(buffer, "hello", "world") will write "helloworld" into buffer.
 template <class ...taArgs>
-constexpr StringView gConcat(MutStringView ioDest, const StringView inStr, taArgs... inArgs)
+constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr, taArgs... inArgs)
 {
-	StringView concatenated_str = gConcat(gAppend(ioDest, inStr), inArgs...);
+	MutStringView concatenated_str = gConcat(gAppend(ioDest, inStr), inArgs...);
 
 	return { ioDest.data(), gEndPtr(concatenated_str) };
 }

@@ -117,8 +117,16 @@ int WinMain(
 
 	// Add all repos.
 	gFileSystem.AddRepo("Source", R"(D:\test\)");
+	gFileSystem.AddRepo("Bin", R"(D:\output\test\)");
 
 	// Add all rules.
+	auto& copy_txt_rule = gCookingSystem.AddRule();
+	copy_txt_rule.mName = "Copy";
+	copy_txt_rule.mInputFilters = {
+		{ .mRepoIndex = gFileSystem.FindRepo("Source")->mIndex, .mExtension = ".txt" },
+		{ .mRepoIndex = gFileSystem.FindRepo("Source")->mIndex, .mExtension = ".png", .mDirectoryPrefix = "yes_copy", .mNamePrefix = "only_this_" },
+	};
+	copy_txt_rule.mOutputPaths  = { "{Repo:Bin}{Dir}{File}_copy{Ext}" };
 
 	// If all is good, start adding files.
 	// TODO: otherwise make it clear there's a problem (pop-up the log?)

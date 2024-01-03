@@ -10,8 +10,6 @@
 
 #include "xxHash/xxh3.h"
 
-#include <format>
-#include <optional>
 #include <array>
 
 // These are not exactly the max path length allowed by Windows in all cases, but should be good enough.
@@ -46,6 +44,11 @@ constexpr bool gIsNormalized(StringView inPath)
 	return true;
 }
 
+constexpr bool gIsAbsolute(StringView inPath)
+{
+	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath.substr(1, 2) == ":\\"; 
+}
+
 
 // Hash the absolute path of a file in a case insensitive manner.
 // That's used to get a unique identifier for the file even if the file itself doesn't exist.
@@ -53,11 +56,13 @@ constexpr bool gIsNormalized(StringView inPath)
 // Clearly not the most efficient implementation, but good enough for now.
 Hash128 gHashPath(StringView inRootPath, StringView inPath)
 {
-	gAssert(gIsNormalized(inPath));
-
 	// Build the full path.
 	PathBufferUTF8  abs_path_buffer;
-	StringView      abs_path = gConcat(abs_path_buffer, inRootPath, inPath);
+	MutStringView   abs_path = gConcat(abs_path_buffer, inRootPath, inPath);
+
+	// Make sure it's normalized.
+	gNormalizePath(abs_path);
+	gAssert(gIsAbsolute(abs_path));
 
 	// Convert it to wide char.
 	PathBufferUTF16 wpath_buffer;
@@ -178,7 +183,7 @@ static uint16 sFindExtensionPos(uint16 inNamePos, StringView inPath)
 
 	size_t offset = file_name.find_first_of('.');
 	if (offset != StringView::npos)
-		return (uint16)offset;
+		return (uint16)offset + inNamePos;
 	else
 		return (uint16)inPath.size(); // No extension.
 }
@@ -186,14 +191,94 @@ static uint16 sFindExtensionPos(uint16 inNamePos, StringView inPath)
 
 FileInfo::FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType inType, FileRefNumber inRefNumber)
 	: mID(inID)
-	, mIsDirectory(inType == FileType::Directory)
 	, mNamePos(sFindNamePos(inPath))
 	, mExtensionPos(sFindExtensionPos(mNamePos, inPath))
 	, mPath(inPath)
 	, mPathHash(inPathHash)
+	, mIsDirectory(inType == FileType::Directory)
+	, mCommandsCreated(false)
 	, mRefNumber(inRefNumber)
 {
+	gAssert(gIsNormalized(inPath));
+}
 
+
+static bool sDirectoryExistsW(std::wstring_view inPath)
+{
+	gAssert(!inPath.ends_with(L'\\'));
+	gAssert(*(inPath.data() + inPath.size()) == 0);
+
+	DWORD attributes = GetFileAttributesW(inPath.data());
+
+	return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
+}
+
+static bool sCreateDirectoryW(std::wstring_view inPath)
+{
+	gAssert(!inPath.ends_with(L'\\'));
+	gAssert(*(inPath.data() + inPath.size()) == 0);
+
+	BOOL success = CreateDirectoryW(inPath.data(), nullptr);
+
+	return success || GetLastError() == ERROR_ALREADY_EXISTS;
+}
+
+
+static bool sCreateDirectoryRecursiveW(std::span<wchar_t> ioPath)
+{
+	gAssert(ioPath[ioPath.size() - 1] == 0);
+	gAssert(ioPath[ioPath.size() - 2] != L'\\');
+	gAssert(ioPath.size() > 3 && ioPath[1] == L':' && ioPath[2] == L'\\'); // We expect an absolute path, first three characters should be the drive.
+
+	// Early out if the directory already exists.
+	if (sDirectoryExistsW(std::wstring_view(ioPath.data(), ioPath.size() - 1)))
+		return true;
+
+	// Otherwise try to create every parent directrory.
+	wchar_t* p_begin = ioPath.data();
+	wchar_t* p_end   = ioPath.data() + ioPath.size() - 1; // Just before the null-terminator.
+	wchar_t* p       = p_begin + 3;
+	while(p != p_end)
+	{
+		if (*p == L'\\')
+		{
+			// Null terminate the dir path.
+			*p = 0;
+
+			// Create the parent directory.
+			if (!sCreateDirectoryW({ p_begin, p }))
+				return false; // Uh-oh failed.
+
+			// Put back the slash we overwrote earlier.
+			*p = L'\\';
+		}
+
+		p++;
+	}
+
+	// Create the final directory.
+	return sCreateDirectoryW({ p_begin, p });
+}
+
+bool gCreateDirectoryRecursive(StringView inPath)
+{
+	gAssert(gIsNormalized(inPath));
+
+	PathBufferUTF16 wpath_buffer;
+	std::optional   wpath_optional = gUtf8ToWideChar(inPath, wpath_buffer);
+	if (!wpath_optional)
+		return false;
+
+	std::wstring_view wpath = *wpath_optional;
+
+	// If the path ends with a slash, remove it, because that's what the other functions expect.
+	if (wpath.back() == L'\\')
+	{
+		wpath.remove_suffix(1);
+		wpath_buffer[wpath.size()] = 0; // Replace slash with null terminator.
+	}
+
+	return sCreateDirectoryRecursiveW({ wpath_buffer.data(), wpath.size() + 1 }); // +1 to include the null terminator.
 }
 
 	 
@@ -208,15 +293,17 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 	// Add this repo to the repo list in the drive.
 	mDrive.mRepos.push_back(this);
 
+	// Make sure the root path exists.
+	gCreateDirectoryRecursive(mRootPath);
+
 	// Get a handle to the root path.
-	// TODO: do we want to keep that handle to make sure the root isn't deleted?
-	OwnedHandle root_dir_handle = CreateFileA(mRootPath.data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
-	if (!root_dir_handle.IsValid())
+	mRootDirHandle = CreateFileA(mRootPath.data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+	if (!mRootDirHandle.IsValid())
 		gApp.FatalError("Failed to get handle to {} - {}", mRootPath, GetLastErrorString());
 
 	// Get the FileReferenceNumber of the root dir.
 	FILE_ID_INFO file_info;
-	if (!GetFileInformationByHandleEx(root_dir_handle, FileIdInfo, &file_info, sizeof(file_info)))
+	if (!GetFileInformationByHandleEx(mRootDirHandle, FileIdInfo, &file_info, sizeof(file_info)))
 		gApp.FatalError("Failed to get FileReferenceNumber for {} - {}", mRootPath, GetLastErrorString());
 
 	// The root directory file info has an empty path (relative to mRootPath).
@@ -287,7 +374,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 	if (actual_file_id == new_file_id)
 	{
 		// The file wasn't already known, add it to the list.
-		return mFiles.emplace_back(new_file_id, mStringPool.AllocateCopy(inPath), path_hash, inType, inRefNumber);
+		return mFiles.emplace_back(new_file_id, gNormalizePath(mStringPool.AllocateCopy(inPath)), path_hash, inType, inRefNumber);
 	}
 	else
 	{
@@ -703,6 +790,16 @@ void FileSystem::StopMonitoring()
 	mMonitorDirThread.request_stop();
 	KickMonitorDirectoryThread();
 	mMonitorDirThread.join();
+}
+
+
+FileRepo* FileSystem::FindRepo(StringView inRepoName)
+{
+	for (FileRepo& repo : mRepos)
+		if (inRepoName == repo.mName)
+			return &repo;
+
+	return nullptr;
 }
 
 

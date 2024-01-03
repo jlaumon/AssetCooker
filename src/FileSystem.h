@@ -1,6 +1,7 @@
 #pragma once
 #include "Core.h"
 #include "StringPool.h"
+#include "CookingSystemIDs.h"
 
 #include <thread>
 #include <semaphore>
@@ -55,7 +56,6 @@ struct FileRefNumber
 	constexpr FileRefNumber& operator=(const FileRefNumber&) = default;
 
 	constexpr auto operator<=>(const FileRefNumber& inOther) const = default;
-	using Hasher = MemoryHasher<FileRefNumber>;
 
 	// Conversion to/from FILE_ID_128.
 	FileRefNumber(const _FILE_ID_128&);
@@ -68,6 +68,7 @@ struct FileRefNumber
 };
 static_assert(sizeof(FileRefNumber) == 16);
 
+template <> struct ankerl::unordered_dense::hash<FileRefNumber> : MemoryHasher<FileRefNumber> {};
 
 
 // Wrapper for a 128-bits hash value.
@@ -78,8 +79,7 @@ struct Hash128
 	constexpr auto operator<=>(const Hash128&) const = default;
 };
 
-template <>
-struct ankerl::unordered_dense::hash<Hash128>
+template <> struct ankerl::unordered_dense::hash<Hash128>
 {
 	using is_avalanching = void; // mark class as high quality avalanching hash
 
@@ -94,12 +94,14 @@ struct FileID
 	uint32 mRepoIndex : cFileRepoIndexBits = cMaxFileRepos;
 	uint32 mFileIndex : cFileIndexBits     = cMaxFilePerRepo;
 
-	bool IsValid() const { return *this != FileID{}; }
+	bool IsValid() const { return *this != cInvalid(); }
+	static constexpr FileID cInvalid() { return {}; }
 
 	auto operator<=>(const FileID& inOther) const = default;
-	using Hasher = MemoryHasher<FileID>;
 };
 static_assert(sizeof(FileID) == 4);
+
+template <> struct ankerl::unordered_dense::hash<FileID> : MemoryHasher<FileID> {};
 
 
 enum class FileType : int
@@ -111,21 +113,27 @@ enum class FileType : int
 
 struct FileInfo : NoCopy
 {
-	const FileID     mID;               // Our ID for this file.
-	const uint16     mNamePos     : 15; // Position in the path of the start of the file name (after the last '/').
-	const uint16     mExtensionPos;     // Position in the path of the first '.' in the file name.
-	const StringView mPath;             // Path relative to the root directory.
-	const Hash128    mPathHash;			// Case-insensitive hash of the path.
+	const FileID                  mID;                  // Our ID for this file.
+	const uint16                  mNamePos;             // Position in the path of the start of the file name (after the last '/').
+	const uint16                  mExtensionPos;        // Position in the path of the first '.' in the file name.
+	const StringView              mPath;                // Path relative to the root directory.
+	const Hash128                 mPathHash;            // Case-insensitive hash of the path.
 
-	bool             mIsDirectory;      // Is this a directory or a file. Note: might change if file is deleted then a directory of the same name is created.
-	FileRefNumber    mRefNumber;        // File ID used by Windows. Can change when the file is deleted and re-created.
-	USN              mUSN = 0;          // Identifier of the last change to this file.
+	bool                          mIsDirectory     : 1; // Is this a directory or a file. Note: might change if a file is deleted then a directory of the same name is created.
+	bool                          mCommandsCreated : 1; // Are cooking commands already created for this file.
+	FileRefNumber                 mRefNumber;           // File ID used by Windows. Can change when the file is deleted and re-created.
+	USN                           mUSN = 0;             // Identifier of the last change to this file.
+
+	std::vector<CookingCommandID> mInputOf;				// List of commands that use this file as input.
+	std::vector<CookingCommandID> mOutputOf;			// List of commands that use this file as output. There should be only one, but being able to store several is needed for debugging.hash
 
 	bool             IsDeleted() const { return !mRefNumber.IsValid(); }
 	bool             IsDirectory() const { return mIsDirectory != 0; }
 	FileType         GetType() const { return mIsDirectory ? FileType::Directory : FileType::File; }
 	StringView       GetName() const { return mPath.substr(mNamePos); }
+	StringView       GetNameNoExt() const { return mPath.substr(mNamePos, mExtensionPos - mNamePos); }
 	StringView       GetExtension() const { return mPath.substr(mExtensionPos); }
+	StringView       GetDirectory() const { return mPath.substr(0, mNamePos); }
 	const FileRepo&  GetRepo() const;
 
 	FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType inType, FileRefNumber inRefNumber);
@@ -139,23 +147,24 @@ struct FileRepo : NoCopy
 	FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, FileDrive& inDrive);
 	~FileRepo() = default;
 
-	FileInfo&		GetFile(FileID inFileID)		{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
-	FileInfo&                 GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
-	void                      MarkFileDeleted(FileInfo& inFile);
+	FileInfo&						GetFile(FileID inFileID)	{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
+	FileInfo&                       GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
+	void                            MarkFileDeleted(FileInfo& inFile);
 
-	StringView                RemoveRootPath(StringView inFullPath);
+	StringView                      RemoveRootPath(StringView inFullPath);
 
-	void                      ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> ioBuffer);
+	void                            ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> ioBuffer);
 
-	uint32                    mIndex = 0;        // The index of this repo.
-	StringView                mName;			 // A named used to identify the repo.
-	StringView                mRootPath;         // Absolute path to the repo. Starts with the drive letter, ends with a slash.
-	FileDrive&				  mDrive;			 // The drive this repo is on.
-	FileID                    mRootDirID;		 // The FileID of the root dir.
+	uint32                          mIndex = 0;     // The index of this repo.
+	StringView                      mName;          // A named used to identify the repo.
+	StringView                      mRootPath;      // Absolute path to the repo. Starts with the drive letter, ends with a slash.
+	OwnedHandle                     mRootDirHandle; // Handle to the root dir, makes sure the dir can't be deleted.
+	FileDrive&                      mDrive;         // The drive this repo is on.
+	FileID                          mRootDirID;     // The FileID of the root dir.
 
-	SegmentedVector<FileInfo, 4096> mFiles;      // All the files in this repo.
+	SegmentedVector<FileInfo, 4096> mFiles;         // All the files in this repo.
 
-	StringPool                mStringPool;       // Pool for storing all the paths.
+	StringPool                      mStringPool;    // Pool for storing all the paths.
 };
 
 
@@ -191,6 +200,8 @@ struct FileSystem : NoCopy
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 
+	FileRepo*       FindRepo(StringView inRepoName);	// Return nullptr if not found.
+
 	FileID			FindFileID(FileRefNumber inRefNumber) const;				// Return an invalid FileID if not found.
 	FileInfo*		FindFile(FileRefNumber inRefNumber);				// Return nullptr if not found.
 
@@ -202,7 +213,7 @@ private:
 	FileDrive&		GetOrAddDrive(char inDriveLetter);
 
 
-	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID, FileRefNumber::Hasher>;
+	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
 	using FilesByPathHash = SegmentedHashMap<Hash128, FileID>;
 
 	SegmentedVector<FileRepo> mRepos;

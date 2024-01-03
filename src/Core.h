@@ -54,8 +54,32 @@ template <typename T> constexpr T gMin(T inA, T inB)				{ return inA < inB ? inA
 template <typename T> constexpr T gMax(T inA, T inB)				{ return inB < inA ? inA : inB; }
 template <typename T> constexpr T gClamp(T inV, T inLow, T inHigh)	{ return (inV < inLow) ? inLow : (inHigh < inV) ? inHigh : inV; }
 
+// Helper to get the size of C arrays.
 template<typename taType, size_t taArraySize>
 constexpr size_t gElemCount(const taType (&inArray)[taArraySize]) { return taArraySize; }
+
+// Helper to check if a value is present in a vector-like container.
+template<typename taValue, typename taContainer>
+constexpr bool gContains(const taContainer& ioContainer, const taValue& inElem)
+{
+	for (auto& elem : ioContainer)
+		if (elem == inElem)
+			return true;
+
+	return false;
+}
+
+// Helper to add a value to a vector-like container only if it's not already in it.
+template<typename taValue, typename taContainer>
+constexpr bool gPushBackUnique(taContainer& ioContainer, const taValue& inElem)
+{
+	if (gContains(ioContainer, inElem))
+		return false;
+
+	ioContainer.push_back(inElem);
+	return true;
+}
+
 
 // Basic containers.
 #include "ankerl/unordered_dense.h"
@@ -109,4 +133,5 @@ struct MemoryHasher
         return ankerl::unordered_dense::detail::wyhash::hash(&inValue, sizeof(inValue));
     }
 };
+
 
