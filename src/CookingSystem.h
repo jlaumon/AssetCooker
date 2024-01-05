@@ -71,7 +71,7 @@ struct CookingRule : NoCopy
 	StringView               mName;
 	std::vector<InputFilter> mInputFilters;
 	StringView               mCommandLine;
-	int                      mBuildOrder     = 0;
+	int                      mPriority       = 0;
 	uint16                   mVersion        = 0;
 	bool                     mMatchMoreRules = false; // If false, we'll stop matching rules once an input file is matched with this rule. If true, we'll keep looking.
 	bool                     mUseDepFile     = false;
@@ -87,28 +87,92 @@ struct CookingCommand : NoCopy
 {
 	CookingCommandID       mID;
 	CookingRuleID          mRuleID;
-	FileID                 mDepFile;
-
 	std::vector<FileID>    mInputs;
 	std::vector<FileID>    mOutputs;
+
+	enum DirtyState : uint8
+	{
+		NotDirty      = 0,
+		InputMissing  = 0b0001,	// Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error (bad ordering, or truly missing input).
+		InputChanged  = 0b0010,
+		OutputMissing = 0b0100,
+	};
+
+	enum CookingState : uint8
+	{
+		Unknown,
+		Error,
+		InQueue,
+		Cooking,
+		Done,
+	};
+
+	DirtyState             mDirtyState   = NotDirty;
+	CookingState           mCookingState = Unknown;
+	USN                    mLastCook     = 0;
+
+	void                   UpdateDirtyState();
+	bool                   IsDirty() const { return mDirtyState != NotDirty; }
+
+	void                   ReadDepFile();
+
+	FileID                 GetMainInput() const { return mInputs[0]; }
+	FileID                 GetDepFile() const;
+
+};
+
+constexpr CookingCommand::DirtyState& operator|=(CookingCommand::DirtyState& ioA, CookingCommand::DirtyState inB) { return ioA = (CookingCommand::DirtyState)(ioA | inB); }
+
+
+struct CookingQueue : NoCopy
+{
+	void             Push(CookingCommandID inCommandID);
+	CookingCommandID Pop();
+
+	struct PrioBucket
+	{
+		int                           mPriority = 0;
+		std::vector<CookingCommandID> mCommands;
+
+		auto                          operator<=>(int inOrder) const { return mPriority <=> inOrder; }
+		auto                          operator==(int inOrder) const { return mPriority == inOrder; }
+		auto                          operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
+	};
+
+	std::vector<PrioBucket> mPrioBuckets;
+	size_t                  mTotalSize = 0;
+	std::mutex              mMutex;
+
 };
 
 
 struct CookingSystem : NoCopy
 {
 	const CookingRule&                    GetRule(CookingRuleID inID) const { return mRules[inID.mIndex]; }
-	const CookingCommand&                 GetCommand(CookingCommandID inID) const { return mCommands[inID.mIndex]; }
+	CookingCommand&                       GetCommand(CookingCommandID inID) { return mCommands[inID.mIndex]; }
 
 	CookingRule&                          AddRule() { return mRules.emplace_back(CookingRuleID{ (int16)mRules.size() }); }
 	void                                  CreateCommandsForFile(FileInfo& ioFile);
 
 	bool                                  ValidateRules(); // Return false if problems were found (see log).
+	void                                  StartCooking();
+	void                                  StopCooking();
+
+	void                                  KickOneCookingThread();
+
+private:
+	void                                  CookingThread(std::stop_token inStopToken);
+
 
 	SegmentedVector<CookingRule, 256>     mRules;
 
 	SegmentedVector<CookingCommand, 4096> mCommands;
 	std::mutex                            mCommandsMutex;
+
+	std::vector<std::jthread>             mCookingThreads;
+	std::counting_semaphore<>             mCookingThreadsSemaphore = std::counting_semaphore(0);
 };
 
 
 inline CookingSystem gCookingSystem;
+inline CookingQueue  gCookingQueue;

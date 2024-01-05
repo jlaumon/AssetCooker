@@ -84,9 +84,9 @@ void App::LogV(std::string_view inFmt, std::format_args inArgs, LogType inType)
 }
 
 
-void App::DrawLog()
+void App::DrawLog(bool* ioOpen)
 {
 	std::lock_guard lock(mLogMutex);
-	mLog.Draw();
+	mLog.Draw("App Log", ioOpen);
 }
 

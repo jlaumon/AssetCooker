@@ -70,11 +70,11 @@ static void sDrawLine(StringView inLine)
 }
 
 
-void Log::Draw()
+void Log::Draw(StringView inName, bool* ioOpen)
 {
 	ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-	String title = std::format("Log ({})###Log", SizeInBytes(mStringPool.mChunks.size() * mStringPool.cChunkSize));
-	if (!ImGui::Begin(title.c_str()))
+	String title = std::format("{} ({})###{}", inName, SizeInBytes(mStringPool.mChunks.size() * mStringPool.cChunkSize), inName);
+	if (!ImGui::Begin(title.c_str(), ioOpen))
 	{
 		ImGui::End();
 		return;

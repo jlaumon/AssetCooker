@@ -12,6 +12,8 @@
 
 #include <array>
 
+#include "CookingSystem.h"
+
 // These are not exactly the max path length allowed by Windows in all cases, but should be good enough.
 // TODO: these numbers are actually ridiculously high, lower them (except maybe in scanning code) and crash hard and blame user if they need more
 constexpr size_t cMaxPathSizeUTF16 = 32768;
@@ -324,83 +326,98 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber)
 {
 	// Calculate the case insensitive path hash that will be used to identify the file.
-	Hash128 path_hash = gHashPath(mRootPath, inPath);
+	Hash128   path_hash = gHashPath(mRootPath, inPath);
 
-	// TODO: not great to access these internals, maybe find a better way?
-	std::lock_guard lock(gFileSystem.mFilesMutex);
+	FileInfo* file      = nullptr;
 
-	// Prepare a new FileID in case this file wasn't already added.
-	FileID          new_file_id = { mIndex, (uint32)mFiles.size() };
-	FileID          actual_file_id;
-
-	// Try to insert it to the path hash map.
 	{
-		auto [it, inserted] = gFileSystem.mFilesByPathHash.insert({ path_hash, new_file_id });
-		if (!inserted)
+		// TODO: not great to access these internals, maybe find a better way?
+		std::unique_lock lock(gFileSystem.mFilesMutex);
+
+		// Prepare a new FileID in case this file wasn't already added.
+		FileID          new_file_id = { mIndex, (uint32)mFiles.size() };
+		FileID          actual_file_id;
+
+		// Try to insert it to the path hash map.
 		{
-			actual_file_id = it->second;
-
-			if (inRefNumber.IsValid())
+			auto [it, inserted] = gFileSystem.mFilesByPathHash.insert({ path_hash, new_file_id });
+			if (!inserted)
 			{
-				// If the file is already known, make sure we update the ref number.
-				// The file could have been deleted and re-created (and we've missed the event?) and gotten a new ref number.
-				FileInfo& file = GetFile(actual_file_id);
-				if (file.mRefNumber != inRefNumber)
-				{
-					if (file.mRefNumber.IsValid())
-						gApp.LogError("{} chandged ref number unexpectedly (missed event?)", file);
+				actual_file_id = it->second;
 
-					file.mRefNumber = inRefNumber;
+				if (inRefNumber.IsValid())
+				{
+					// If the file is already known, make sure we update the ref number.
+					// The file could have been deleted and re-created (and we've missed the event?) and gotten a new ref number.
+					FileInfo& file = GetFile(actual_file_id);
+					if (file.mRefNumber != inRefNumber)
+					{
+						if (file.mRefNumber.IsValid())
+							gApp.LogError("{} chandged ref number unexpectedly (missed event?)", file);
+
+						file.mRefNumber = inRefNumber;
+					}
+				}
+			}
+			else
+			{
+				actual_file_id = new_file_id;
+			}
+		}
+
+		// Update the ref number hash map.
+		{
+			auto [it, inserted] = gFileSystem.mFilesByRefNumber.insert({ inRefNumber, actual_file_id });
+			if (!inserted)
+			{
+				FileID previous_file_id = it->second;
+
+				// Check if the existing file is the same (ie. same path).
+				// The file could have been renamed but kept the same ref number (and we've missed that rename event?).
+				if (previous_file_id != actual_file_id || GetFile(previous_file_id).mPathHash != path_hash)
+				{
+					// Mark the old file as deleted, and add the new one instead.
+					MarkFileDeleted(GetFile(previous_file_id), lock);
 				}
 			}
 		}
+
+
+		if (actual_file_id == new_file_id)
+		{
+			// The file wasn't already known, add it to the list.
+			file = &mFiles.emplace_back(new_file_id, gNormalizePath(mStringPool.AllocateCopy(inPath)), path_hash, inType, inRefNumber);
+		}
 		else
 		{
-			actual_file_id = new_file_id;
-		}
-	}
+			// The file was known, return it.
+			file = &GetFile(actual_file_id);
 
-	// Update the ref number hash map.
-	{
-		auto [it, inserted] = gFileSystem.mFilesByRefNumber.insert({ inRefNumber, actual_file_id });
-		if (!inserted)
-		{
-			FileID previous_file_id = it->second;
-
-			// Check if the existing file is the same (ie. same path).
-			// The file could have been renamed but kept the same ref number (and we've missed that rename event?).
-			if (previous_file_id != actual_file_id || GetFile(previous_file_id).mPathHash != path_hash)
+			if (file->GetType() != inType)
 			{
-				// Mark the old file as deleted, and add the new one instead.
-				MarkFileDeleted(GetFile(previous_file_id));
+				// TODO we could support changing the file type if we make sure to update any list of all directories
+				gApp.FatalError("A file was turned into a directory (or vice versa). This is not supported yet.");
 			}
 		}
 	}
 
-	if (actual_file_id == new_file_id)
-	{
-		// The file wasn't already known, add it to the list.
-		return mFiles.emplace_back(new_file_id, gNormalizePath(mStringPool.AllocateCopy(inPath)), path_hash, inType, inRefNumber);
-	}
-	else
-	{
-		// The file was known, return it.
-		FileInfo& file = GetFile(actual_file_id);
+	// Create all the commands that take this file as input (this may add more (non-existing) files).
+	gCookingSystem.CreateCommandsForFile(*file);
 
-		if (file.GetType() != inType)
-		{
-			// TODO we could support changing the file type if we make sure to update any list of all directories
-			gApp.FatalError("A file was turned into a directory (or vice versa). This is not supported yet.");
-		}
-
-		return file;
-	}
+	return *file;
 }
 
 void FileRepo::MarkFileDeleted(FileInfo& inFile)
 {
 	// TODO: not great to access these internals, maybe find a better way?
-	std::lock_guard lock(gFileSystem.mFilesMutex);
+	std::unique_lock lock(gFileSystem.mFilesMutex);
+
+	MarkFileDeleted(inFile, lock);
+}
+
+void FileRepo::MarkFileDeleted(FileInfo& inFile, const std::unique_lock<std::mutex>& inLock)
+{
+	gAssert(inLock.mutex() == &gFileSystem.mFilesMutex);
 
 	gFileSystem.mFilesByRefNumber.erase(inFile.mRefNumber);
 	inFile.mRefNumber = FileRefNumber::cInvalid();
@@ -533,7 +550,9 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 						gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
 				}
 
-				file.mUSN = mDrive.GetUSN(file_handle);
+				file.mLastChange = mDrive.GetUSN(file_handle);
+
+				gFileSystem.OnFileChanged(file.mID);
 			}
 			
 			if (file.IsDirectory())
@@ -549,6 +568,34 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			gApp.Log("Used {} of {} buffer.", SizeInBytes(buffer_end - ioBuffer.data()), SizeInBytes(ioBuffer.size()));
 		}
 	}
+}
+
+
+FileDrive::FileDrive(char inDriveLetter)
+{
+	// Store the drive letter;
+	mLetter = inDriveLetter;
+
+	// Get a handle to the drive.
+	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
+	mHandle = CreateFileA(std::format(R"(\\.\{}:)", mLetter).c_str(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (!mHandle.IsValid())
+		gApp.FatalError(R"(Failed to get handle to {}:\ - {})", mLetter, GetLastErrorString());
+
+	// Query the USN journal to get its ID.
+	USN_JOURNAL_DATA_V0 journal_data;
+	uint32				unused;
+	if (!DeviceIoControl(mHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &unused, nullptr))
+		gApp.FatalError(R"(Failed to query USN journal for {}:\ - {})", mLetter, GetLastErrorString());
+
+	// Store the jorunal ID.
+	mUSNJournalID = journal_data.UsnJournalID;
+
+	// Store the current USN.
+	// TODO: we should read that from saved stated instead.
+	mNextUSN = journal_data.NextUsn;
+
+	gApp.Log(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize));
 }
 
 
@@ -754,7 +801,9 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
 					gApp.Log("Modified {}", *file);
 
-				file->mUSN = record->Usn;
+				file->mLastChange = record->Usn;
+
+				gFileSystem.OnFileChanged(file->mID);
 			}
 		}
 	}
@@ -796,6 +845,9 @@ void FileSystem::StopMonitoring()
 	mMonitorDirThread.request_stop();
 	KickMonitorDirectoryThread();
 	mMonitorDirThread.join();
+
+	// Also stop the cooking since we started it.
+	gCookingSystem.StopCooking();
 }
 
 
@@ -881,6 +933,7 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 	mRepos.emplace_back((uint32)mRepos.size(), inName, root_path, GetOrAddDrive(root_path[0]));
 }
 
+
 FileDrive& FileSystem::GetOrAddDrive(char inDriveLetter)
 {
 	for (FileDrive& drive : mDrives)
@@ -891,33 +944,32 @@ FileDrive& FileSystem::GetOrAddDrive(char inDriveLetter)
 }
 
 
-FileDrive::FileDrive(char inDriveLetter)
+void FileSystem::OnFileChanged(FileID inFileID)
 {
-	// Store the drive letter;
-	mLetter = inDriveLetter;
-
-	// Get a handle to the drive.
-	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
-	mHandle = CreateFileA(std::format(R"(\\.\{}:)", mLetter).c_str(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-	if (!mHandle.IsValid())
-		gApp.FatalError(R"(Failed to get handle to {}:\ - {})", mLetter, GetLastErrorString());
-
-	// Query the USN journal to get its ID.
-	USN_JOURNAL_DATA_V0 journal_data;
-	uint32				unused;
-	if (!DeviceIoControl(mHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &unused, nullptr))
-		gApp.FatalError(R"(Failed to query USN journal for {}:\ - {})", mLetter, GetLastErrorString());
-
-	// Store the jorunal ID.
-	mUSNJournalID = journal_data.UsnJournalID;
-
-	// Store the current USN.
-	// TODO: we should read that from saved stated instead.
-	mNextUSN = journal_data.NextUsn;
-
-	gApp.Log(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize));
+	std::lock_guard lock(mChangedFilesMutex);
+	mChangedFiles.insert(inFileID);
 }
 
+
+void FileSystem::ProcessChangedFiles()
+{
+	// TODO WIP store commands to update in cooking system instead?
+	std::lock_guard lock(mChangedFilesMutex);
+
+	for (FileID file_id : mChangedFiles)
+	{
+		FileInfo& file = GetFile(file_id);
+
+		for (CookingCommandID command_id : file.mInputOf)
+		{
+			CookingCommand& command = gCookingSystem.GetCommand(command_id);
+
+			command.UpdateDirtyState();
+		}
+	}
+
+	mChangedFiles.clear();
+}
 
 
 void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer)
@@ -952,6 +1004,8 @@ void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuf
 			total_files += repo.mFiles.size();
 	}
 
+	mInitialScanCompleted = true;
+
 	gApp.Log("Initial scan complete ({} files in {:.2f} seconds).", 
 		total_files, gTicksToSeconds(gGetTickCount() - ticks_start));
 }
@@ -980,6 +1034,11 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	// Scan the repos.
 	InitialScan(inStopToken, buffer_scan);
 
+	ProcessChangedFiles();
+
+	// Once the scan is finished, start cooking.
+	gCookingSystem.StartCooking();
+
 	while (!inStopToken.stop_requested())
 	{
 		bool any_work_done = false;
@@ -999,6 +1058,9 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			if (inStopToken.stop_requested())
 				break;
 		}
+
+		// TODO return bool for any_work_done
+		ProcessChangedFiles();
 
 		if (!any_work_done)
 		{

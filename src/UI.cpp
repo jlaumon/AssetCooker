@@ -2,10 +2,15 @@
 #include "UI.h"
 
 #include "FileSystem.h"
+#include "CookingSystem.h"
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
 
 ImGuiStyle gStyle               = {};
+
+
+bool       gDrawAppLog          = true;
+bool       gDrawCookingQueue    = true;
 
 struct UIScale
 {
@@ -62,6 +67,7 @@ void gUIUpdate()
 		ImGui_ImplDX11_InvalidateDeviceObjects();
 
 		// Reload the font at the new scale.
+		// TODO embed the font
 		io.Fonts->AddFontFromFileTTF("thirdparty/imgui/misc/fonts/Cousine-Regular.ttf", 14.0f * gUIScale.GetFinalScale());
 		// Re-create the DX11 objects.
 		ImGui_ImplDX11_CreateDeviceObjects();
@@ -76,9 +82,15 @@ void gUIDrawMainMenuBar()
 		if (ImGui::BeginMenu("File"))
 		{
 			if (ImGui::MenuItem("Exit", "Alt + F4"))
-			{
-				
-			}
+				gApp.RequestExit();
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("View"))
+		{
+			ImGui::MenuItem("App Log", nullptr, &gDrawAppLog);
+			ImGui::MenuItem("Cooking Queue", nullptr, &gDrawCookingQueue);
 
 			ImGui::EndMenu();
 		}
@@ -120,7 +132,7 @@ void gUIDrawMain()
 	// Make a fullscreen window.
 	ImGui::SetNextWindowPos({ 0, 0 });
 	ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-	ImGui::Begin(cAppName, nullptr, 
+	ImGui::Begin("Background", nullptr, 
 		ImGuiWindowFlags_NoMove | 
 		ImGuiWindowFlags_NoResize | 
 		ImGuiWindowFlags_NoTitleBar | 
@@ -129,5 +141,64 @@ void gUIDrawMain()
 
 	ImGui::End();
 
-	gApp.DrawLog();
+	if (gDrawAppLog)
+		gApp.DrawLog(&gDrawAppLog);
+
+	if (gDrawCookingQueue)
+		gUIDrawCookingQueue();
+}
+
+
+
+
+
+void gUIDrawCookingQueue()
+{
+	if (!ImGui::Begin("Cooking Queue", &gDrawCookingQueue))
+	{
+		ImGui::End();
+		return;
+	}
+
+	// Lock the queue while we're browsing it.
+	std::lock_guard lock(gCookingQueue.mMutex);
+
+	if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_None))
+	{
+
+		for (auto& bucket : gCookingQueue.mPrioBuckets)
+		{
+			if (bucket.mCommands.empty())
+				continue;
+
+			ImGui::Separator();
+			ImGui::Text("Priority %d (%d items)", bucket.mPriority, (int)bucket.mCommands.size());
+			ImGui::Separator();
+
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+			ImGuiListClipper clipper;
+			clipper.Begin((int)bucket.mCommands.size());
+			while (clipper.Step())
+			{
+				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+				{
+					const CookingCommand& command = gCookingSystem.GetCommand(bucket.mCommands[i]);
+					const CookingRule& rule = gCookingSystem.GetRule(command.mRuleID);
+					const FileInfo& main_input = gFileSystem.GetFile(command.GetMainInput());
+					ImGui::TextUnformatted(rule.mName);
+					ImGui::SameLine();
+					ImGui::TextUnformatted(" - ");
+					ImGui::SameLine();
+					ImGui::TextUnformatted(main_input.mPath);
+				}
+			}
+			clipper.End();
+
+			ImGui::PopStyleVar();
+		}
+	}
+	ImGui::EndChild();
+
+	ImGui::End();
 }

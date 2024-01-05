@@ -81,6 +81,61 @@ constexpr bool gPushBackUnique(taContainer& ioContainer, const taValue& inElem)
 }
 
 
+// Lower bound implementation to avoid <algorithm>
+template<typename taIterator, typename taValue>
+constexpr taIterator gLowerBound(taIterator inFirst, taIterator inLast, const taValue& inElem)
+{
+	auto first = inFirst;
+	auto count = inLast - first;
+
+    while (count > 0) 
+	{
+		auto count2 = count / 2;
+		auto mid    = first + count2;
+
+		if (*mid < inElem)
+		{
+			first = mid + 1;
+			count -= count2 + 1;
+		}
+		else
+		{
+			count = count2;
+		}
+    }
+
+	return first;
+}
+
+
+// Helper to find a value in a sorted vector-like container.
+template<typename taValue, typename taContainer>
+constexpr auto gFindSorted(const taContainer& inContainer, const taValue& inElem)
+{
+	auto end = inContainer.end();
+	auto it = gLowerBound(inContainer.begin(), end, inElem);
+
+	if (it != end && *it == inElem)
+		return it;
+	else
+		return end;
+}
+
+
+// Helper to insert a value in a sorted vector-like container.
+template<typename taValue, typename taContainer>
+constexpr auto gEmplaceSorted(taContainer& ioContainer, const taValue& inElem)
+{
+	auto end = ioContainer.end();
+	auto it = gLowerBound(ioContainer.begin(), end, inElem);
+
+	if (it != end && *it == inElem)
+		return it;
+	else
+		return ioContainer.emplace(it, inElem);
+}
+
+
 // Basic containers.
 #include "ankerl/unordered_dense.h"
 

@@ -122,7 +122,7 @@ struct FileInfo : NoCopy
 	bool                          mIsDirectory     : 1; // Is this a directory or a file. Note: might change if a file is deleted then a directory of the same name is created.
 	bool                          mCommandsCreated : 1; // Are cooking commands already created for this file.
 	FileRefNumber                 mRefNumber;           // File ID used by Windows. Can change when the file is deleted and re-created.
-	USN                           mUSN = 0;             // Identifier of the last change to this file.
+	USN                           mLastChange = 0;      // Identifier of the last change to this file.
 
 	std::vector<CookingCommandID> mInputOf;				// List of commands that use this file as input.
 	std::vector<CookingCommandID> mOutputOf;			// List of commands that use this file as output. There should be only one, but being able to store several is needed for debugging.hash
@@ -150,6 +150,8 @@ struct FileRepo : NoCopy
 	FileInfo&						GetFile(FileID inFileID)	{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
 	FileInfo&                       GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
 	void                            MarkFileDeleted(FileInfo& inFile);
+
+	void                            MarkFileDeleted(FileInfo& inFile, const std::unique_lock<std::mutex>& inLock);
 
 	StringView                      RemoveRootPath(StringView inFullPath);
 
@@ -205,6 +207,9 @@ struct FileSystem : NoCopy
 	FileID			FindFileID(FileRefNumber inRefNumber) const;				// Return an invalid FileID if not found.
 	FileInfo*		FindFile(FileRefNumber inRefNumber);				// Return nullptr if not found.
 
+	void            OnFileChanged(FileID inFileID);
+	void            ProcessChangedFiles();
+
 	void			KickMonitorDirectoryThread();
 private:
 	void            InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer);
@@ -224,6 +229,10 @@ private:
 	FilesByPathHash          mFilesByPathHash;          // Map to find files by path hash.
 	mutable std::mutex       mFilesMutex;
 
+	bool                     mInitialScanCompleted = false;
+
+	std::mutex               mChangedFilesMutex;
+	SegmentedHashSet<FileID> mChangedFiles;
 
 	std::jthread             mMonitorDirThread;
 	std::binary_semaphore    mMonitorDirThreadSignal = std::binary_semaphore(0);

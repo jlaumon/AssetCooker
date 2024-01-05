@@ -205,9 +205,99 @@ bool InputFilter::Pass(const FileInfo& inFile) const
 }
 
 
+FileID CookingCommand::GetDepFile() const
+{
+	if (gCookingSystem.GetRule(mRuleID).mUseDepFile)
+		return mOutputs[0];
+	else
+		return FileID::cInvalid();
+}
+
+
+void CookingCommand::UpdateDirtyState()
+{
+	DirtyState dirty_state = NotDirty;
+
+	for (FileID file_id : mInputs)
+	{
+		const FileInfo& file = gFileSystem.GetFile(file_id);
+
+		if (file.IsDeleted())
+			dirty_state |= InputMissing;
+		else if (file.mLastChange > mLastCook)
+			dirty_state |= InputChanged;
+	}
+
+	for (FileID file_id : mOutputs)
+	{
+		const FileInfo& file = gFileSystem.GetFile(file_id);
+
+		if (file.IsDeleted())
+			dirty_state |= OutputMissing;
+	}
+
+	mDirtyState = dirty_state;
+
+	// If dirty, add it to the cooking queue.
+	// Note: Add it even if there are missing inputs. They might be created by earlier priority commands, and if not that's an error and we want to know about it.
+	if (IsDirty())
+		gCookingQueue.Push(mID);
+}
+
+
+void CookingCommand::ReadDepFile()
+{
+	// TODO
+}
+
+
+void CookingQueue::Push(CookingCommandID inCommandID)
+{
+	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
+	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
+
+	// TODO: check if the command is already in the queue/already cooking?
+
+	{
+		std::lock_guard lock(mMutex);
+
+		// Find or add the bucket for that cooking priority.
+		PrioBucket& bucket = *gEmplaceSorted(mPrioBuckets, priority);
+
+		// Add the command.
+		bucket.mCommands.push_back(inCommandID);
+		mTotalSize++;
+	}
+}
+
+
+CookingCommandID CookingQueue::Pop()
+{
+	std::lock_guard lock(mMutex);
+
+	// Find the first non-empty bucket.
+	for (PrioBucket& bucket : mPrioBuckets)
+	{
+		if (!bucket.mCommands.empty())
+		{
+			// Pop a command.
+			CookingCommandID id = bucket.mCommands.back();
+			bucket.mCommands.pop_back();
+			mTotalSize--;
+
+			return id;
+		}
+	}
+
+	return CookingCommandID::cInvalid();
+}
+
+
 void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 {
-	gAssert(!ioFile.IsDirectory());
+	// Directories can't have commands.
+	if (ioFile.IsDirectory())
+		return;
 
 	// Already done?
 	if (ioFile.mCommandsCreated)
@@ -239,11 +329,13 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 
 			bool success    = true;
 
+			FileID dep_file;
+
 			// Get the dep file (if needed).
 			if (rule.mUseDepFile)
 			{
-				command.mDepFile = gGetOrAddFileFromFormat(rule.mDepFilePath, ioFile);
-				if (!command.mDepFile.IsValid())
+				dep_file = gGetOrAddFileFromFormat(rule.mDepFilePath, ioFile);
+				if (!dep_file.IsValid())
 					success = false;
 			}
 
@@ -265,7 +357,7 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 
 			// If there is a dep file, consider it an output.
 			if (rule.mUseDepFile)
-				command.mOutputs.push_back(command.mDepFile);
+				command.mOutputs.push_back(dep_file);
 
 			// Add the ouput files.
 			for (StringView path : rule.mOutputPaths)
@@ -316,7 +408,6 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 			break;
 	}	
 }
-
 
 
 bool CookingSystem::ValidateRules()
@@ -405,4 +496,55 @@ bool CookingSystem::ValidateRules()
 	}
 
 	return errors == 0;
+}
+
+
+void CookingSystem::StartCooking()
+{
+	// TODO: add more threads
+	int thread_count = 1;
+
+	gApp.Log("Starting {} Cooking Threads.", thread_count);
+
+	mCookingThreads.resize(thread_count);
+
+	// Start the cooking thread.
+	for (auto& thread : mCookingThreads)
+		thread = std::jthread(std::bind_front(&CookingSystem::CookingThread, this));
+}
+
+
+void CookingSystem::StopCooking()
+{
+	for (auto& thread : mCookingThreads)
+		thread.request_stop();
+
+	mCookingThreadsSemaphore.release(mCookingThreads.size());
+
+	for (auto& thread : mCookingThreads)
+		thread.join();
+}
+
+
+void CookingSystem::KickOneCookingThread()
+{
+	mCookingThreadsSemaphore.release();
+}
+
+
+void CookingSystem::CookingThread(std::stop_token inStopToken)
+{
+	while (true)
+	{
+		mCookingThreadsSemaphore.acquire();
+
+		if (inStopToken.stop_requested())
+			return;
+
+		//CookingCommandID command_id = gCookingQueue.Pop();
+		//if (command_id.IsValid())
+		//{
+		//	// TODO process the command.
+		//}
+	}
 }

@@ -31,7 +31,7 @@ struct App
 	template <class... taArgs> void LogError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogErrorV(inFmt.get(), std::make_format_args(inArgs...)); }
 	void                            LogErrorV(std::string_view inFmt, std::format_args inArgs = {}) { LogV(inFmt, inArgs, LogType::Error); }
 
-	void                            DrawLog();
+	void                            DrawLog(bool* ioOpen);
 
 	void*      mMainWindowHwnd  = nullptr;
 	bool       mExitRequested   = false;

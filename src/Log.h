@@ -26,7 +26,7 @@ struct Log
 	StringView                      Add(LogType inType, std::string_view inFmt, std::format_args inArgs);
 
 	void Clear();
-	void Draw();
+	void Draw(StringView inName, bool* ioOpen = nullptr);
 
 	StringPool::ResizableStringView	StartLine(LogType inType);
 	void							FinishLine(StringPool::ResizableStringView& inLine);

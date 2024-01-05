@@ -5,3 +5,5 @@ void gUIUpdate();
 
 void gUIDrawMainMenuBar();
 void gUIDrawMain();
+
+void gUIDrawCookingQueue();
