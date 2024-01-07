@@ -12,6 +12,8 @@ struct CookingRuleID
 	auto  operator<=>(const CookingRuleID& inOther) const = default;
 };
 
+template <> struct ankerl::unordered_dense::hash<CookingRuleID> : MemoryHasher<CookingRuleID> {};
+
 struct CookingCommandID
 {
 	uint32 mIndex = (uint32)-1;
@@ -20,3 +22,5 @@ struct CookingCommandID
 	static constexpr CookingCommandID cInvalid() { return {}; }
 	auto  operator<=>(const CookingCommandID& inOther) const = default;
 };
+
+template <> struct ankerl::unordered_dense::hash<CookingCommandID> : MemoryHasher<CookingCommandID> {};

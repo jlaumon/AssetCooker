@@ -57,13 +57,8 @@ void App::FatalErrorV(std::string_view inFmt, std::format_args inArgs)
 
 void App::LogV(std::string_view inFmt, std::format_args inArgs, LogType inType)
 {
-	StringView formatted_str;
-
 	// Add to the in-memory log.
-	{
-		std::lock_guard lock(mLogMutex);
-		formatted_str = mLog.Add(inType, inFmt, inArgs);
-	}
+	StringView formatted_str = mLog.Add(inType, inFmt, inArgs);
 
 	// Convert to wide char to write to the debug output.
 	wchar_t message_buffer[4096];
@@ -83,10 +78,4 @@ void App::LogV(std::string_view inFmt, std::format_args inArgs, LogType inType)
 	// TODO: also log to a file
 }
 
-
-void App::DrawLog(bool* ioOpen)
-{
-	std::lock_guard lock(mLogMutex);
-	mLog.Draw("App Log", ioOpen);
-}
 

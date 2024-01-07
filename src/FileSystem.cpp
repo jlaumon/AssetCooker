@@ -236,7 +236,7 @@ static bool sCreateDirectoryRecursiveW(std::span<wchar_t> ioPath)
 	if (sDirectoryExistsW(std::wstring_view(ioPath.data(), ioPath.size() - 1)))
 		return true;
 
-	// Otherwise try to create every parent directrory.
+	// Otherwise try to create every parent directory.
 	wchar_t* p_begin = ioPath.data();
 	wchar_t* p_end   = ioPath.data() + ioPath.size() - 1; // Just before the null-terminator.
 	wchar_t* p       = p_begin + 3;
@@ -262,12 +262,12 @@ static bool sCreateDirectoryRecursiveW(std::span<wchar_t> ioPath)
 	return sCreateDirectoryW({ p_begin, p });
 }
 
-bool gCreateDirectoryRecursive(StringView inPath)
+bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 {
-	gAssert(gIsNormalized(inPath));
+	gAssert(gIsNormalized(inAbsolutePath) && gIsAbsolute(inAbsolutePath));
 
 	PathBufferUTF16 wpath_buffer;
-	std::optional   wpath_optional = gUtf8ToWideChar(inPath, wpath_buffer);
+	std::optional   wpath_optional = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
 	if (!wpath_optional)
 		return false;
 
@@ -941,6 +941,23 @@ FileDrive& FileSystem::GetOrAddDrive(char inDriveLetter)
 			return drive;
 
 	return mDrives.emplace_back(inDriveLetter);
+}
+
+
+bool FileSystem::CreateDirectory(FileID inFileID)
+{
+	const FileInfo& file = GetFile(inFileID);
+	const FileRepo& repo = GetRepo(inFileID);
+
+	PathBufferUTF8 abs_path_buffer;
+	StringView abs_path = gConcat(abs_path_buffer, repo.mRootPath, file.GetDirectory());
+
+	bool success = gCreateDirectoryRecursive(abs_path);
+
+	if (!success)
+		gApp.LogError("Failed to create directory for {}", file);
+
+	return success;
 }
 
 

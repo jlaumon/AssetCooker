@@ -7,12 +7,30 @@
 // Simple linear allocator for strings.
 struct StringPool
 {
-	static constexpr size_t              cChunkSize = 1024 * 1024ull;
-	std::vector<std::unique_ptr<char[]>> mChunks;
+	struct Chunk
+	{
+		std::unique_ptr<char[]> mData;
+		size_t                  mSize;
+	};
+	size_t                               mDefaultChunkSize  = 1024 * 1024ull;
+	std::vector<Chunk>                   mChunks;
 	char*                                mLastChunk         = nullptr;
 	size_t                               mLastChunkCapacity = 0;
 
 	struct ResizableStringView;
+
+	void Clear()
+	{
+		if (!mChunks.empty())
+		{
+			// Keep just one chunk.
+			mChunks.resize(1);
+
+			// Reset to its start.
+			mLastChunk         = mChunks.back().mData.get();
+			mLastChunkCapacity = mChunks.back().mSize;
+		}
+	}
 
 	MutStringView Allocate(size_t inSize)
 	{
@@ -48,14 +66,21 @@ struct StringPool
 	void AddChunk(size_t inMinSize)
 	{
 		// Make sure the chunk is always large enough for the requested size.
-		size_t chunk_size = gMax(cChunkSize, inMinSize);
+		size_t chunk_size = gMax(mDefaultChunkSize, inMinSize);
 
 		// Allocate the chunk.
-		mChunks.push_back(std::make_unique<char[]>(chunk_size));
-		mLastChunk         = mChunks.back().get();
+		mChunks.push_back({ std::make_unique<char[]>(chunk_size), chunk_size });
+		mLastChunk         = mChunks.back().mData.get();
 		mLastChunkCapacity = chunk_size;
 	}
 
+	size_t GetTotalAllocatedSize() const
+	{
+		size_t total = 0;
+		for (const Chunk& chunk : mChunks)
+			total += chunk.mSize;
+		return total;
+	}
 
 	struct ResizableStringView
 	{
@@ -79,8 +104,16 @@ struct StringPool
 			// Check if it would it fit in the current chunk.
 			if (additional_size > mPool.mLastChunkCapacity)
 			{
+				size_t min_chunk_size = mSize + additional_size;
+
+				// If the string size is already larger than a chunk, grow more aggressively to avoid allocating a new chunk at each append.
+				// This is a lot more aggressive than eg. std::vector because we're wasting the memory of the chunks where the string doesn't fit,
+				// so we really want to make sure the next size fits everything! 
+				if (min_chunk_size > mPool.mDefaultChunkSize)
+					min_chunk_size *= 4;
+
 				// Add a new chunk.
-				mPool.AddChunk(mSize + additional_size);
+				mPool.AddChunk(min_chunk_size);
 
 				// Copy the string into it.
 				auto new_str = mPool.AllocateCopy(AsStringView());
@@ -102,6 +135,11 @@ struct StringPool
 			mSize += additional_size;
 			mPool.mLastChunk += additional_size;
 			mPool.mLastChunkCapacity -= additional_size;
+		}
+
+		template<typename... taArgs> void AppendFormat(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
+		{
+			std::vformat_to(std::back_inserter(*this), inFmt.get(), std::make_format_args(inArgs...));
 		}
 
 		void push_back(char inChar)

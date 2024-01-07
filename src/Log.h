@@ -29,9 +29,20 @@ struct Log
 	void Draw(StringView inName, bool* ioOpen = nullptr);
 
 	StringPool::ResizableStringView	StartLine(LogType inType);
-	void							FinishLine(StringPool::ResizableStringView& inLine);
+	void							FinishLine(LogType inType, StringPool::ResizableStringView& inLine);
+
+	struct Line
+	{
+		const char* mData = nullptr;
+		int         mSize = 0;
+		LogType     mType = LogType::Normal;
+		StringView  AsStringView() const { return { mData, (size_t)mSize }; }
+	};
 	
-	std::vector<StringView> mLines;
+	SegmentedVector<Line>   mLines;
 	StringPool              mStringPool;
+	std::mutex              mMutex;
 	ImGuiTextFilter         mFilter;
+	bool                    mAutoAddErrorTag = false;
+	bool                    mAutoAddTime     = false;
 };

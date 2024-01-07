@@ -22,6 +22,7 @@ static constexpr uint32 cMaxFileRepos   = (1u << cFileRepoIndexBits) - 1;
 static constexpr uint32 cMaxFilePerRepo = (1u << cFileIndexBits) - 1;
 
 
+
 // Wrapper for a HANDLE that closes it on destruction.
 struct OwnedHandle : NoCopy
 {
@@ -133,7 +134,7 @@ struct FileInfo : NoCopy
 	StringView       GetName() const { return mPath.substr(mNamePos); }
 	StringView       GetNameNoExt() const { return mPath.substr(mNamePos, mExtensionPos - mNamePos); }
 	StringView       GetExtension() const { return mPath.substr(mExtensionPos); }
-	StringView       GetDirectory() const { return mPath.substr(0, mNamePos); }
+	StringView       GetDirectory() const { return mPath.substr(0, mNamePos); }		// Includes the trailing slash.
 	const FileRepo&  GetRepo() const;
 
 	FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType inType, FileRefNumber inRefNumber);
@@ -206,6 +207,8 @@ struct FileSystem : NoCopy
 
 	FileID			FindFileID(FileRefNumber inRefNumber) const;				// Return an invalid FileID if not found.
 	FileInfo*		FindFile(FileRefNumber inRefNumber);				// Return nullptr if not found.
+
+	bool            CreateDirectory(FileID inFileID);
 
 	void            OnFileChanged(FileID inFileID);
 	void            ProcessChangedFiles();

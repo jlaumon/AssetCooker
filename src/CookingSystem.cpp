@@ -1,6 +1,7 @@
 #include "CookingSystem.h"
 #include "App.h"
-
+#include "Debug.h"
+#include "subprocess/subprocess.h"
 
 
 // Return a StringView on the text part of {text}.
@@ -96,6 +97,9 @@ static std::optional<String> sParseCommandVariables(StringView inFormatStr, cons
 
 std::optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
 {
+	if (inFormatStr.empty())
+		return {}; // Consider empty format string is an error.
+
 	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, String& outStr) 
 	{
 		switch (inVar)
@@ -207,7 +211,7 @@ bool InputFilter::Pass(const FileInfo& inFile) const
 
 FileID CookingCommand::GetDepFile() const
 {
-	if (gCookingSystem.GetRule(mRuleID).mUseDepFile)
+	if (gCookingSystem.GetRule(mRuleID).UseDepFile())
 		return mOutputs[0];
 	else
 		return FileID::cInvalid();
@@ -268,6 +272,8 @@ void CookingQueue::Push(CookingCommandID inCommandID)
 		bucket.mCommands.push_back(inCommandID);
 		mTotalSize++;
 	}
+
+	gCookingSystem.KickOneCookingThread();
 }
 
 
@@ -324,15 +330,11 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 
 		// Create the command.
 		{
-			CookingCommand command;
-			command.mRuleID = rule.mID;
-
-			bool success    = true;
-
+			bool   success = true;
 			FileID dep_file;
 
 			// Get the dep file (if needed).
-			if (rule.mUseDepFile)
+			if (rule.UseDepFile())
 			{
 				dep_file = gGetOrAddFileFromFormat(rule.mDepFilePath, ioFile);
 				if (!dep_file.IsValid())
@@ -340,7 +342,8 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 			}
 
 			// Add the main input file.
-			command.mInputs.push_back(ioFile.mID);
+			std::vector<FileID> inputs;
+			inputs.push_back(ioFile.mID);
 
 			// Get the additional input files.
 			for (StringView path : rule.mInputPaths)
@@ -352,12 +355,13 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 					continue;
 				}
 
-				gPushBackUnique(command.mInputs, file);
+				gPushBackUnique(inputs, file);
 			}
 
 			// If there is a dep file, consider it an output.
-			if (rule.mUseDepFile)
-				command.mOutputs.push_back(dep_file);
+			std::vector<FileID> outputs;
+			if (rule.UseDepFile())
+				outputs.push_back(dep_file);
 
 			// Add the ouput files.
 			for (StringView path : rule.mOutputPaths)
@@ -369,7 +373,7 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 					continue;
 				}
 
-				gPushBackUnique(command.mOutputs, file);
+				gPushBackUnique(outputs, file);
 			}
 
 			// Most problems should be caught during ValidateRules,
@@ -384,10 +388,15 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 			{
 				std::lock_guard lock(mCommandsMutex);
 
-				// Set the ID now that we have the mutex.
-				command_id  = CookingCommandID{ (uint32)mCommands.size() };
-				command.mID = command_id;
-				mCommands.emplace_back(std::move(command));
+				// Build the ID now that we have the mutex.
+				command_id              = CookingCommandID{ (uint32)mCommands.size() };
+
+				// Create the command.
+				CookingCommand& command = mCommands.emplace_back();
+				command.mID             = command_id;
+				command.mRuleID         = rule.mID;
+				command.mInputs         = std::move(inputs);
+				command.mOutputs        = std::move(outputs);
 			}
 		}
 
@@ -468,10 +477,13 @@ bool CookingSystem::ValidateRules()
 		}
 
 		// Validate the dep file path.
-		if (rule.mUseDepFile && !gFormatCommandString(rule.mDepFilePath, dummy_file))
+		if (rule.UseDepFile())
 		{
-			errors++;
-			gApp.LogError(R"(Rule {}: Failed to parse DepFilePath "{}")", rule.mName, rule.mDepFilePath);
+			if (!gFormatCommandString(rule.mDepFilePath, dummy_file))
+			{
+				errors++;
+				gApp.LogError(R"(Rule {}: Failed to parse DepFilePath "{}")", rule.mName, rule.mDepFilePath);
+			}
 		}
 
 		// Validate the input paths.
@@ -510,41 +522,256 @@ void CookingSystem::StartCooking()
 
 	// Start the cooking thread.
 	for (auto& thread : mCookingThreads)
-		thread = std::jthread(std::bind_front(&CookingSystem::CookingThread, this));
+		thread.mThread = std::jthread(std::bind_front(&CookingSystem::CookingThreadFunction, this, &thread));
 }
 
 
 void CookingSystem::StopCooking()
 {
 	for (auto& thread : mCookingThreads)
-		thread.request_stop();
+		thread.mThread.request_stop();
 
-	mCookingThreadsSemaphore.release(mCookingThreads.size());
+	mCookingQueueSemaphore.release(mCookingThreads.size());
 
 	for (auto& thread : mCookingThreads)
-		thread.join();
+		thread.mThread.join();
+}
+
+
+void CookingSystem::SetCookingPaused(bool inPaused)
+{
+	if (inPaused == mCookingPaused)
+		return;
+
+	if (inPaused)
+	{
+		mCookingPaused = true;
+	}
+	else
+	{
+		// Unpause and wake all the threads.
+		mCookingPaused = false;
+		mCookingResumeSemaphore.release(mCookingThreads.size());
+	}
 }
 
 
 void CookingSystem::KickOneCookingThread()
 {
-	mCookingThreadsSemaphore.release();
+	mCookingQueueSemaphore.release();
 }
 
 
-void CookingSystem::CookingThread(std::stop_token inStopToken)
+void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringPool)
+{
+	CookingLogEntry& log_entry = AllocateCookingLogEntry(ioCommand.mID);
+
+	// Set the log entry on the command.
+	ioCommand.mLastCookingLog       = &log_entry;
+
+	// Build the command line.
+	const CookingRule& rule         = gCookingSystem.GetRule(ioCommand.mRuleID);
+	std::optional      command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
+	if (!command_line)
+	{
+		log_entry.mOutput       = ioStringPool.AllocateCopy("[error] Failed to format command line.\n");
+		log_entry.mCookingState = CookingState::Error;
+		ioCommand.mCookingState = CookingState::Error;
+		return;
+	}
+
+	StringPool::ResizableStringView output_str     = ioStringPool.CreateResizableString();
+	output_str.AppendFormat("Command Line: {}\n", StringView(*command_line));
+
+	// Make sure all inputs exist.
+	{
+		bool all_inputs_exist = true;
+		for (FileID input_id : ioCommand.mInputs)
+		{
+			const FileInfo& input = gFileSystem.GetFile(input_id);
+			if (input.IsDeleted())
+			{
+				all_inputs_exist = false;
+				output_str.AppendFormat("[error] Input missing: {}\n", input);
+			}
+		}
+
+		if (!all_inputs_exist)
+		{
+			log_entry.mCookingState = CookingState::Error;
+			ioCommand.mCookingState = CookingState::Error;
+			return;
+		}
+	}
+
+	// Make sure the directories for all the outputs exist.
+	{
+		bool all_dirs_exist = true;
+		for (FileID output_file : ioCommand.mOutputs)
+		{
+			bool success = gFileSystem.CreateDirectory(output_file);
+
+			if (!success)
+			{
+				all_dirs_exist = false;
+				output_str.AppendFormat("[error] Failed to create directory for {}\n", gFileSystem.GetFile(output_file));
+			}
+		}
+
+		if (!all_dirs_exist)
+		{
+			log_entry.mCookingState = CookingState::Error;
+			ioCommand.mCookingState = CookingState::Error;
+			return;
+		}
+	}
+
+	// Get the max USN of all inputs (to later know if this command needs to cook again).
+	USN max_input_usn = 0;
+	for (FileID input_id : ioCommand.mInputs)
+		max_input_usn = gMax(max_input_usn, gFileSystem.GetFile(input_id).mLastChange);
+
+	// Subprocess wants each arg in a different string to then concatenate them... a bit silly but whatevs, let's split it.
+	std::vector<const char*> command_line_array;
+	{
+		const char* arg_begin = command_line->data();
+		for (char& c : *command_line)
+		{
+			if (c == ' ' || c == '\t' || c == 'v')
+				c = 0;
+
+			command_line_array.push_back(arg_begin);
+			arg_begin = &c + 1;
+		}
+
+		if (arg_begin != gEndPtr(*command_line))
+			command_line_array.push_back(arg_begin);
+
+		command_line_array.push_back(nullptr);
+	}
+
+	// Create the process for the command line.
+	subprocess_s process;
+	if (subprocess_create(command_line_array.data(), subprocess_option_no_window | subprocess_option_combined_stdout_stderr, &process))
+	{
+		output_str.AppendFormat("[error] Failed to create process - {}\n", GetLastErrorString());
+		log_entry.mCookingState = CookingState::Error;
+		ioCommand.mCookingState = CookingState::Error;
+		return;
+	}
+
+	// Wait for the process to finish.
+	int exit_code = 0;
+	if (subprocess_join(&process, &exit_code))
+	{
+		output_str.AppendFormat("[error] Failed to get exit code - {}\n", GetLastErrorString());
+		log_entry.mCookingState = CookingState::Error;
+		ioCommand.mCookingState = CookingState::Error;
+	}
+
+	// Get the output.
+	// TODO: use the async API to get the output before the process is finished? but may need an extra thread to read stderr
+	{
+		FILE* p_stdout = subprocess_stdout(&process);
+		char  buffer[16384];
+		while (true)
+		{
+			size_t bytes_read  = fread(buffer, 1, sizeof(buffer) - 1, p_stdout);
+			buffer[bytes_read] = 0;
+
+			if (bytes_read == 0)
+				break;
+
+			output_str.Append({ buffer, bytes_read });
+		}
+	}
+	
+	// Destruct the process handles (this can't actually fail).
+	subprocess_destroy(&process);
+
+	// Set the inputs USN on the command.
+	ioCommand.mLastCook = max_input_usn;
+
+	// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
+	log_entry.mCookingState = CookingState::Waiting;
+	ioCommand.mCookingState = CookingState::Waiting;
+
+	// Any time an output is detected changed, we will try updating the cooking state.
+	// If all outputs were written, cooking is a success.
+	// If timeout happens first, we declare it's an error because of outputs not written.
+	AddToWaitList(ioCommand.mID);
+}
+
+
+void CookingSystem::AddToWaitList(CookingCommandID inCommandID)
+{
+	std::lock_guard lock(mWaitingCommandsMutex);
+
+	int next_index = (mWaitingCommandCurrentIndex + 1) % (int)mWaitingCommands.size();
+	mWaitingCommands[next_index].insert(inCommandID);
+}
+
+
+// TODO add something that calls this
+// TODO also add the call that sets the cooking state to success on the file event side
+void CookingSystem::ProcessWaitList()
+{
+	std::lock_guard lock(mWaitingCommandsMutex);
+
+	HashSet<CookingCommandID>& waiting_commands = mWaitingCommands[mWaitingCommandCurrentIndex];
+
+	for (CookingCommandID command_id : waiting_commands)
+	{
+		CookingCommand& command = GetCommand(command_id);
+
+		// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
+		if (command.mCookingState != CookingState::Waiting)
+		{
+			command.mCookingState                  = CookingState::Error;
+			command.mLastCookingLog->mCookingState = CookingState::Error;
+		}
+	}
+
+	waiting_commands.clear();
+	mWaitingCommandCurrentIndex = (mWaitingCommandCurrentIndex + 1) % (int)mWaitingCommands.size();
+}
+
+
+
+void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken)
 {
 	while (true)
 	{
-		mCookingThreadsSemaphore.acquire();
+		mCookingQueueSemaphore.acquire();
 
 		if (inStopToken.stop_requested())
 			return;
 
-		//CookingCommandID command_id = gCookingQueue.Pop();
-		//if (command_id.IsValid())
-		//{
-		//	// TODO process the command.
-		//}
+		// If cooking is paused, wait on the resume semaphore.
+		if (mCookingPaused)
+		{
+			mCookingResumeSemaphore.acquire();
+
+			if (inStopToken.stop_requested())
+				return;
+		}
+
+		CookingCommandID command_id = gCookingQueue.Pop();
+		if (command_id.IsValid())
+		{
+			CookCommand(GetCommand(command_id), ioThread->mStringPool);
+		}
 	}
+}
+
+
+CookingLogEntry& CookingSystem::AllocateCookingLogEntry(CookingCommandID inCommandID)
+{
+	std::lock_guard lock(mCookingLogMutex);
+
+	CookingLogEntry& log_entry = mCookingLog.emplace_back();
+	log_entry.mCommandID       = inCommandID;
+	log_entry.mCookingState    = CookingState::Cooking;
+
+	return log_entry;
 }

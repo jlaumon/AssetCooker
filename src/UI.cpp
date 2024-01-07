@@ -12,6 +12,10 @@ ImGuiStyle gStyle               = {};
 bool       gDrawAppLog          = true;
 bool       gDrawCookingQueue    = true;
 
+constexpr const char* cAppLogName          = "Main Log";
+constexpr const char* cCookingQueueName    = "Cooking Queue";
+
+
 struct UIScale
 {
 	static constexpr float cMin = 0.4f;
@@ -89,8 +93,8 @@ void gUIDrawMainMenuBar()
 
 		if (ImGui::BeginMenu("View"))
 		{
-			ImGui::MenuItem("App Log", nullptr, &gDrawAppLog);
-			ImGui::MenuItem("Cooking Queue", nullptr, &gDrawCookingQueue);
+			ImGui::MenuItem(cAppLogName, nullptr, &gDrawAppLog);
+			ImGui::MenuItem(cCookingQueueName, nullptr, &gDrawCookingQueue);
 
 			ImGui::EndMenu();
 		}
@@ -142,7 +146,7 @@ void gUIDrawMain()
 	ImGui::End();
 
 	if (gDrawAppLog)
-		gApp.DrawLog(&gDrawAppLog);
+		gApp.mLog.Draw(cAppLogName, &gDrawAppLog);
 
 	if (gDrawCookingQueue)
 		gUIDrawCookingQueue();
@@ -159,6 +163,10 @@ void gUIDrawCookingQueue()
 		ImGui::End();
 		return;
 	}
+
+	bool auto_cook = !gCookingSystem.IsCookingPaused();
+	if (ImGui::Checkbox("Auto cook", &auto_cook))
+		gCookingSystem.SetCookingPaused(!auto_cook);
 
 	// Lock the queue while we're browsing it.
 	std::lock_guard lock(gCookingQueue.mMutex);

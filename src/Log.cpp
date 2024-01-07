@@ -7,8 +7,12 @@ StringPool::ResizableStringView Log::StartLine(LogType inType)
 {
 	auto resizable_str = mStringPool.CreateResizableString();
 
-	// TODO: add date/time (optionally)
-	if (inType == LogType::Error)
+	if (mAutoAddTime)
+	{
+		// TODO: add date/time
+	}
+
+	if (mAutoAddErrorTag && inType == LogType::Error)
 	{
 		resizable_str.Append(cErrorTag);
 		resizable_str.Append(" ");
@@ -18,28 +22,28 @@ StringPool::ResizableStringView Log::StartLine(LogType inType)
 }
 
 
-void Log::FinishLine(StringPool::ResizableStringView& inLine)
+void Log::FinishLine(LogType inType, StringPool::ResizableStringView& inLine)
 {
 	StringView line = inLine.AsStringView();
 
 	// TODO: check inString for end of lines and split it, otherwise can't use imgui clipper
 	gAssert(gIsNullTerminated(line));
 
-	mLines.push_back(line);
+	mLines.emplace_back(line.data(), (int)line.size(), inType);
 }
 
 
 StringView Log::Add(LogType inType, std::string_view inFmt, std::format_args inArgs)
 {
+	std::lock_guard lock(mMutex);
+
 	StringPool::ResizableStringView str = StartLine(inType);
 
 	size_t size_before_format = str.AsStringView().size();
-
 	std::vformat_to(std::back_inserter(str), inFmt, inArgs);
-
 	size_t size_after_format = str.AsStringView().size();
 
-	FinishLine(str);
+	FinishLine(inType, str);
 
 	return { str.mData + size_before_format, str.mData + size_after_format };
 }
@@ -47,16 +51,17 @@ StringView Log::Add(LogType inType, std::string_view inFmt, std::format_args inA
 
 void Log::Clear()
 {
+	std::lock_guard lock(mMutex);
 	mLines.clear();
-	mStringPool = {};
+	mStringPool.Clear();
 }
 
 
-static void sDrawLine(StringView inLine)
+static void sDrawLine(const Log::Line& inLine)
 {
 	ImVec4 color;
     bool has_color = false;
-	if (inLine.starts_with(Log::cErrorTag))
+	if (inLine.mType == LogType::Error)
 	{
 		color     = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
 		has_color = true;
@@ -64,7 +69,7 @@ static void sDrawLine(StringView inLine)
 
     if (has_color)
         ImGui::PushStyleColor(ImGuiCol_Text, color);
-    ImGui::TextUnformatted(inLine.data(), inLine.data() + inLine.size());
+    ImGui::TextUnformatted(inLine.AsStringView());
     if (has_color)
         ImGui::PopStyleColor();
 }
@@ -72,8 +77,10 @@ static void sDrawLine(StringView inLine)
 
 void Log::Draw(StringView inName, bool* ioOpen)
 {
+	std::lock_guard lock(mMutex);
+
 	ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-	String title = std::format("{} ({})###{}", inName, SizeInBytes(mStringPool.mChunks.size() * mStringPool.cChunkSize), inName);
+	String title = std::format("{} ({})###{}", inName, SizeInBytes(mStringPool.GetTotalAllocatedSize()), inName);
 	if (!ImGui::Begin(title.c_str(), ioOpen))
 	{
 		ImGui::End();
@@ -95,7 +102,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 			// Can't use clipper with the filter. For very long logs, we should store the filter result instead.
 			for (auto line : mLines)
 			{
-				if (mFilter.PassFilter(line.data(), line.data() + line.size()))
+				if (mFilter.PassFilter(line.mData, line.mData + line.mSize))
 					sDrawLine(line);
 			}
 		}

@@ -54,6 +54,7 @@ solution "AssetCooker"
             "thirdparty/unordered_dense/include/ankerl/unordered_dense.h",
             "thirdparty/WindowsHModular/include/**.h",
             "thirdparty/xxHash/*.h",
+            "thirdparty/subprocess/*.h",
         }
 		
 		includedirs 

@@ -7,6 +7,8 @@
 
 #include <vector>
 
+#include "Log.h"
+
 enum class CommandVariables : uint8
 {
 	Ext,
@@ -74,12 +76,29 @@ struct CookingRule : NoCopy
 	int                      mPriority       = 0;
 	uint16                   mVersion        = 0;
 	bool                     mMatchMoreRules = false; // If false, we'll stop matching rules once an input file is matched with this rule. If true, we'll keep looking.
-	bool                     mUseDepFile     = false;
 	StringView               mDepFilePath;
 	std::vector<StringView>  mInputPaths;
 	std::vector<StringView>  mOutputPaths;
+
+	bool                     UseDepFile() const { return !mDepFilePath.empty(); }
 };
 
+enum class CookingState : uint8
+{
+	Unknown,
+	InQueue,
+	Cooking,
+	Waiting,	// After cooking, we need to wait a little to get the USN events and see if all outputs were written (otherwise it's an Error instead of Success).
+	Error,
+	Success,
+};
+
+struct CookingLogEntry
+{
+	CookingCommandID          mCommandID;
+	std::atomic<CookingState> mCookingState = CookingState::Unknown;
+	StringView                mOutput;
+};
 
 
 // Instance of a rule for a specific input file.
@@ -98,27 +117,19 @@ struct CookingCommand : NoCopy
 		OutputMissing = 0b0100,
 	};
 
-	enum CookingState : uint8
-	{
-		Unknown,
-		Error,
-		InQueue,
-		Cooking,
-		Done,
-	};
+	DirtyState                mDirtyState     = NotDirty;
+	std::atomic<CookingState> mCookingState   = CookingState::Unknown;
+	USN                       mLastCook       = 0;
+	CookingLogEntry*          mLastCookingLog = nullptr;
 
-	DirtyState             mDirtyState   = NotDirty;
-	CookingState           mCookingState = Unknown;
-	USN                    mLastCook     = 0;
+	void                      UpdateDirtyState();
+	bool                      IsDirty() const { return mDirtyState != NotDirty; }
 
-	void                   UpdateDirtyState();
-	bool                   IsDirty() const { return mDirtyState != NotDirty; }
+	void                      ReadDepFile();
 
-	void                   ReadDepFile();
-
-	FileID                 GetMainInput() const { return mInputs[0]; }
-	FileID                 GetDepFile() const;
-
+	FileID                    GetMainInput() const { return mInputs[0]; }
+	FileID                    GetDepFile() const;
+	const CookingRule&        GetRule() const;
 };
 
 constexpr CookingCommand::DirtyState& operator|=(CookingCommand::DirtyState& ioA, CookingCommand::DirtyState inB) { return ioA = (CookingCommand::DirtyState)(ioA | inB); }
@@ -157,22 +168,46 @@ struct CookingSystem : NoCopy
 	bool                                  ValidateRules(); // Return false if problems were found (see log).
 	void                                  StartCooking();
 	void                                  StopCooking();
+	void                                  SetCookingPaused(bool inPaused);
+	bool                                  IsCookingPaused() const { return mCookingPaused; }
 
 	void                                  KickOneCookingThread();
 
 private:
-	void                                  CookingThread(std::stop_token inStopToken);
+	struct CookingThread;
 
+	void                                  CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken);
+	CookingLogEntry&                      AllocateCookingLogEntry(CookingCommandID inCommandID);
+	void                                  CookCommand(CookingCommand& ioCommand, StringPool& ioStringPool);
+	void                                  AddToWaitList(CookingCommandID);
+	void                                  ProcessWaitList();
 
 	SegmentedVector<CookingRule, 256>     mRules;
 
 	SegmentedVector<CookingCommand, 4096> mCommands;
 	std::mutex                            mCommandsMutex;
 
-	std::vector<std::jthread>             mCookingThreads;
-	std::counting_semaphore<>             mCookingThreadsSemaphore = std::counting_semaphore(0);
+	struct CookingThread
+	{
+		std::jthread mThread;
+		StringPool   mStringPool;
+	};
+	std::vector<CookingThread>               mCookingThreads;
+	std::counting_semaphore<>                mCookingQueueSemaphore  = std::counting_semaphore(0);
+	std::counting_semaphore<>                mCookingResumeSemaphore = std::counting_semaphore(0);
+	bool                                     mCookingPaused          = false;
+
+	SegmentedVector<CookingLogEntry>         mCookingLog;
+	std::mutex                               mCookingLogMutex;
+
+	std::array<HashSet<CookingCommandID>, 2> mWaitingCommands;
+	std::mutex                               mWaitingCommandsMutex;
+	int                                      mWaitingCommandCurrentIndex = 0;
 };
 
 
 inline CookingSystem gCookingSystem;
 inline CookingQueue  gCookingQueue;
+
+
+inline const CookingRule& CookingCommand::GetRule() const { return gCookingSystem.GetRule(mRuleID); }

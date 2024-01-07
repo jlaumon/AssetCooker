@@ -115,11 +115,14 @@ int WinMain(
 	// Our state
 	bool show_demo_window = true;
 
+	
+
 	gApp.mLogFSActivity = LogLevel::Verbose;
 
 	// Add all repos.
 	gFileSystem.AddRepo("Source", R"(D:\test\)");
 	gFileSystem.AddRepo("Bin", u8R"(D:\output\tëst\)");
+	//gFileSystem.AddRepo("Bin", u8R"(D:\output\)");
 
 	// Add all rules.
 	auto& copy_txt_rule = gCookingSystem.AddRule();
@@ -129,6 +132,10 @@ int WinMain(
 		{ .mRepoIndex = gFileSystem.FindRepo("Source")->mIndex, .mExtension = ".png", .mDirectoryPrefix = "yes_copy", .mNamePrefix = "only_this_" },
 	};
 	copy_txt_rule.mOutputPaths  = { "{Repo:Bin}{Dir}{File}_copy{Ext}" };
+	copy_txt_rule.mCommandLine  = { "xcopy.exe {Repo:Source}{FullPath} {Repo:Bin}{Dir}{File}_copy{Ext} /Y /-I" };
+
+	// Start paused, for debugging.
+	gCookingSystem.SetCookingPaused(true);
 
 	// If all is good, start adding files.
 	// TODO: otherwise make it clear there's a problem (pop-up the log?)
