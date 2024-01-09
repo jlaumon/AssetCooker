@@ -33,6 +33,9 @@ solution "AssetCooker"
 
         filter { "configurations:Debug" }
             defines "ASSERTS_ENABLED"
+			
+		-- filter "files:**.rs"
+			-- buildaction "ResourceCompile"
 
         filter {}
         
@@ -55,20 +58,24 @@ solution "AssetCooker"
             "thirdparty/WindowsHModular/include/**.h",
             "thirdparty/xxHash/*.h",
             "thirdparty/subprocess/*.h",
+			"data/fonts/**.rc",
+			"data/fonts/**.h",
         }
 		
 		includedirs 
 		{
+			".",
             "src",
             "thirdparty",
             "thirdparty/imgui",
             "thirdparty/imgui/backends",
             "thirdparty/unordered_dense/include",
 			"thirdparty/WindowsHModular/include",
-			"thirdparty/xxHash"
+			"thirdparty/xxHash",
         }
         
         links
         {
             "D3D11.lib",
         }
+		

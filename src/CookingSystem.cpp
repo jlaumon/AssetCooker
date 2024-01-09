@@ -714,6 +714,7 @@ void CookingSystem::AddToWaitList(CookingCommandID inCommandID)
 
 // TODO add something that calls this
 // TODO also add the call that sets the cooking state to success on the file event side
+//#error need to draw cooking log first to debug?
 void CookingSystem::ProcessWaitList()
 {
 	std::lock_guard lock(mWaitingCommandsMutex);

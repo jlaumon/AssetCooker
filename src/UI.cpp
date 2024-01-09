@@ -6,6 +6,8 @@
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
 
+#include "win32/misc.h"
+
 ImGuiStyle gStyle               = {};
 
 
@@ -15,6 +17,16 @@ bool       gDrawCookingQueue    = true;
 constexpr const char* cAppLogName          = "Main Log";
 constexpr const char* cCookingQueueName    = "Cooking Queue";
 
+
+std::span<const uint8> gGetEmbeddedFont(StringView inName)
+{
+	HRSRC   resource             = FindResourceA(nullptr, inName.AsCStr(), "FONTFILE");
+	DWORD   resource_data_size   = SizeofResource(nullptr, resource);
+	HGLOBAL resource_data_handle = LoadResource(nullptr, resource);
+	auto    resource_data        = (const uint8*)LockResource(resource_data_handle);
+
+	return { resource_data, resource_data_size };
+}
 
 struct UIScale
 {
@@ -70,9 +82,29 @@ void gUIUpdate()
 		// Release the DX11 objects (font textures, but also everything else... might not be the most efficient).
 		ImGui_ImplDX11_InvalidateDeviceObjects();
 
-		// Reload the font at the new scale.
-		// TODO embed the font
-		io.Fonts->AddFontFromFileTTF("thirdparty/imgui/misc/fonts/Cousine-Regular.ttf", 14.0f * gUIScale.GetFinalScale());
+		// Fonts are embedded in the exe, they don't need to be released.
+		ImFontConfig font_config; 
+		font_config.FontDataOwnedByAtlas = false;
+
+		// Reload the fonts at the new scale.
+		// The main font.
+		{
+			auto cousine_ttf = gGetEmbeddedFont("cousine_regular");
+			io.Fonts->AddFontFromMemoryTTF((void*)cousine_ttf.data(), (int)cousine_ttf.size(), 14.0f * gUIScale.GetFinalScale(), &font_config);
+		}
+
+		// The icons font.
+		{
+			ImFontConfig icons_config          = font_config;
+			icons_config.MergeMode             = true; // Merge inot the default font.
+			icons_config.GlyphOffset.y         = 3.f * gUIScale.GetFinalScale();
+
+			static const ImWchar icon_ranges[] = { ICON_MIN_CI, ICON_MAX_CI, 0 };
+
+			auto codicon_ttf = gGetEmbeddedFont("codicon");
+			io.Fonts->AddFontFromMemoryTTF((void*)codicon_ttf.data(), (int)codicon_ttf.size(), 14.0f * gUIScale.GetFinalScale(), &icons_config, icon_ranges);
+		}
+
 		// Re-create the DX11 objects.
 		ImGui_ImplDX11_CreateDeviceObjects();
 	}
@@ -153,7 +185,125 @@ void gUIDrawMain()
 }
 
 
+void gDrawFileInfoSpan(StringView inListName, std::span<const FileID> inFileIDs);
+void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingCommandID> inCommandIDs);
 
+
+void gUIDrawFileInfo(const FileInfo& inFile)
+{
+	ImGui::PushID(TempString32("File {}", inFile.mID.AsUInt()).AsCStr());
+	defer { ImGui::PopID(); };
+
+	TempString512 label("{}", inFile);
+	bool       clicked = ImGui::Selectable(label.AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
+	bool       open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
+
+	if (open)
+		ImGui::OpenPopup("Popup");
+
+	if (ImGui::BeginPopup("Popup"))
+	{
+		ImGui::Text(label);
+
+		ImGui::SmallButton("Open Dir");
+		ImGui::SameLine();
+		ImGui::SmallButton("Open File");
+
+		ImGui::SeparatorText("Details");
+
+		if (ImGui::BeginTable("File Details", 2))
+		{
+			ImGui::TableNextRow();
+			
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("Repo");
+			ImGui::TableNextColumn(); ImGui::Text(TempString128("{} ({})", inFile.GetRepo().mName, inFile.GetRepo().mRootPath));
+
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("RefNumber");
+			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mRefNumber));
+
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("LastChange");
+			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChange));
+
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Related Commands");
+
+		if (!inFile.mInputOf.empty())
+			gDrawCookingCommandSpan("Is Input Of", inFile.mInputOf);
+		if (!inFile.mOutputOf.empty())
+			gDrawCookingCommandSpan("Is Output Of", inFile.mOutputOf);
+
+
+		ImGui::EndPopup();
+	}
+}
+
+
+
+void gUIDrawCookingCommand(const CookingCommand& inCommand)
+{
+	ImGui::PushID(TempString32("Command {}", inCommand.mID.mIndex).AsCStr());
+	defer { ImGui::PopID(); };
+
+	TempString256 label("[{}] {}", inCommand.GetRule().mName, inCommand.GetMainInput().GetFile().mPath);
+
+	bool       clicked = ImGui::Selectable(label.AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
+	bool       open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
+
+	// TODO add tooltip when hovering the selectable? or just over the icon (if there's one)
+
+	if (open)
+		ImGui::OpenPopup("Popup");
+
+	if (ImGui::BeginPopup("Popup"))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
+
+		ImGui::Text(label);
+
+		ImGui::SeparatorText("Related Files");
+
+		gDrawFileInfoSpan("Inputs", inCommand.mInputs);
+		gDrawFileInfoSpan("Outputs", inCommand.mOutputs);
+
+		ImGui::PopStyleVar();
+		ImGui::EndPopup();
+	}
+}
+
+
+
+void gDrawFileInfoSpan(StringView inListName, std::span<const FileID> inFileIDs)
+{
+	constexpr int cMaxItemsForOpenByDefault = 10;
+	ImGui::SetNextItemOpen(inListName.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
+
+	if (ImGui::TreeNode(inListName.data(), TempString64("{} ({} items)", inListName, inFileIDs.size()).AsCStr()))
+	{
+		for (FileID file_id : inFileIDs)
+		{
+			gUIDrawFileInfo(file_id.GetFile());
+		}
+		ImGui::TreePop();
+	}
+};
+
+
+void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingCommandID> inCommandIDs)
+{
+	constexpr int cMaxItemsForOpenByDefault = 10;
+	ImGui::SetNextItemOpen(inListName.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
+
+	if (ImGui::TreeNode(inListName.data(), TempString64("{} ({} items)", inListName, inCommandIDs.size()).AsCStr()))
+	{
+		for (CookingCommandID command_id : inCommandIDs)
+		{
+			gUIDrawCookingCommand(gCookingSystem.GetCommand(command_id));
+		}
+		ImGui::TreePop();
+	}
+};
 
 
 void gUIDrawCookingQueue()
@@ -179,11 +329,9 @@ void gUIDrawCookingQueue()
 			if (bucket.mCommands.empty())
 				continue;
 
-			ImGui::Separator();
-			ImGui::Text("Priority %d (%d items)", bucket.mPriority, (int)bucket.mCommands.size());
-			ImGui::Separator();
+			ImGui::SeparatorText(TempString64("Priority {} ({} items)", bucket.mPriority, bucket.mCommands.size()));
 
-			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
 
 			ImGuiListClipper clipper;
 			clipper.Begin((int)bucket.mCommands.size());
@@ -191,14 +339,7 @@ void gUIDrawCookingQueue()
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 				{
-					const CookingCommand& command = gCookingSystem.GetCommand(bucket.mCommands[i]);
-					const CookingRule& rule = gCookingSystem.GetRule(command.mRuleID);
-					const FileInfo& main_input = gFileSystem.GetFile(command.GetMainInput());
-					ImGui::TextUnformatted(rule.mName);
-					ImGui::SameLine();
-					ImGui::TextUnformatted(" - ");
-					ImGui::SameLine();
-					ImGui::TextUnformatted(main_input.mPath);
+					gUIDrawCookingCommand(gCookingSystem.GetCommand(bucket.mCommands[i]));
 				}
 			}
 			clipper.End();

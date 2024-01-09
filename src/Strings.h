@@ -8,12 +8,18 @@
 #include <format>
 #include <optional>
 
+struct StringView;
+constexpr bool gIsNullTerminated(StringView inString);
+
 
 // Mutable StringView. Size includes the null-terminator.
 using MutStringView = std::span<char>;
 
 // Mutable String. Allocates its own memory; size doesn't include the null-terminator.
 using String		= std::string;
+
+template<size_t taSize> struct TempString;
+
 
 // StringView class. Size doesn't include the null-terminator.
 // Not just a std::string_view because an implicit constructor from MutStringView.
@@ -48,17 +54,47 @@ struct StringView : public std::string_view
 		if (!empty() && back() == 0)
 			remove_suffix(1);
 	}
-};
 
+	// Implicit consturctors from TempString. This is the dangerous one, let see if we can do without.
+	//template<size_t taSize> constexpr StringView(const TempString<taSize>& inString);
 
-template <> struct std::hash<StringView>
-{
-    using is_avalanching = void;
-    uint64 operator()(const StringView& inString) const
+	// All our strings are null terminated so it's "safe", but assert in case it's a sub-string view.
+	const char* AsCStr() const
 	{
-        return ankerl::unordered_dense::detail::wyhash::hash(inString.data(), inString.size());
-    }
+		gAssert(gIsNullTerminated(*this));
+		return data();
+	}
 };
+
+
+// Fixed size string meant for temporaries.
+template<size_t taSize>
+struct TempString : NoCopy // No copy for now, should not be needed on temporary strings.
+{
+	TempString()
+	{
+		mBuffer[0] = 0;
+		mSize      = 1;
+	}
+
+	// Constructor that also formats the string.
+	template <typename... taArgs> TempString(std::format_string<taArgs...> inFmt, taArgs&&... inArgs);
+
+	StringView  AsStringView() const { return { mBuffer, mSize }; }
+	const char* AsCStr() const { return mBuffer; }
+
+	size_t      mSize = 0;
+	char        mBuffer[taSize];
+};
+
+using TempString32  = TempString<32>;
+using TempString64  = TempString<64>;
+using TempString128 = TempString<128>;
+using TempString256 = TempString<256>;
+using TempString512 = TempString<512>;
+
+
+//template<size_t taSize> constexpr StringView::StringView(const TempString<taSize>& inString) : std::string_view(inString.AsStringView()) {}
 
 
 // Return true if inString1 and inString2 are identical.
@@ -181,3 +217,32 @@ std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutString
 std::optional<std::wstring_view> gUtf8ToWideChar(StringView inString, std::span<wchar_t> ioBuffer);
 
 
+// Helper to format a string into a fixed size buffer.
+template<typename... taArgs>
+StringView gFormat(MutStringView ioBuffer, std::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+{
+	auto result = std::format_to_n(ioBuffer.data(), ioBuffer.size() - 1, inFmt, std::forward<taArgs>(inArgs)...);
+	*result.out = 0; // Add the null terminator.
+
+	return ioBuffer.subspan(0, result.size);
+}
+
+
+template <size_t taSize>
+template <typename... taArgs> TempString<taSize>::TempString(std::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+{
+	StringView str_view = gFormat(mBuffer, inFmt, std::forward<taArgs>(inArgs)...);
+	mSize               = str_view.size();
+}
+
+
+
+// Hash for StringView.
+template <> struct ankerl::unordered_dense::hash<StringView>
+{
+    using is_avalanching = void;
+    uint64 operator()(const StringView& inString) const
+	{
+        return detail::wyhash::hash(inString.data(), inString.size());
+    }
+};

@@ -92,11 +92,21 @@ template <> struct ankerl::unordered_dense::hash<Hash128>
 // Identifier for a file. 4 bytes.
 struct FileID
 {
-	uint32 mRepoIndex : cFileRepoIndexBits = cMaxFileRepos;
-	uint32 mFileIndex : cFileIndexBits     = cMaxFilePerRepo;
+	uint32                  mRepoIndex : cFileRepoIndexBits = cMaxFileRepos;
+	uint32                  mFileIndex : cFileIndexBits     = cMaxFilePerRepo;
 
-	bool IsValid() const { return *this != cInvalid(); }
+	const FileInfo&         GetFile() const; // Convenience getter for the FileInfo itself.
+	const FileRepo&         GetRepo() const; // Convenience getter for the FileRepo.
+
+	bool                    IsValid() const { return *this != cInvalid(); }
 	static constexpr FileID cInvalid() { return {}; }
+
+	uint32                  AsUInt() const
+	{
+		uint32 i;
+		memcpy(&i, this, sizeof(*this));
+		return i;
+	}
 
 	auto operator<=>(const FileID& inOther) const = default;
 };
@@ -128,14 +138,14 @@ struct FileInfo : NoCopy
 	std::vector<CookingCommandID> mInputOf;				// List of commands that use this file as input.
 	std::vector<CookingCommandID> mOutputOf;			// List of commands that use this file as output. There should be only one, but being able to store several is needed for debugging.hash
 
-	bool             IsDeleted() const { return !mRefNumber.IsValid(); }
-	bool             IsDirectory() const { return mIsDirectory != 0; }
-	FileType         GetType() const { return mIsDirectory ? FileType::Directory : FileType::File; }
-	StringView       GetName() const { return mPath.substr(mNamePos); }
-	StringView       GetNameNoExt() const { return mPath.substr(mNamePos, mExtensionPos - mNamePos); }
-	StringView       GetExtension() const { return mPath.substr(mExtensionPos); }
-	StringView       GetDirectory() const { return mPath.substr(0, mNamePos); }		// Includes the trailing slash.
-	const FileRepo&  GetRepo() const;
+	bool                          IsDeleted() const { return !mRefNumber.IsValid(); }
+	bool                          IsDirectory() const { return mIsDirectory != 0; }
+	FileType                      GetType() const { return mIsDirectory ? FileType::Directory : FileType::File; }
+	StringView                    GetName() const { return mPath.substr(mNamePos); }
+	StringView                    GetNameNoExt() const { return mPath.substr(mNamePos, mExtensionPos - mNamePos); }
+	StringView                    GetExtension() const { return mPath.substr(mExtensionPos); }
+	StringView                    GetDirectory() const { return mPath.substr(0, mNamePos); } // Includes the trailing slash.
+	const FileRepo&               GetRepo() const { return mID.GetRepo(); }
 
 	FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType inType, FileRefNumber inRefNumber);
 };
@@ -245,9 +255,15 @@ private:
 inline FileSystem gFileSystem;
 
 
-inline const FileRepo& FileInfo::GetRepo() const
+inline const FileInfo& FileID::GetFile() const
 {
-	return gFileSystem.GetRepo(mID);
+	return gFileSystem.GetFile(*this);
+}
+
+
+inline const FileRepo& FileID::GetRepo() const
+{
+	return gFileSystem.GetRepo(*this);
 }
 
 
@@ -267,8 +283,8 @@ template <> struct std::formatter<FileInfo> : std::formatter<std::string_view>
 {
 	auto format(const FileInfo& inFileInfo, format_context& ioCtx) const
 	{
-		return std::format_to(ioCtx.out(), "{:9} {}:{}", 
-			inFileInfo.IsDirectory() ? "Directory" : "File", 
+		return std::format_to(ioCtx.out(), "{}:{}", 
+			//inFileInfo.IsDirectory() ? "Dir" : "File", 
 			inFileInfo.GetRepo().mName,
 			inFileInfo.mPath);
 	}
