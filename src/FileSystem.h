@@ -210,6 +210,7 @@ struct FileSystem : NoCopy
 
 	bool            IsMonitoringStarted() const			{ return mMonitorDirThread.joinable(); }
 
+	// TODO: these getters aren't thread safe, SegmentedVector contains a std::vector that might grow, replace with virtual mem array!
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 

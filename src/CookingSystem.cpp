@@ -581,7 +581,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 	}
 
 	StringPool::ResizableStringView output_str     = ioStringPool.CreateResizableString();
-	output_str.AppendFormat("Command Line: {}\n", StringView(*command_line));
+	output_str.AppendFormat("Command Line: {}\n\n", StringView(*command_line));
 
 	// Make sure all inputs exist.
 	{
@@ -598,6 +598,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 
 		if (!all_inputs_exist)
 		{
+			log_entry.mOutput       = output_str.AsStringView();
 			log_entry.mCookingState = CookingState::Error;
 			ioCommand.mCookingState = CookingState::Error;
 			return;
@@ -620,6 +621,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 
 		if (!all_dirs_exist)
 		{
+			log_entry.mOutput       = output_str.AsStringView();
 			log_entry.mCookingState = CookingState::Error;
 			ioCommand.mCookingState = CookingState::Error;
 			return;
@@ -631,30 +633,15 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 	for (FileID input_id : ioCommand.mInputs)
 		max_input_usn = gMax(max_input_usn, gFileSystem.GetFile(input_id).mLastChange);
 
-	// Subprocess wants each arg in a different string to then concatenate them... a bit silly but whatevs, let's split it.
-	std::vector<const char*> command_line_array;
-	{
-		const char* arg_begin = command_line->data();
-		for (char& c : *command_line)
-		{
-			if (c == ' ' || c == '\t' || c == 'v')
-				c = 0;
-
-			command_line_array.push_back(arg_begin);
-			arg_begin = &c + 1;
-		}
-
-		if (arg_begin != gEndPtr(*command_line))
-			command_line_array.push_back(arg_begin);
-
-		command_line_array.push_back(nullptr);
-	}
-
 	// Create the process for the command line.
 	subprocess_s process;
-	if (subprocess_create(command_line_array.data(), subprocess_option_no_window | subprocess_option_combined_stdout_stderr, &process))
+	int options = subprocess_option_no_window | subprocess_option_combined_stdout_stderr | subprocess_option_single_string_command_line;
+	const char*  command_line_array[] = { command_line->data(), nullptr };
+	if (subprocess_create(command_line_array, options, &process))
 	{
 		output_str.AppendFormat("[error] Failed to create process - {}\n", GetLastErrorString());
+
+		log_entry.mOutput       = output_str.AsStringView();
 		log_entry.mCookingState = CookingState::Error;
 		ioCommand.mCookingState = CookingState::Error;
 		return;
@@ -662,12 +649,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 
 	// Wait for the process to finish.
 	int exit_code = 0;
-	if (subprocess_join(&process, &exit_code))
-	{
-		output_str.AppendFormat("[error] Failed to get exit code - {}\n", GetLastErrorString());
-		log_entry.mCookingState = CookingState::Error;
-		ioCommand.mCookingState = CookingState::Error;
-	}
+	bool got_exit_code = subprocess_join(&process, &exit_code);
+	
 
 	// Get the output.
 	// TODO: use the async API to get the output before the process is finished? but may need an extra thread to read stderr
@@ -685,12 +668,29 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 			output_str.Append({ buffer, bytes_read });
 		}
 	}
+
+	// Log the exit code if we have it.
+	if (got_exit_code)
+	{
+		output_str.AppendFormat("[error] Failed to get exit code - {}\n", GetLastErrorString());
+
+		log_entry.mOutput       = output_str.AsStringView();
+		log_entry.mCookingState = CookingState::Error;
+		ioCommand.mCookingState = CookingState::Error;
+	}
+	else
+	{
+		output_str.AppendFormat("\nExit code: {}\n", exit_code);
+	}
 	
 	// Destruct the process handles (this can't actually fail).
 	subprocess_destroy(&process);
 
 	// Set the inputs USN on the command.
 	ioCommand.mLastCook = max_input_usn;
+
+	// Store the log output.
+	log_entry.mOutput   = output_str.AsStringView();
 
 	// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
 	log_entry.mCookingState = CookingState::Waiting;

@@ -170,6 +170,7 @@ template <  class Key,
 			class Bucket = ankerl::unordered_dense::bucket_type::standard>
 using SegmentedHashSet = ankerl::unordered_dense::segmented_set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
 
+// TODO replace all uses of SegmentedVector by a virtual mem array to make it safe to access with multiple thread while it grows
 template <	typename T,
 			size_t MaxSegmentSizeElements = 1024,
 			typename Allocator = std::allocator<T>>

@@ -49,7 +49,7 @@ int WinMain(
 	::RegisterClassExW(&wc);
 	wchar_t name_buffer[128];
 	auto name_wchar = gUtf8ToWideChar(cAppName, name_buffer);
-	HWND hwnd = ::CreateWindowW(wc.lpszClassName, name_wchar.value_or(L"").data(), WS_OVERLAPPEDWINDOW, 100, 100, 1600, 1600, nullptr, nullptr, wc.hInstance, nullptr);
+	HWND hwnd = ::CreateWindowW(wc.lpszClassName, name_wchar.value_or(L"").data(), WS_OVERLAPPEDWINDOW, 100, 100, 2400, 1600, nullptr, nullptr, wc.hInstance, nullptr);
 
 	gApp.Init(hwnd);
 
@@ -132,7 +132,7 @@ int WinMain(
 		{ .mRepoIndex = gFileSystem.FindRepo("Source")->mIndex, .mExtension = ".png", .mDirectoryPrefix = "yes_copy", .mNamePrefix = "only_this_" },
 	};
 	copy_txt_rule.mOutputPaths  = { "{Repo:Bin}{Dir}{File}_copy{Ext}" };
-	copy_txt_rule.mCommandLine  = { "xcopy.exe {Repo:Source}{FullPath} {Repo:Bin}{Dir}{File}_copy{Ext} /Y /-I" };
+	copy_txt_rule.mCommandLine  = { R"(xcopy.exe "{Repo:Source}{FullPath}" "{Repo:Bin}{Dir}{File}_copy{Ext}" /Y /-I)" };
 
 	// Start paused, for debugging.
 	gCookingSystem.SetCookingPaused(true);

@@ -91,10 +91,28 @@ enum class CookingState : uint8
 	Waiting,	// After cooking, we need to wait a little to get the USN events and see if all outputs were written (otherwise it's an Error instead of Success).
 	Error,
 	Success,
+	_Count,
+};
+
+constexpr StringView gToStringView(CookingState inVar)
+{
+	constexpr StringView cNames[]
+	{
+		"Unknown",
+		"InQueue",
+		"Cooking",
+		"Waiting",
+		"Error",
+		"Success",
+	};
+	static_assert(gElemCount(cNames) == (size_t)CookingState::_Count);
+
+	return cNames[(int)inVar];
 };
 
 struct CookingLogEntry
 {
+	// TODO add a start time (and duration?)
 	CookingCommandID          mCommandID;
 	std::atomic<CookingState> mCookingState = CookingState::Unknown;
 	StringView                mOutput;
@@ -197,6 +215,8 @@ private:
 	std::counting_semaphore<>                mCookingResumeSemaphore = std::counting_semaphore(0);
 	bool                                     mCookingPaused          = false;
 
+	friend void                              gUIDrawCookingLog();
+	friend void                              gUIDrawSelectedCookingLogEntry();
 	SegmentedVector<CookingLogEntry>         mCookingLog;
 	std::mutex                               mCookingLogMutex;
 
