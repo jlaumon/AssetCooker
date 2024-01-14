@@ -45,6 +45,8 @@ struct OwnedHandle : NoCopy
 struct _FILE_ID_128;
 using USN = int64;
 
+constexpr USN cMaxUSN = 9223372036854775807;
+
 
 // Alias for FILE_ID_128.
 struct FileRefNumber
@@ -220,9 +222,6 @@ struct FileSystem : NoCopy
 	FileInfo*		FindFile(FileRefNumber inRefNumber);				// Return nullptr if not found.
 
 	bool            CreateDirectory(FileID inFileID);
-
-	void            OnFileChanged(FileID inFileID);
-	void            ProcessChangedFiles();
 
 	void			KickMonitorDirectoryThread();
 private:

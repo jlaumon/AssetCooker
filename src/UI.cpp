@@ -8,12 +8,13 @@
 
 #include "win32/misc.h"
 
-ImGuiStyle             gStyle                   = {};
+ImGuiStyle             gStyle                           = {};
 
-bool                   gDrawAppLog              = true;
-bool                   gDrawCookingQueue        = true;
-bool                   gDrawCookingLog          = true;
-int                    gSelectedCookingLogEntry = -1;
+bool                   gDrawAppLog                      = true;
+bool                   gDrawCookingQueue                = true;
+bool                   gDrawCookingLog                  = true;
+int                    gSelectedCookingLogEntry         = -1;
+bool                   gScrollToSelectedCookingLogEntry = false;
 
 constexpr const char*  cAppLogName              = "Main Log";
 constexpr const char*  cCookingQueueName        = "Cooking Queue";
@@ -244,6 +245,37 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	ImGui::Text(gFormat(inCommand));
 
+	if (ImGui::SmallButton("Cook"))
+		gCookingSystem.ForceCook(inCommand.mID);
+
+	if (inCommand.mLastCookingLog && ImGui::Button("Select in Log"))
+	{
+		gSelectedCookingLogEntry         = inCommand.mLastCookingLog->mIndex;
+		gScrollToSelectedCookingLogEntry = true;
+	}
+
+	ImGui::SeparatorText("Cooking State");
+
+	if (inCommand.IsDirty())
+	{
+		ImGui::TextUnformatted("Dirty");
+
+		ImGui::Indent();
+
+		if (inCommand.mDirtyState & CookingCommand::InputMissing)
+			ImGui::TextUnformatted("Input Missing");
+		if (inCommand.mDirtyState & CookingCommand::InputChanged)
+			ImGui::TextUnformatted("Input Changed");
+		if (inCommand.mDirtyState & CookingCommand::OutputMissing)
+			ImGui::TextUnformatted("Output Missing");
+
+		ImGui::Unindent();
+	}
+	else
+	{
+		ImGui::TextUnformatted("Up To Date");
+	}
+
 	ImGui::SeparatorText("Related Files");
 
 	gDrawFileInfoSpan("Inputs", inCommand.mInputs);
@@ -319,13 +351,13 @@ void gUIDrawCookingQueue()
 	if (ImGui::Checkbox("Auto cook", &auto_cook))
 		gCookingSystem.SetCookingPaused(!auto_cook);
 
-	// Lock the queue while we're browsing it.
-	std::lock_guard lock(gCookingQueue.mMutex);
+	// Lock the dirty command list while we're browsing it.
+	std::lock_guard lock(gCookingSystem.mCommandsDirty.mMutex);
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
 
-		for (auto& bucket : gCookingQueue.mPrioBuckets)
+		for (auto& bucket : gCookingSystem.mCommandsDirty.mPrioBuckets)
 		{
 			if (bucket.mCommands.empty())
 				continue;
@@ -359,7 +391,7 @@ void gUIDrawCookingQueue()
 
 void gUIDrawCookingLog()
 {
-	if (!ImGui::Begin("Cooking Log", &gDrawCookingQueue))
+	if (!ImGui::Begin("Cooking Log", &gDrawCookingLog))
 	{
 		ImGui::End();
 		return;
@@ -377,10 +409,19 @@ void gUIDrawCookingLog()
 		clipper.Begin((int)gCookingSystem.mCookingLog.size());
 		while (clipper.Step())
 		{
+			if (gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry != -1)
+			{
+				// TODO test this
+				gScrollToSelectedCookingLogEntry = false;
+                ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + gSelectedCookingLogEntry * clipper.ItemsHeight);
+			}
+
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 			{
 				const CookingLogEntry& log_entry     = gCookingSystem.mCookingLog[i];
 				bool                   selected      = (gSelectedCookingLogEntry == i);
+
+				ImGui::PushID(&log_entry);
 
 				// TODO draw spinner and change color based on cooking state
 				if (ImGui::Selectable(gFormat(log_entry).AsCStr(), selected))
@@ -397,6 +438,8 @@ void gUIDrawCookingLog()
 					gDrawCookingCommandPopup(gCookingSystem.GetCommand(log_entry.mCommandID));
 					ImGui::EndPopup();
 				}
+
+				ImGui::PopID();
 			}
 		}
 		clipper.End();

@@ -110,7 +110,7 @@ constexpr taIterator gLowerBound(taIterator inFirst, taIterator inLast, const ta
 
 // Helper to find a value in a sorted vector-like container.
 template<typename taValue, typename taContainer>
-constexpr auto gFindSorted(const taContainer& inContainer, const taValue& inElem)
+constexpr auto gFindSorted(taContainer& inContainer, const taValue& inElem)
 {
 	auto end = inContainer.end();
 	auto it = gLowerBound(inContainer.begin(), end, inElem);
@@ -133,6 +133,22 @@ constexpr auto gEmplaceSorted(taContainer& ioContainer, const taValue& inElem)
 		return it;
 	else
 		return ioContainer.emplace(it, inElem);
+}
+
+// Helper to find a value in a vector-like container.
+template<typename taValue, typename taContainer>
+constexpr auto gFind(taContainer& inContainer, const taValue& inElem)
+{
+	auto end = inContainer.end();
+	auto begin = inContainer.begin();
+
+	for (auto it = begin; it != end; ++it)
+	{
+		if (*it == inElem)
+			return it;
+	}
+
+	return end;
 }
 
 

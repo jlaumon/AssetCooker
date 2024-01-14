@@ -552,7 +552,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 
 				file.mLastChange = mDrive.GetUSN(file_handle);
 
-				gFileSystem.OnFileChanged(file.mID);
+				gCookingSystem.QueueUpdateDirtyStates(file.mID);
 			}
 			
 			if (file.IsDirectory())
@@ -803,7 +803,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 
 				file->mLastChange = record->Usn;
 
-				gFileSystem.OnFileChanged(file->mID);
+				gCookingSystem.QueueUpdateDirtyStates(file->mID);
 			}
 		}
 	}
@@ -961,33 +961,6 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 }
 
 
-void FileSystem::OnFileChanged(FileID inFileID)
-{
-	std::lock_guard lock(mChangedFilesMutex);
-	mChangedFiles.insert(inFileID);
-}
-
-
-void FileSystem::ProcessChangedFiles()
-{
-	// TODO WIP store commands to update in cooking system instead?
-	std::lock_guard lock(mChangedFilesMutex);
-
-	for (FileID file_id : mChangedFiles)
-	{
-		FileInfo& file = GetFile(file_id);
-
-		for (CookingCommandID command_id : file.mInputOf)
-		{
-			CookingCommand& command = gCookingSystem.GetCommand(command_id);
-
-			command.UpdateDirtyState();
-		}
-	}
-
-	mChangedFiles.clear();
-}
-
 
 void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer)
 {
@@ -1051,7 +1024,7 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	// Scan the repos.
 	InitialScan(inStopToken, buffer_scan);
 
-	ProcessChangedFiles();
+	gCookingSystem.ProcessUpdateDirtyStates();
 
 	// Once the scan is finished, start cooking.
 	gCookingSystem.StartCooking();
@@ -1076,8 +1049,9 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 				break;
 		}
 
-		// TODO return bool for any_work_done
-		ProcessChangedFiles();
+		// Note: we don't update any_work_done here because we don't want to cause a busy loop waiting to update commands that are still cooking.
+		// Instead the cooking threads will wake this thread up any time a command finishes (which usually also means there are file changes to process).
+		gCookingSystem.ProcessUpdateDirtyStates();
 
 		if (!any_work_done)
 		{

@@ -86,10 +86,9 @@ struct CookingRule : NoCopy
 enum class CookingState : uint8
 {
 	Unknown,
-	InQueue,
 	Cooking,
 	Waiting,	// After cooking, we need to wait a little to get the USN events and see if all outputs were written (otherwise it's an Error instead of Success).
-	Error,
+	Error,		// TODO: maybe we need a second error value for the kind that will never go away (ie. generating command line fails)
 	Success,
 	_Count,
 };
@@ -99,7 +98,6 @@ constexpr StringView gToStringView(CookingState inVar)
 	constexpr StringView cNames[]
 	{
 		"Unknown",
-		"InQueue",
 		"Cooking",
 		"Waiting",
 		"Error",
@@ -114,6 +112,7 @@ struct CookingLogEntry
 {
 	// TODO add a start time (and duration?)
 	CookingCommandID          mCommandID;
+	int                       mIndex = -1;
 	std::atomic<CookingState> mCookingState = CookingState::Unknown;
 	StringView                mOutput;
 };
@@ -134,14 +133,16 @@ struct CookingCommand : NoCopy
 		InputChanged  = 0b0010,
 		OutputMissing = 0b0100,
 	};
+	// TODO is InputMissing really needed? and is its comment still true?
 
 	DirtyState                mDirtyState     = NotDirty;
-	std::atomic<CookingState> mCookingState   = CookingState::Unknown;
 	USN                       mLastCook       = 0;
 	CookingLogEntry*          mLastCookingLog = nullptr;
 
 	void                      UpdateDirtyState();
 	bool                      IsDirty() const { return mDirtyState != NotDirty; }
+
+	CookingState              GetCookingState() const { return mLastCookingLog ? mLastCookingLog->mCookingState.load() : CookingState::Unknown; }
 
 	void                      ReadDepFile();
 
@@ -152,31 +153,54 @@ struct CookingCommand : NoCopy
 
 constexpr CookingCommand::DirtyState& operator|=(CookingCommand::DirtyState& ioA, CookingCommand::DirtyState inB) { return ioA = (CookingCommand::DirtyState)(ioA | inB); }
 
+enum class PushPosition
+{
+	Back,
+	Front
+};
+
+enum class RemoveOption : uint8
+{
+	None        = 0b00,
+	KeepOrder   = 0b01,
+	ExpectFound = 0b10
+};
+
+constexpr RemoveOption operator|(RemoveOption inA, RemoveOption inB) { return (RemoveOption)((uint8)inA | (uint8)inB); }
+constexpr bool         operator&(RemoveOption inA, RemoveOption inB) { return ((uint8)inA & (uint8)inB) != 0; }
 
 struct CookingQueue : NoCopy
 {
-	void             Push(CookingCommandID inCommandID);
+	void             SetSemaphore(std::counting_semaphore<>* ioSemaphore) { mSemaphore = ioSemaphore; } // Set a semaphore that will be acquired/released when commands are popped/pushed.
+
+	void             Push(CookingCommandID inCommandID, PushPosition inPosition = PushPosition::Back);
 	CookingCommandID Pop();
+
+	void             Remove(CookingCommandID inCommandID, RemoveOption inOption = RemoveOption::None);
+	void             Clear();
 
 	struct PrioBucket
 	{
 		int                           mPriority = 0;
-		std::vector<CookingCommandID> mCommands;
+		std::vector<CookingCommandID> mCommands; // TODO replace by a ring buffer or some kind of deque
 
 		auto                          operator<=>(int inOrder) const { return mPriority <=> inOrder; }
 		auto                          operator==(int inOrder) const { return mPriority == inOrder; }
 		auto                          operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
 	};
 
-	std::vector<PrioBucket> mPrioBuckets;
-	size_t                  mTotalSize = 0;
-	std::mutex              mMutex;
-
+	std::vector<PrioBucket>    mPrioBuckets;
+	size_t                     mTotalSize = 0;
+	std::mutex                 mMutex;
+	std::counting_semaphore<>* mSemaphore = nullptr;
 };
 
 
 struct CookingSystem : NoCopy
 {
+	CookingSystem();
+	~CookingSystem() = default;
+
 	const CookingRule&                    GetRule(CookingRuleID inID) const { return mRules[inID.mIndex]; }
 	CookingCommand&                       GetCommand(CookingCommandID inID) { return mCommands[inID.mIndex]; }
 
@@ -189,21 +213,33 @@ struct CookingSystem : NoCopy
 	void                                  SetCookingPaused(bool inPaused);
 	bool                                  IsCookingPaused() const { return mCookingPaused; }
 
-	void                                  KickOneCookingThread();
+	void                                  QueueUpdateDirtyStates(FileID inFileID);
+	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
+
+	void                                  ForceCook(CookingCommandID inCommandID);
 
 private:
+	friend struct CookingCommand;
+	friend void gUIDrawCookingQueue();
 	struct CookingThread;
 
 	void                                  CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken);
 	CookingLogEntry&                      AllocateCookingLogEntry(CookingCommandID inCommandID);
 	void                                  CookCommand(CookingCommand& ioCommand, StringPool& ioStringPool);
-	void                                  AddToWaitList(CookingCommandID);
-	void                                  ProcessWaitList();
+	void                                  AddTimeOut(CookingLogEntry* inLogEntry);
+	void                                  ProcessTimeOuts();
+	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
 
 	SegmentedVector<CookingRule, 256>     mRules;
 
 	SegmentedVector<CookingCommand, 4096> mCommands;
 	std::mutex                            mCommandsMutex;
+
+	SegmentedHashSet<CookingCommandID>    mCommandsQueuedForUpdateDirtyState;
+	std::mutex                            mCommandsQueuedForUpdateDirtyStateMutex;
+
+	CookingQueue                          mCommandsDirty;	// All dirty commands.
+	CookingQueue                          mCommandsToCook;	// Commands that will get cooked by the cooking threads.
 
 	struct CookingThread
 	{
@@ -211,8 +247,7 @@ private:
 		StringPool   mStringPool;
 	};
 	std::vector<CookingThread>               mCookingThreads;
-	std::counting_semaphore<>                mCookingQueueSemaphore  = std::counting_semaphore(0);
-	std::counting_semaphore<>                mCookingResumeSemaphore = std::counting_semaphore(0);
+	std::counting_semaphore<>                mCookingThreadsSemaphore  = std::counting_semaphore(0);
 	bool                                     mCookingPaused          = false;
 
 	friend void                              gUIDrawCookingLog();
@@ -220,14 +255,16 @@ private:
 	SegmentedVector<CookingLogEntry>         mCookingLog;
 	std::mutex                               mCookingLogMutex;
 
-	std::array<HashSet<CookingCommandID>, 2> mWaitingCommands;
-	std::mutex                               mWaitingCommandsMutex;
-	int                                      mWaitingCommandCurrentIndex = 0;
+	std::array<HashSet<CookingLogEntry*>, 2> mTimeOutBatches;
+	std::mutex                               mTimeOutsMutex;
+	int                                      mTimeOutBatchCurrentIndex = 0;
+	std::jthread                             mTimeOutUpdateThread;
+	std::binary_semaphore                    mTimeOutAddedSignal = std::binary_semaphore(0);
+	std::binary_semaphore                    mTimeOutTimerSignal = std::binary_semaphore(0);
 };
 
 
 inline CookingSystem gCookingSystem;
-inline CookingQueue  gCookingQueue;
 
 
 inline const CookingRule& CookingCommand::GetRule() const { return gCookingSystem.GetRule(mRuleID); }

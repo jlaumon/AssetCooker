@@ -232,21 +232,50 @@ void CookingCommand::UpdateDirtyState()
 			dirty_state |= InputChanged;
 	}
 
+	USN min_output_usn = cMaxUSN;
+
 	for (FileID file_id : mOutputs)
 	{
 		const FileInfo& file = gFileSystem.GetFile(file_id);
 
 		if (file.IsDeleted())
 			dirty_state |= OutputMissing;
+
+		min_output_usn = gMin(min_output_usn, file.mLastChange);
 	}
+
+	// If the command is waiting for results and all outputs were written, change its state to success.
+	if (mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting)
+	{
+		if (min_output_usn >= mLastCook)
+			mLastCookingLog->mCookingState = CookingState::Success;
+	}
+
+	bool was_dirty = IsDirty();
 
 	mDirtyState = dirty_state;
 
-	// If dirty, add it to the cooking queue.
-	// Note: Add it even if there are missing inputs. They might be created by earlier priority commands, and if not that's an error and we want to know about it.
+	if (was_dirty == IsDirty())
+		return;
+
 	if (IsDirty())
-		gCookingQueue.Push(mID);
+	{
+		// TODO move all that to functions in CookingSystem and remove friend
+		gCookingSystem.mCommandsDirty.Push(mID);
+
+		if (!gCookingSystem.IsCookingPaused())
+			gCookingSystem.mCommandsToCook.Push(mID);
+	}
+	else
+	{
+		// Keep the order because it makes the UI much nicer.
+		gCookingSystem.mCommandsDirty.Remove(mID, RemoveOption::KeepOrder | RemoveOption::ExpectFound);
+
+		// Don't care about the order in the cooking queue as much since it's not displayed (and might not be found if a worker already grabbed it).
+		gCookingSystem.mCommandsToCook.Remove(mID);
+	}
 }
+
 
 
 void CookingCommand::ReadDepFile()
@@ -255,7 +284,7 @@ void CookingCommand::ReadDepFile()
 }
 
 
-void CookingQueue::Push(CookingCommandID inCommandID)
+void CookingQueue::Push(CookingCommandID inCommandID, PushPosition inPosition/* = PushPosition::Back*/)
 {
 	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
 	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
@@ -269,16 +298,24 @@ void CookingQueue::Push(CookingCommandID inCommandID)
 		PrioBucket& bucket = *gEmplaceSorted(mPrioBuckets, priority);
 
 		// Add the command.
-		bucket.mCommands.push_back(inCommandID);
+		if (inPosition == PushPosition::Back)
+			bucket.mCommands.push_back(inCommandID);
+		else
+			bucket.mCommands.insert(bucket.mCommands.begin(), inCommandID);
+
 		mTotalSize++;
 	}
 
-	gCookingSystem.KickOneCookingThread();
+	if (mSemaphore)
+		mSemaphore->release();
 }
 
 
 CookingCommandID CookingQueue::Pop()
 {
+	if (mSemaphore)
+		mSemaphore->acquire();
+
 	std::lock_guard lock(mMutex);
 
 	// Find the first non-empty bucket.
@@ -291,6 +328,9 @@ CookingCommandID CookingQueue::Pop()
 			bucket.mCommands.pop_back();
 			mTotalSize--;
 
+			if (mSemaphore)
+				mSemaphore->release();
+
 			return id;
 		}
 	}
@@ -298,6 +338,62 @@ CookingCommandID CookingQueue::Pop()
 	return CookingCommandID::cInvalid();
 }
 
+
+void CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* = RemoveOption::None*/)
+{
+	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
+	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
+
+	std::lock_guard lock(mMutex);
+
+	// We expect to find the command (and the bucket, incidently).
+	auto bucket_it = gFindSorted(mPrioBuckets, priority);
+	if (bucket_it == mPrioBuckets.end())
+	{
+		gAssert((inOption & RemoveOption::ExpectFound) == false);
+		return;
+	}
+
+	auto        it = gFind(bucket_it->mCommands, inCommandID);
+	if (it == bucket_it->mCommands.end())
+	{
+		gAssert((inOption & RemoveOption::ExpectFound) == false);
+		return;
+	}
+
+	if (inOption & RemoveOption::KeepOrder)
+	{
+		bucket_it->mCommands.erase(it);
+	}
+	else
+	{
+		std::swap(*it, bucket_it->mCommands.back());
+		bucket_it->mCommands.pop_back();
+	}
+
+	mTotalSize--;
+}
+
+void CookingQueue::Clear()
+{
+	std::lock_guard lock(mMutex);
+
+	for (PrioBucket& bucket : mPrioBuckets)
+		bucket.mCommands.clear();
+
+	mTotalSize = 0;
+
+	// Reset the semaphore to zero.
+	if (mSemaphore)
+		while (mSemaphore->try_acquire()) {}
+}
+
+
+CookingSystem::CookingSystem()
+{
+	// Set the semaphore on the cooking queue so that worker threads are woken up when there's work to do.
+	mCommandsToCook.SetSemaphore(&mCookingThreadsSemaphore);
+}
 
 void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 {
@@ -409,8 +505,11 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 
 			for (FileID file_id : command.mOutputs)
 				gFileSystem.GetFile(file_id).mOutputOf.push_back(command.mID);
-			
 		}
+
+		// TODO: add validation
+		// - a file cannot be the input/output of the same command
+		// - all the inputs of a command can only be outputs of commands with lower prio (ie. that build before)
 
 		// Check if we need to continue to try more rules for this file.
 		if (!rule.mMatchMoreRules)
@@ -523,6 +622,9 @@ void CookingSystem::StartCooking()
 	// Start the cooking thread.
 	for (auto& thread : mCookingThreads)
 		thread.mThread = std::jthread(std::bind_front(&CookingSystem::CookingThreadFunction, this, &thread));
+
+	// Start the thread updating the time outs.
+	mTimeOutUpdateThread = std::jthread(std::bind_front(&CookingSystem::TimeOutUpdateThread, this));
 }
 
 
@@ -531,7 +633,7 @@ void CookingSystem::StopCooking()
 	for (auto& thread : mCookingThreads)
 		thread.mThread.request_stop();
 
-	mCookingQueueSemaphore.release(mCookingThreads.size());
+	mCookingThreadsSemaphore.release(mCookingThreads.size());
 
 	for (auto& thread : mCookingThreads)
 		thread.mThread.join();
@@ -546,19 +648,35 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 	if (inPaused)
 	{
 		mCookingPaused = true;
+
+		// Empty the cooking queue.
+		mCommandsToCook.Clear();
+
 	}
 	else
 	{
-		// Unpause and wake all the threads.
 		mCookingPaused = false;
-		mCookingResumeSemaphore.release(mCookingThreads.size());
+
+		// Queue all the dirty commands (unless they're in error, or already cooking).
+		// TODO make a function for that
+		{
+			std::lock_guard lock(mCommandsDirty.mMutex);
+
+			for (auto& bucket : mCommandsDirty.mPrioBuckets)
+			{
+				for (CookingCommandID command_id : bucket.mCommands)
+				{
+					const CookingCommand& command = GetCommand(command_id);
+					CookingState          cooking_state = command.GetCookingState();
+
+					if (cooking_state == CookingState::Unknown || cooking_state == CookingState::Success)
+					{
+						mCommandsToCook.Push(command_id);
+					}
+				}
+			}
+		}
 	}
-}
-
-
-void CookingSystem::KickOneCookingThread()
-{
-	mCookingQueueSemaphore.release();
 }
 
 
@@ -576,7 +694,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 	{
 		log_entry.mOutput       = ioStringPool.AllocateCopy("[error] Failed to format command line.\n");
 		log_entry.mCookingState = CookingState::Error;
-		ioCommand.mCookingState = CookingState::Error;
 		return;
 	}
 
@@ -600,7 +717,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 		{
 			log_entry.mOutput       = output_str.AsStringView();
 			log_entry.mCookingState = CookingState::Error;
-			ioCommand.mCookingState = CookingState::Error;
 			return;
 		}
 	}
@@ -623,7 +739,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 		{
 			log_entry.mOutput       = output_str.AsStringView();
 			log_entry.mCookingState = CookingState::Error;
-			ioCommand.mCookingState = CookingState::Error;
 			return;
 		}
 	}
@@ -643,7 +758,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 
 		log_entry.mOutput       = output_str.AsStringView();
 		log_entry.mCookingState = CookingState::Error;
-		ioCommand.mCookingState = CookingState::Error;
 		return;
 	}
 
@@ -676,7 +790,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 
 		log_entry.mOutput       = output_str.AsStringView();
 		log_entry.mCookingState = CookingState::Error;
-		ioCommand.mCookingState = CookingState::Error;
 	}
 	else
 	{
@@ -694,70 +807,130 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 
 	// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
 	log_entry.mCookingState = CookingState::Waiting;
-	ioCommand.mCookingState = CookingState::Waiting;
 
 	// Any time an output is detected changed, we will try updating the cooking state.
 	// If all outputs were written, cooking is a success.
 	// If timeout happens first, we declare it's an error because of outputs not written.
-	AddToWaitList(ioCommand.mID);
+	AddTimeOut(&log_entry);
+
+	// Make sure the file changes are processed as soon as possible.
+	gFileSystem.KickMonitorDirectoryThread();
 }
 
 
-void CookingSystem::AddToWaitList(CookingCommandID inCommandID)
+void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 {
-	std::lock_guard lock(mWaitingCommandsMutex);
+	std::lock_guard lock(mTimeOutsMutex);
 
-	int next_index = (mWaitingCommandCurrentIndex + 1) % (int)mWaitingCommands.size();
-	mWaitingCommands[next_index].insert(inCommandID);
+	int next_index = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
+	mTimeOutBatches[next_index].insert(inLogEntry);
 }
 
 
-// TODO add something that calls this
-// TODO also add the call that sets the cooking state to success on the file event side
-//#error need to draw cooking log first to debug?
-void CookingSystem::ProcessWaitList()
+void CookingSystem::ProcessTimeOuts()
 {
-	std::lock_guard lock(mWaitingCommandsMutex);
+	std::lock_guard lock(mTimeOutsMutex);
 
-	HashSet<CookingCommandID>& waiting_commands = mWaitingCommands[mWaitingCommandCurrentIndex];
+	HashSet<CookingLogEntry*>& time_outs = mTimeOutBatches[mTimeOutBatchCurrentIndex];
 
-	for (CookingCommandID command_id : waiting_commands)
+	for (CookingLogEntry* log_entry : time_outs)
 	{
-		CookingCommand& command = GetCommand(command_id);
-
 		// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
-		if (command.mCookingState != CookingState::Waiting)
+		if (log_entry->mCookingState != CookingState::Waiting)
+			log_entry->mCookingState = CookingState::Error;
+	}
+
+	time_outs.clear();
+	mTimeOutBatchCurrentIndex = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
+}
+
+
+
+void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
+{
+	using namespace std::chrono_literals;
+
+	while (true)
+	{
+		// Wait until there are time outs to update.
+		mTimeOutAddedSignal.acquire();
+
+		// Wait a little to give them a chance to succeed before we declare a timeout.
+		(void)mTimeOutTimerSignal.try_acquire_for(3s);
+
+		if (inStopToken.stop_requested())
+			return;
+
+		ProcessTimeOuts();
+	}
+}
+
+
+void CookingSystem::QueueUpdateDirtyStates(FileID inFileID)
+{
+	// We want to queue/defer the update for several reasons:
+	// - we don't want to update during the init scan (there's no point, we don't have all the files/all the info yet)
+	// - we don't want to update commands while they are still running (again there's no point)
+
+	const FileInfo& file = inFileID.GetFile();
+
+	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+
+	for (auto command_id : file.mInputOf)
+		mCommandsQueuedForUpdateDirtyState.insert(command_id);
+	for (auto command_id : file.mOutputOf)
+		mCommandsQueuedForUpdateDirtyState.insert(command_id);
+}
+
+
+bool CookingSystem::ProcessUpdateDirtyStates()
+{
+	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+
+	for (auto it = mCommandsQueuedForUpdateDirtyState.begin(); it != mCommandsQueuedForUpdateDirtyState.end();)
+	{
+		CookingCommand& command = GetCommand(*it);
+
+		if (command.mLastCookingLog && command.mLastCookingLog->mCookingState == CookingState::Cooking)
 		{
-			command.mCookingState                  = CookingState::Error;
-			command.mLastCookingLog->mCookingState = CookingState::Error;
+			++it; // Still cooking, check again later.
+		}
+		else
+		{
+			// Update and remove from the list.
+			command.UpdateDirtyState();
+			it = mCommandsQueuedForUpdateDirtyState.erase(it);
 		}
 	}
 
-	waiting_commands.clear();
-	mWaitingCommandCurrentIndex = (mWaitingCommandCurrentIndex + 1) % (int)mWaitingCommands.size();
+	return !mCommandsQueuedForUpdateDirtyState.empty();
 }
 
+
+void CookingSystem::ForceCook(CookingCommandID inCommandID)
+{
+	auto& command       = GetCommand(inCommandID);
+	auto  cooking_state = command.GetCookingState();
+
+	if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
+		return; // Already cooking, don't do anything.
+
+	// Remove it from the queue (if present) and add it at the front.
+	mCommandsToCook.Remove(inCommandID);
+	mCommandsToCook.Push(inCommandID, PushPosition::Front);
+}
 
 
 void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken)
 {
 	while (true)
 	{
-		mCookingQueueSemaphore.acquire();
+		CookingCommandID command_id = mCommandsToCook.Pop();
 
 		if (inStopToken.stop_requested())
 			return;
 
-		// If cooking is paused, wait on the resume semaphore.
-		if (mCookingPaused)
-		{
-			mCookingResumeSemaphore.acquire();
-
-			if (inStopToken.stop_requested())
-				return;
-		}
-
-		CookingCommandID command_id = gCookingQueue.Pop();
+		// TODO need to wait until all commands of prio N have properly finished cooking before starting prio N + 1
 		if (command_id.IsValid())
 		{
 			CookCommand(GetCommand(command_id), ioThread->mStringPool);
@@ -772,6 +945,7 @@ CookingLogEntry& CookingSystem::AllocateCookingLogEntry(CookingCommandID inComma
 
 	CookingLogEntry& log_entry = mCookingLog.emplace_back();
 	log_entry.mCommandID       = inCommandID;
+	log_entry.mIndex           = (int)mCookingLog.size() - 1;
 	log_entry.mCookingState    = CookingState::Cooking;
 
 	return log_entry;
