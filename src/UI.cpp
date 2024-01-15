@@ -170,7 +170,7 @@ void gDrawFileInfoSpan(StringView inListName, std::span<const FileID> inFileIDs)
 void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingCommandID> inCommandIDs);
 
 
-TempString32 gFormat(const CookingCommand& inCommand)
+TempString256 gFormat(const CookingCommand& inCommand)
 {
 	return { "Command: {} {}", inCommand.GetRule().mName, inCommand.GetMainInput().GetFile().mPath };
 }
