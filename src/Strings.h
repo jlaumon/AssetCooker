@@ -224,7 +224,7 @@ StringView gFormat(MutStringView ioBuffer, std::format_string<taArgs...> inFmt, 
 	auto result = std::format_to_n(ioBuffer.data(), ioBuffer.size() - 1, inFmt, std::forward<taArgs>(inArgs)...);
 	*result.out = 0; // Add the null terminator.
 
-	return ioBuffer.subspan(0, result.size);
+	return { ioBuffer.data(), result.out };
 }
 
 
