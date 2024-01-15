@@ -450,6 +450,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		}
 
 		// Update the ref number hash map.
+		if (inRefNumber.IsValid())
 		{
 			auto [it, inserted] = gFileSystem.mFilesByRefNumber.insert({ inRefNumber, actual_file_id });
 			if (!inserted)
