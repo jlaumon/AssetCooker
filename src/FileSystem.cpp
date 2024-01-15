@@ -137,11 +137,6 @@ String gUSNReasonToString(uint32 inReason)
 }
 
 
-FileRefNumber::FileRefNumber(const _FILE_ID_128& inFileID128)
-{
-	*this = inFileID128;
-}
-
 _FILE_ID_128 FileRefNumber::ToWin32() const
 {
 	static_assert(sizeof(_FILE_ID_128) == sizeof(FileRefNumber));
@@ -157,6 +152,95 @@ FileRefNumber& FileRefNumber::operator=(const _FILE_ID_128& inFileID128)
 
 	memcpy(mData, inFileID128.Identifier, sizeof(inFileID128));
 	return *this;
+}
+
+
+_FILETIME FileTime::ToWin32() const
+{
+	static_assert(sizeof(FileTime) == sizeof(_FILETIME));
+
+	_FILETIME file_time;
+	memcpy(&file_time, this, sizeof(*this));
+	return file_time;
+}
+
+
+FileTime& FileTime::operator=(const _FILETIME& inFileTime)
+{
+	static_assert(sizeof(FileTime) == sizeof(_FILETIME));
+
+	memcpy(this, &inFileTime, sizeof(FileTime));
+	return *this;
+}
+
+
+SystemTime FileTime::ToSystemTime() const
+{
+	const FILETIME ft = ToWin32();
+	SYSTEMTIME     st = {};
+	FileTimeToSystemTime(&ft, &st);
+	return st;
+}
+
+
+SystemTime FileTime::ToLocalTime() const
+{
+	return ToSystemTime().ToLocalTime();
+}
+
+
+
+_SYSTEMTIME SystemTime::ToWin32() const
+{
+	static_assert(sizeof(SystemTime) == sizeof(_SYSTEMTIME));
+
+	_SYSTEMTIME system_time;
+	memcpy(&system_time, this, sizeof(*this));
+	return system_time;
+}
+
+
+SystemTime& SystemTime::operator=(const _SYSTEMTIME& inSystemTime)
+{
+	static_assert(sizeof(SystemTime) == sizeof(_SYSTEMTIME));
+
+	memcpy(this, &inSystemTime, sizeof(*this));
+	return *this;
+}
+
+
+
+FileTime SystemTime::ToFileTime() const
+{
+	const SYSTEMTIME st = ToWin32();
+	FILETIME         ft = {};
+	SystemTimeToFileTime(&st, &ft);
+	return ft;
+}
+
+
+SystemTime SystemTime::ToLocalTime() const
+{
+	const SYSTEMTIME st = ToWin32();
+	SYSTEMTIME       local_st = {};
+	SystemTimeToTzSpecificLocalTime(nullptr, &st, &local_st);
+	return local_st;
+}
+
+
+SystemTime gGetSystemTime()
+{
+	SYSTEMTIME st = {};
+	GetSystemTime(&st);
+	return st;
+}
+
+
+FileTime gGetSystemTimeAsFileTime()
+{
+	FILETIME ft = {};
+	GetSystemTimeAsFileTime(&ft);
+	return ft;
 }
 
 
@@ -538,6 +622,8 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 				gApp.Log("Added {}", file);
 
 			// TODO: read more attributes?
+			file.mCreationTime = entry->ChangeTime.QuadPart;
+			file.mLastChangeTime = entry->ChangeTime.QuadPart;
 
 			// Update the USN.
 			// TODO: this is by far the slowest part, find another way?
@@ -550,7 +636,7 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 						gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
 				}
 
-				file.mLastChange = mDrive.GetUSN(file_handle);
+				file.mLastChangeUSN = mDrive.GetUSN(file_handle);
 
 				gCookingSystem.QueueUpdateDirtyStates(file.mID);
 			}
@@ -801,7 +887,8 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
 					gApp.Log("Modified {}", *file);
 
-				file->mLastChange = record->Usn;
+				file->mLastChangeUSN  = record->Usn;
+				file->mLastChangeTime = record->TimeStamp.QuadPart;
 
 				gCookingSystem.QueueUpdateDirtyStates(file->mID);
 			}

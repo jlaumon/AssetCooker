@@ -110,9 +110,10 @@ constexpr StringView gToStringView(CookingState inVar)
 
 struct CookingLogEntry
 {
-	// TODO add a start time (and duration?)
 	CookingCommandID          mCommandID;
 	int                       mIndex = -1;
+	FileTime                  mTimeStart;
+	FileTime                  mTimeEnd;
 	std::atomic<CookingState> mCookingState = CookingState::Unknown;
 	StringView                mOutput;
 };

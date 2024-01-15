@@ -13,6 +13,8 @@ struct FileInfo;
 struct FileRepo;
 struct FileDrive;
 struct FileSystem;
+struct FileTime;
+struct SystemTime;
 
 
 static constexpr int cFileRepoIndexBits = 6;
@@ -43,6 +45,8 @@ struct OwnedHandle : NoCopy
 
 // Forward declarations of Win32 types.
 struct _FILE_ID_128;
+struct _FILETIME;
+struct _SYSTEMTIME;
 using USN = int64;
 
 constexpr USN cMaxUSN = 9223372036854775807;
@@ -51,27 +55,94 @@ constexpr USN cMaxUSN = 9223372036854775807;
 // Alias for FILE_ID_128.
 struct FileRefNumber
 {
-	uint64 mData[2] = { (uint64)-1, (uint64)-1 };
+	uint64 mData[2]                                                          = { (uint64)-1, (uint64)-1 };
 
-	constexpr FileRefNumber() = default;
-	constexpr FileRefNumber(const FileRefNumber&) = default;
-	constexpr ~FileRefNumber() = default;
-	constexpr FileRefNumber& operator=(const FileRefNumber&) = default;
-
-	constexpr auto operator<=>(const FileRefNumber& inOther) const = default;
+	constexpr FileRefNumber()                                                = default;
+	constexpr FileRefNumber(const FileRefNumber&)                            = default;
+	constexpr ~FileRefNumber()                                               = default;
+	constexpr FileRefNumber& operator=(const FileRefNumber&)                 = default;
+	constexpr auto           operator<=>(const FileRefNumber& inOther) const = default;
 
 	// Conversion to/from FILE_ID_128.
-	FileRefNumber(const _FILE_ID_128&);
-	_FILE_ID_128   ToWin32() const;
-	FileRefNumber& operator=(const _FILE_ID_128&);
+	FileRefNumber(const _FILE_ID_128& inFileID128) { *this = inFileID128; }
+	_FILE_ID_128                   ToWin32() const;
+	FileRefNumber&                 operator=(const _FILE_ID_128&);
 
-	constexpr bool IsValid() const { return *this != cInvalid(); }
-
+	constexpr bool                 IsValid() const { return *this != cInvalid(); }
 	static constexpr FileRefNumber cInvalid() { return {}; }
 };
 static_assert(sizeof(FileRefNumber) == 16);
 
 template <> struct ankerl::unordered_dense::hash<FileRefNumber> : MemoryHasher<FileRefNumber> {};
+
+
+// Alias for FILETIME.
+struct FileTime
+{
+	uint64 mDateTime                                              = 0;
+
+	constexpr FileTime()                                          = default;
+	constexpr FileTime(const FileTime&)                           = default;
+	constexpr ~FileTime()                                         = default;
+	constexpr FileTime& operator=(const FileTime&)                = default;
+	constexpr bool      operator==(const FileTime& inOther) const = default;
+
+	// Conversion to/from FILETIME.
+	FileTime(const _FILETIME& inFileTime) { *this = inFileTime; }
+	FileTime(uint64 inTime) { mDateTime = inTime; }
+	_FILETIME ToWin32() const;
+	FileTime& operator=(const _FILETIME&);
+	FileTime& operator=(uint64 inTime)
+	{
+		mDateTime = inTime;
+		return *this;
+	}
+
+	int64                     operator-(FileTime inOther) const { return ((int64)mDateTime - (int64)inOther.mDateTime) * 100; } // Difference in nano seconds.
+
+	SystemTime                ToSystemTime() const;
+	SystemTime                ToLocalTime() const;
+
+	constexpr bool            IsValid() const { return *this != cInvalid(); }
+	static constexpr FileTime cInvalid() { return {}; }
+};
+static_assert(sizeof(FileTime) == 8);
+
+SystemTime gGetSystemTime();
+FileTime   gGetSystemTimeAsFileTime();
+
+// Alias for SYSTEMTIME.
+struct SystemTime
+{
+	uint16 mYear                                                      = 0;
+	uint16 mMonth                                                     = 0;
+	uint16 mDayOfWeek                                                 = 0;
+	uint16 mDay                                                       = 0;
+	uint16 mHour                                                      = 0;
+	uint16 mMinute                                                    = 0;
+	uint16 mSecond                                                    = 0;
+	uint16 mMilliseconds                                              = 0;
+
+	constexpr SystemTime()                                            = default;
+	constexpr SystemTime(const SystemTime&)                           = default;
+	constexpr ~SystemTime()                                           = default;
+	constexpr SystemTime& operator=(const SystemTime&)                = default;
+	constexpr bool        operator==(const SystemTime& inOther) const = default;
+
+	// Conversion to/from SYSTEMTIME.
+	SystemTime(const _SYSTEMTIME& inSystemTime) { *this = inSystemTime; }
+	_SYSTEMTIME                 ToWin32() const;
+	SystemTime&                 operator=(const _SYSTEMTIME&);
+
+	FileTime                    ToFileTime() const;
+	SystemTime                  ToLocalTime() const;
+
+	SystemTime                  sGetCurrent();	// Get the current System Time (not Local)
+
+	constexpr bool              IsValid() const { return *this != cInvalid(); }
+	static constexpr SystemTime cInvalid() { return {}; }
+};
+static_assert(sizeof(SystemTime) == 16);
 
 
 // Wrapper for a 128-bits hash value.
@@ -81,6 +152,7 @@ struct Hash128
 
 	constexpr auto operator<=>(const Hash128&) const = default;
 };
+
 
 template <> struct ankerl::unordered_dense::hash<Hash128>
 {
@@ -135,7 +207,9 @@ struct FileInfo : NoCopy
 	bool                          mIsDirectory     : 1; // Is this a directory or a file. Note: might change if a file is deleted then a directory of the same name is created.
 	bool                          mCommandsCreated : 1; // Are cooking commands already created for this file.
 	FileRefNumber                 mRefNumber;           // File ID used by Windows. Can change when the file is deleted and re-created.
-	USN                           mLastChange = 0;      // Identifier of the last change to this file.
+	FileTime                      mCreationTime;        // Time of the creation of this file.
+	USN                           mLastChangeUSN = 0;   // Identifier of the last change to this file.
+	FileTime                      mLastChangeTime;      // Time of the last change to this file.
 
 	std::vector<CookingCommandID> mInputOf;				// List of commands that use this file as input.
 	std::vector<CookingCommandID> mOutputOf;			// List of commands that use this file as output. There should be only one, but being able to store several is needed for debugging.hash
@@ -287,6 +361,23 @@ template <> struct std::formatter<FileInfo> : std::formatter<std::string_view>
 			//inFileInfo.IsDirectory() ? "Dir" : "File", 
 			inFileInfo.GetRepo().mName,
 			inFileInfo.mPath);
+	}
+};
+
+
+// Formatter for FileTime.
+template <> struct std::formatter<FileTime> : std::formatter<std::string_view>
+{
+	auto format(FileTime inFileTime, format_context& ioCtx) const
+	{
+		SystemTime local_time = inFileTime.ToLocalTime();
+		return std::format_to(ioCtx.out(), "{:04}/{:02}/{:02} {:02}:{:02}:{:02}", 
+			local_time.mYear,
+			local_time.mMonth,
+			local_time.mDay,
+			local_time.mHour,
+			local_time.mMinute,
+			local_time.mSecond);
 	}
 };
 

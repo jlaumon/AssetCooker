@@ -228,7 +228,7 @@ void CookingCommand::UpdateDirtyState()
 
 		if (file.IsDeleted())
 			dirty_state |= InputMissing;
-		else if (file.mLastChange > mLastCook)
+		else if (file.mLastChangeUSN > mLastCook)
 			dirty_state |= InputChanged;
 	}
 
@@ -241,7 +241,7 @@ void CookingCommand::UpdateDirtyState()
 		if (file.IsDeleted())
 			dirty_state |= OutputMissing;
 
-		min_output_usn = gMin(min_output_usn, file.mLastChange);
+		min_output_usn = gMin(min_output_usn, file.mLastChangeUSN);
 	}
 
 	// If the command is waiting for results and all outputs were written, change its state to success.
@@ -684,8 +684,11 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 {
 	CookingLogEntry& log_entry = AllocateCookingLogEntry(ioCommand.mID);
 
+	// Set the start time.
+	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
+
 	// Set the log entry on the command.
-	ioCommand.mLastCookingLog       = &log_entry;
+	ioCommand.mLastCookingLog = &log_entry;
 
 	// Build the command line.
 	const CookingRule& rule         = gCookingSystem.GetRule(ioCommand.mRuleID);
@@ -746,7 +749,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 	// Get the max USN of all inputs (to later know if this command needs to cook again).
 	USN max_input_usn = 0;
 	for (FileID input_id : ioCommand.mInputs)
-		max_input_usn = gMax(max_input_usn, gFileSystem.GetFile(input_id).mLastChange);
+		max_input_usn = gMax(max_input_usn, gFileSystem.GetFile(input_id).mLastChangeUSN);
 
 	// Create the process for the command line.
 	subprocess_s process;
@@ -802,8 +805,12 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringP
 	// Set the inputs USN on the command.
 	ioCommand.mLastCook = max_input_usn;
 
+	// Set the end time and add the duration at the end of the log.
+	log_entry.mTimeEnd = gGetSystemTimeAsFileTime();
+	output_str.AppendFormat("\nDuration: {:.3f} seconds\n", (double)(log_entry.mTimeEnd - log_entry.mTimeStart) / 1'000'000'000.0);
+
 	// Store the log output.
-	log_entry.mOutput   = output_str.AsStringView();
+	log_entry.mOutput = output_str.AsStringView();
 
 	// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
 	log_entry.mCookingState = CookingState::Waiting;

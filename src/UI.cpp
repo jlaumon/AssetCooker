@@ -172,14 +172,19 @@ void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingComma
 
 TempString32 gFormat(const CookingCommand& inCommand)
 {
-	return { "[{}] {}", inCommand.GetRule().mName, inCommand.GetMainInput().GetFile().mPath };
+	return { "Command: {} {}", inCommand.GetRule().mName, inCommand.GetMainInput().GetFile().mPath };
 }
 
 
 TempString256 gFormat(const CookingLogEntry& inLogEntry)
 {
 	const CookingCommand& command = gCookingSystem.GetCommand(inLogEntry.mCommandID);
-	return { "[{}] {} - {}", command.GetRule().mName, command.GetMainInput().GetFile().mPath, gToStringView(inLogEntry.mCookingState) };
+	const CookingRule&    rule    = gCookingSystem.GetRule(command.mRuleID);
+	SystemTime            start_time = inLogEntry.mTimeStart.ToLocalTime();
+	return { "[#{} {:02}:{:02}:{:02}] {:8} {} - {}",
+		rule.mPriority,
+		start_time.mHour, start_time.mMinute, start_time.mSecond,
+		command.GetRule().mName, command.GetMainInput().GetFile().mPath, gToStringView(inLogEntry.mCookingState) };
 }
 
 
@@ -219,9 +224,15 @@ void gUIDrawFileInfo(const FileInfo& inFile)
 
 			ImGui::TableNextColumn(); ImGui::TextUnformatted("RefNumber");
 			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mRefNumber));
+			
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("Creation Time");
+			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mCreationTime));
 
-			ImGui::TableNextColumn(); ImGui::TextUnformatted("LastChange");
-			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChange));
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change Time");
+			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeTime));
+			
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change USN");
+			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeUSN));
 
 			ImGui::EndTable();
 		}
@@ -248,10 +259,14 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 	if (ImGui::SmallButton("Cook"))
 		gCookingSystem.ForceCook(inCommand.mID);
 
-	if (inCommand.mLastCookingLog && ImGui::Button("Select in Log"))
+	if (inCommand.mLastCookingLog)
 	{
-		gSelectedCookingLogEntry         = inCommand.mLastCookingLog->mIndex;
-		gScrollToSelectedCookingLogEntry = true;
+		ImGui::SameLine();
+		if (ImGui::SmallButton("Select last Log"))
+		{
+			gSelectedCookingLogEntry         = inCommand.mLastCookingLog->mIndex;
+			gScrollToSelectedCookingLogEntry = true;
+		}
 	}
 
 	ImGui::SeparatorText("Cooking State");
