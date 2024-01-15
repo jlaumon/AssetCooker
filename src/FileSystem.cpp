@@ -460,8 +460,10 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 				// The file could have been renamed but kept the same ref number (and we've missed that rename event?).
 				if (previous_file_id != actual_file_id || GetFile(previous_file_id).mPathHash != path_hash)
 				{
+					gApp.LogError("Unexpected file deletion detected! {}", GetFile(previous_file_id));
+
 					// Mark the old file as deleted, and add the new one instead.
-					MarkFileDeleted(GetFile(previous_file_id), lock);
+					MarkFileDeleted(GetFile(previous_file_id), {}, lock);
 				}
 			}
 		}
@@ -491,20 +493,25 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 	return *file;
 }
 
-void FileRepo::MarkFileDeleted(FileInfo& inFile)
+void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp)
 {
 	// TODO: not great to access these internals, maybe find a better way?
 	std::unique_lock lock(gFileSystem.mFilesMutex);
 
-	MarkFileDeleted(inFile, lock);
+	MarkFileDeleted(ioFile, inTimeStamp, lock);
 }
 
-void FileRepo::MarkFileDeleted(FileInfo& inFile, const std::unique_lock<std::mutex>& inLock)
+void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std::unique_lock<std::mutex>& inLock)
 {
 	gAssert(inLock.mutex() == &gFileSystem.mFilesMutex);
 
-	gFileSystem.mFilesByRefNumber.erase(inFile.mRefNumber);
-	inFile.mRefNumber = FileRefNumber::cInvalid();
+	gFileSystem.mFilesByRefNumber.erase(ioFile.mRefNumber);
+	ioFile.mRefNumber      = FileRefNumber::cInvalid();
+	ioFile.mCreationTime   = inTimeStamp;	// Store the time of deletion in the creation time. 
+	ioFile.mLastChangeTime = {};
+	ioFile.mLastChangeUSN  = {};
+
+	gCookingSystem.QueueUpdateDirtyStates(ioFile.mID);
 }
 
 
@@ -621,28 +628,32 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 			if (gApp.mLogFSActivity >= LogLevel::Verbose)
 				gApp.Log("Added {}", file);
 
-			// TODO: read more attributes?
-			file.mCreationTime = entry->ChangeTime.QuadPart;
-			file.mLastChangeTime = entry->ChangeTime.QuadPart;
-
-			// Update the USN.
-			// TODO: this is by far the slowest part, find another way?
+			if (file.IsDirectory())
 			{
-				OwnedHandle file_handle = mDrive.OpenFileByRefNumber(file.mRefNumber);
-				if (!dir_handle.IsValid())
-				{
-					// TODO: depending on error, we should probably re-queue for scan
-					if (gApp.mLogFSActivity>= LogLevel::Normal)
-						gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
-				}
+				// Add directories to the scan queue.
+				ioScanQueue.push_back(file.mID);
+			}
+			else
+			{
+				file.mCreationTime   = entry->ChangeTime.QuadPart;
+				file.mLastChangeTime = entry->ChangeTime.QuadPart;
 
-				file.mLastChangeUSN = mDrive.GetUSN(file_handle);
+				// Update the USN.
+				// TODO: this is by far the slowest part, find another way? FSCTL_ENUM_USN_DATA maybe?
+				{
+					OwnedHandle file_handle = mDrive.OpenFileByRefNumber(file.mRefNumber);
+					if (!dir_handle.IsValid())
+					{
+						// TODO: depending on error, we should probably re-queue for scan
+						if (gApp.mLogFSActivity>= LogLevel::Normal)
+							gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
+					}
+
+					file.mLastChangeUSN = mDrive.GetUSN(file_handle);
+				}
 
 				gCookingSystem.QueueUpdateDirtyStates(file.mID);
 			}
-			
-			if (file.IsDirectory())
-				ioScanQueue.push_back(file.mID);
 
 		} while (!last_entry);
 
@@ -804,9 +815,11 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 			FileInfo* file = gFileSystem.FindFile(record->FileReferenceNumber);
 			if (file)
 			{
+				FileTime  timestamp = record->TimeStamp.QuadPart;
+
 				FileRepo& repo = gFileSystem.GetRepo(file->mID);
 
-				repo.MarkFileDeleted(*file);
+				repo.MarkFileDeleted(*file, timestamp);
 
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
 					gApp.Log("Deleted {}", *file);
@@ -821,7 +834,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 					{
 						if (gStartsWith(file.mPath, dir_path))
 						{
-							repo.MarkFileDeleted(file);
+							repo.MarkFileDeleted(file, timestamp);
 
 							if (gApp.mLogFSActivity >= LogLevel::Verbose)
 								gApp.Log("Deleted {}", file);
@@ -863,9 +876,9 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 				// Add the file.
 				FileInfo& file = repo->GetOrAddFile(file_path, is_directory ? FileType::Directory : FileType::File, record->FileReferenceNumber);
 
-				// If it's a directory, scan it to add all the files inside.
 				if (is_directory)
 				{
+					// If it's a directory, scan it to add all the files inside.
 					scan_queue = { file.mID };
 
 					while (!scan_queue.empty())
@@ -873,8 +886,14 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 				}
 				else
 				{
+					// If it's a file, treat it as if it was modified.
 					if (gApp.mLogFSActivity >= LogLevel::Verbose)
 						gApp.Log("Added {})", file);
+
+					file.mLastChangeUSN  = record->Usn;
+					file.mLastChangeTime = record->TimeStamp.QuadPart;
+
+					gCookingSystem.QueueUpdateDirtyStates(file.mID);
 				}
 			}
 		}

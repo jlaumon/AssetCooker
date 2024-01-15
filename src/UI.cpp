@@ -222,17 +222,25 @@ void gUIDrawFileInfo(const FileInfo& inFile)
 			ImGui::TableNextColumn(); ImGui::TextUnformatted("Repo");
 			ImGui::TableNextColumn(); ImGui::Text(TempString128("{} ({})", inFile.GetRepo().mName, inFile.GetRepo().mRootPath));
 
-			ImGui::TableNextColumn(); ImGui::TextUnformatted("RefNumber");
-			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mRefNumber));
-			
-			ImGui::TableNextColumn(); ImGui::TextUnformatted("Creation Time");
-			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mCreationTime));
+			if (inFile.IsDeleted())
+			{
+				ImGui::TableNextColumn(); ImGui::TextUnformatted("Deletion Time");
+				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mCreationTime));
+			}
+			else
+			{
+				ImGui::TableNextColumn(); ImGui::TextUnformatted("RefNumber");
+				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mRefNumber));
+				
+				ImGui::TableNextColumn(); ImGui::TextUnformatted("Creation Time");
+				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mCreationTime));
 
-			ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change Time");
-			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeTime));
-			
-			ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change USN");
-			ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeUSN));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change Time");
+				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeTime));
+				
+				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change USN");
+				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeUSN));
+			}
 
 			ImGui::EndTable();
 		}
