@@ -77,18 +77,23 @@ static void sDrawLine(const Log::Line& inLine)
 
 void Log::Draw(StringView inName, bool* ioOpen)
 {
-	std::lock_guard lock(mMutex);
-
-	ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-	String title = std::format("{} ({})###{}", inName, SizeInBytes(mStringPool.GetTotalAllocatedSize()), inName);
-	if (!ImGui::Begin(title.c_str(), ioOpen))
 	{
-		ImGui::End();
-		return;
+		std::lock_guard lock(mMutex);
+
+		ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
+		TempString32 title("{} ({})###{}", inName, SizeInBytes(mStringPool.GetTotalAllocatedSize()), inName);
+		if (!ImGui::Begin(title.AsCStr(), ioOpen))
+		{
+			ImGui::End();
+			return;
+		}
 	}
 
-	if (ImGui::SmallButton("Clear"))
+
+	if (ImGui::ButtonGrad("Clear"))
 		Clear();
+
+	std::lock_guard lock(mMutex);
 
 	ImGui::Separator();
 	mFilter.Draw(R"(Filter ("incl,-excl") ("error"))", 400);

@@ -18,6 +18,8 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 
+#define IMGUI_VIEWPORTS
+
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
 static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
@@ -67,7 +69,7 @@ int WinMain(
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
+	//io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
 	//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
 	//io.ConfigViewportsNoAutoMerge = true;
 	//io.ConfigViewportsNoTaskBarIcon = true;
@@ -81,6 +83,7 @@ int WinMain(
 	ImGui::StyleColorsDark();
 	//ImGui::StyleColorsLight();
 
+#ifdef IMGUI_VIEWPORTS
 	// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
 	ImGuiStyle& style = ImGui::GetStyle();
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -88,6 +91,7 @@ int WinMain(
 		style.WindowRounding = 0.0f;
 		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 	}
+#endif
 
 	// Set the DPI scale once, then it'll be updated by the WM_DPICHANGED message.
 	gUISetDPIScale(ImGui_ImplWin32_GetDpiScaleForHwnd(hwnd));
@@ -111,11 +115,6 @@ int WinMain(
 	//io.Fonts->AddFontFromFileTTF("thirdparty/imgui/misc/fonts/Cousine-Regular.ttf", 15.0f * 1.75f);
 	//ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
 	//IM_ASSERT(font != nullptr);
-
-	// Our state
-	bool show_demo_window = true; 
-
-	
 
 	gApp.mLogFSActivity = LogLevel::Verbose;
 
@@ -175,21 +174,19 @@ int WinMain(
 		gUIDrawMainMenuBar();
 		gUIDrawMain();
 
-		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-		if (show_demo_window)
-			ImGui::ShowDemoWindow(&show_demo_window);
-
 		// Rendering
 		ImGui::Render();
 		g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
+#ifdef IMGUI_VIEWPORTS
 		// Update and Render additional Platform Windows
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 		{
 			ImGui::UpdatePlatformWindows();
 			ImGui::RenderPlatformWindowsDefault();
 		}
+#endif
 
 		g_pSwapChain->Present(1, 0); // Present with vsync
 	}
@@ -306,6 +303,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		const float dpi_scale = (float)dpi / 96.0f;
 		gUISetDPIScale(dpi_scale);
 
+#ifdef IMGUI_VIEWPORTS
 		if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports)
 		{
 			//const int dpi = HIWORD(wParam);
@@ -313,6 +311,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			const RECT* suggested_rect = (RECT*)lParam;
 			::SetWindowPos(hWnd, nullptr, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
 		}
+#endif
 		break;
 	}
 	return ::DefWindowProcW(hWnd, msg, wParam, lParam);

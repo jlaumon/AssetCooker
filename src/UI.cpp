@@ -11,13 +11,11 @@
 ImGuiStyle             gStyle                           = {};
 
 bool                   gDrawAppLog                      = true;
-bool                   gDrawCookingQueue                = true;
-bool                   gDrawCookingLog                  = true;
+bool                   gDrawImGuiDemo                   = true;
 int                    gSelectedCookingLogEntry         = -1;
 bool                   gScrollToSelectedCookingLogEntry = false;
 
 constexpr const char*  cAppLogName              = "Main Log";
-constexpr const char*  cCookingQueueName        = "Cooking Queue";
 
 
 std::span<const uint8> gGetEmbeddedFont(StringView inName)
@@ -128,7 +126,6 @@ void gUIDrawMainMenuBar()
 		if (ImGui::BeginMenu("View"))
 		{
 			ImGui::MenuItem(cAppLogName, nullptr, &gDrawAppLog);
-			ImGui::MenuItem(cCookingQueueName, nullptr, &gDrawCookingQueue);
 
 			ImGui::EndMenu();
 		}
@@ -156,6 +153,8 @@ void gUIDrawMainMenuBar()
 
 				ImGui::EndMenu();
 			}
+
+			ImGui::MenuItem("ImGui Demo Window", nullptr, &gDrawImGuiDemo);
 
 			ImGui::EndMenu();
 		}
@@ -209,9 +208,9 @@ void gUIDrawFileInfo(const FileInfo& inFile)
 	{
 		ImGui::Text(gFormat(inFile).AsStringView());
 
-		ImGui::SmallButton("Open Dir");
+		ImGui::ButtonGrad("Open Dir");
 		ImGui::SameLine();
-		ImGui::SmallButton("Open File");
+		ImGui::ButtonGrad("Open File");
 
 		ImGui::SeparatorText("Details");
 
@@ -264,13 +263,13 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	ImGui::Text(gFormat(inCommand));
 
-	if (ImGui::SmallButton("Cook"))
+	if (ImGui::ButtonGrad("Cook"))
 		gCookingSystem.ForceCook(inCommand.mID);
 
 	if (inCommand.mLastCookingLog)
 	{
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Select last Log"))
+		if (ImGui::ButtonGrad("Select last Log"))
 		{
 			gSelectedCookingLogEntry         = inCommand.mLastCookingLog->mIndex;
 			gScrollToSelectedCookingLogEntry = true;
@@ -364,7 +363,7 @@ void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingComma
 
 void gUIDrawCookingQueue()
 {
-	if (!ImGui::Begin("Cooking Queue", &gDrawCookingQueue))
+	if (!ImGui::Begin("Cooking Queue"))
 	{
 		ImGui::End();
 		return;
@@ -414,7 +413,7 @@ void gUIDrawCookingQueue()
 
 void gUIDrawCookingLog()
 {
-	if (!ImGui::Begin("Cooking Log", &gDrawCookingLog))
+	if (!ImGui::Begin("Cooking Log"))
 	{
 		ImGui::End();
 		return;
@@ -519,11 +518,12 @@ void gUIDrawMain()
 	if (gDrawAppLog)
 		gApp.mLog.Draw(cAppLogName, &gDrawAppLog);
 
-	if (gDrawCookingQueue)
-		gUIDrawCookingQueue();
+	gUIDrawCookingQueue();
 
-	if (gDrawCookingLog)
-		gUIDrawCookingLog();
+	gUIDrawCookingLog();
 
 	gUIDrawSelectedCookingLogEntry();
+
+	if (gDrawImGuiDemo)
+		ImGui::ShowDemoWindow(&gDrawImGuiDemo);
 }
