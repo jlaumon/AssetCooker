@@ -246,7 +246,6 @@ struct FileRepo : NoCopy
 	uint32                          mIndex = 0;     // The index of this repo.
 	StringView                      mName;          // A named used to identify the repo.
 	StringView                      mRootPath;      // Absolute path to the repo. Starts with the drive letter, ends with a slash.
-	OwnedHandle                     mRootDirHandle; // Handle to the root dir, makes sure the dir can't be deleted.
 	FileDrive&                      mDrive;         // The drive this repo is on.
 	FileID                          mRootDirID;     // The FileID of the root dir.
 

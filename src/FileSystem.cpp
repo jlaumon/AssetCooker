@@ -389,13 +389,13 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 		gApp.FatalError("Failed to convert root path {} to WideChar", mRootPath);
 
 	// Get a handle to the root path.
-	mRootDirHandle = CreateFileW(root_path_wchar->data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
-	if (!mRootDirHandle.IsValid())
+	OwnedHandle root_dir_handle = CreateFileW(root_path_wchar->data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+	if (!root_dir_handle.IsValid())
 		gApp.FatalError("Failed to get handle to {} - {}", mRootPath, GetLastErrorString());
 
 	// Get the FileReferenceNumber of the root dir.
 	FILE_ID_INFO file_info;
-	if (!GetFileInformationByHandleEx(mRootDirHandle, FileIdInfo, &file_info, sizeof(file_info)))
+	if (!GetFileInformationByHandleEx(root_dir_handle, FileIdInfo, &file_info, sizeof(file_info)))
 		gApp.FatalError("Failed to get FileReferenceNumber for {} - {}", mRootPath, GetLastErrorString());
 
 	// The root directory file info has an empty path (relative to mRootPath).
@@ -813,27 +813,31 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 		if (record->Reason & (USN_REASON_FILE_DELETE | USN_REASON_RENAME_NEW_NAME))
 		{
 			// If the file is in a repo, mark it as deleted.
-			FileInfo* file = gFileSystem.FindFile(record->FileReferenceNumber);
-			if (file)
+			FileInfo* deleted_file = gFileSystem.FindFile(record->FileReferenceNumber);
+			if (deleted_file)
 			{
 				FileTime  timestamp = record->TimeStamp.QuadPart;
 
-				FileRepo& repo = gFileSystem.GetRepo(file->mID);
+				FileRepo& repo = gFileSystem.GetRepo(deleted_file->mID);
 
-				repo.MarkFileDeleted(*file, timestamp);
+				repo.MarkFileDeleted(*deleted_file, timestamp);
 
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
-					gApp.Log("Deleted {}", *file);
+					gApp.Log("Deleted {}", *deleted_file);
 
 				// If it's a directory, also mark all the file inside as deleted.
-				if (file->IsDirectory())
+				if (deleted_file->IsDirectory())
 				{
 					PathBufferUTF8 dir_path_buffer;
-					StringView     dir_path = gConcat(dir_path_buffer, file->mPath, "\\");
+					StringView     dir_path;
+
+					// Root dir has an empty path, in this case don't att the slash.
+					if (!deleted_file->mPath.empty())
+						dir_path = gConcat(dir_path_buffer, deleted_file->mPath, "\\");
 
 					for (FileInfo& file : repo.mFiles)
 					{
-						if (gStartsWith(file.mPath, dir_path))
+						if (file.mID != deleted_file->mID && gStartsWith(file.mPath, dir_path))
 						{
 							repo.MarkFileDeleted(file, timestamp);
 
