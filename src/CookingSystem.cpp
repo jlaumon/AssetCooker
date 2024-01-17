@@ -637,6 +637,11 @@ void CookingSystem::StopCooking()
 
 	for (auto& thread : mCookingThreads)
 		thread.mThread.join();
+
+	mTimeOutUpdateThread.request_stop();
+	mTimeOutAddedSignal.release();
+	mTimeOutTimerSignal.release();
+	mTimeOutUpdateThread.join();
 }
 
 
