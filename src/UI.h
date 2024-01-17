@@ -3,7 +3,7 @@
 void gUISetDPIScale(float inDPIScale);
 void gUIUpdate();
 
-void gUIDrawMainMenuBar();
-void gUIDrawMain();
+void gDrawMainMenuBar();
+void gDrawMain();
 
-void gUIDrawCookingQueue();
+void gDrawCookingQueue();

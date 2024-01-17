@@ -4,6 +4,7 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
 
 #include "win32/misc.h"
@@ -11,11 +12,12 @@
 ImGuiStyle             gStyle                           = {};
 
 bool                   gDrawAppLog                      = true;
-bool                   gDrawImGuiDemo                   = true;
+bool                   gDrawImGuiDemo                   = false;
 int                    gSelectedCookingLogEntry         = -1;
 bool                   gScrollToSelectedCookingLogEntry = false;
 
-constexpr const char*  cAppLogName              = "Main Log";
+constexpr const char*  cAppLogWindowName                = "App Log";
+constexpr const char*  cCommandOutputWindowName         = "Command Output";
 
 
 std::span<const uint8> gGetEmbeddedFont(StringView inName)
@@ -111,7 +113,7 @@ void gUIUpdate()
 }
 
 
-void gUIDrawMainMenuBar()
+void gDrawMainMenuBar()
 {
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -125,7 +127,7 @@ void gUIDrawMainMenuBar()
 
 		if (ImGui::BeginMenu("View"))
 		{
-			ImGui::MenuItem(cAppLogName, nullptr, &gDrawAppLog);
+			ImGui::MenuItem(cAppLogWindowName, nullptr, &gDrawAppLog);
 
 			ImGui::EndMenu();
 		}
@@ -193,7 +195,7 @@ TempString512 gFormat(const FileInfo& inFile)
 }
 
 
-void gUIDrawFileInfo(const FileInfo& inFile)
+void gDrawFileInfo(const FileInfo& inFile)
 {
 	ImGui::PushID(TempString32("File {}", inFile.mID.AsUInt()).AsCStr());
 	defer { ImGui::PopID(); };
@@ -307,7 +309,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 }
 
 
-void gUIDrawCookingCommand(const CookingCommand& inCommand)
+void gDrawCookingCommand(const CookingCommand& inCommand)
 {
 	ImGui::PushID(TempString32("Command {}", inCommand.mID.mIndex).AsCStr());
 	defer { ImGui::PopID(); };
@@ -338,7 +340,7 @@ void gDrawFileInfoSpan(StringView inListName, std::span<const FileID> inFileIDs)
 	{
 		for (FileID file_id : inFileIDs)
 		{
-			gUIDrawFileInfo(file_id.GetFile());
+			gDrawFileInfo(file_id.GetFile());
 		}
 		ImGui::TreePop();
 	}
@@ -354,14 +356,14 @@ void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingComma
 	{
 		for (CookingCommandID command_id : inCommandIDs)
 		{
-			gUIDrawCookingCommand(gCookingSystem.GetCommand(command_id));
+			gDrawCookingCommand(gCookingSystem.GetCommand(command_id));
 		}
 		ImGui::TreePop();
 	}
 };
 
 
-void gUIDrawCookingQueue()
+void gDrawCookingQueue()
 {
 	if (!ImGui::Begin("Cooking Queue"))
 	{
@@ -394,7 +396,7 @@ void gUIDrawCookingQueue()
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 				{
-					gUIDrawCookingCommand(gCookingSystem.GetCommand(bucket.mCommands[i]));
+					gDrawCookingCommand(gCookingSystem.GetCommand(bucket.mCommands[i]));
 				}
 			}
 			clipper.End();
@@ -408,10 +410,7 @@ void gUIDrawCookingQueue()
 }
 
 
-
-
-
-void gUIDrawCookingLog()
+void gDrawCookingLog()
 {
 	if (!ImGui::Begin("Cooking Log"))
 	{
@@ -449,6 +448,7 @@ void gUIDrawCookingLog()
 				if (ImGui::Selectable(gFormat(log_entry).AsCStr(), selected))
 				{
 					gSelectedCookingLogEntry = i;
+					ImGui::SetWindowFocus(cCommandOutputWindowName);
 				}
 
 				bool open = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
@@ -474,9 +474,10 @@ void gUIDrawCookingLog()
 	
 }
 
-void gUIDrawSelectedCookingLogEntry()
+
+void gDrawSelectedCookingLogEntry()
 {
-	bool opened = ImGui::Begin("Command Output");
+	bool opened = ImGui::Begin(cCommandOutputWindowName);
 	defer { ImGui::End(); };
 
 	if (!opened || gSelectedCookingLogEntry == -1)
@@ -500,29 +501,52 @@ void gUIDrawSelectedCookingLogEntry()
 }
 
 
-
-void gUIDrawMain()
+void gDrawCommandSearch()
 {
-	// Make a fullscreen window.
-	ImGui::SetNextWindowPos({ 0, 0 });
-	ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-	ImGui::Begin("Background", nullptr, 
-		ImGuiWindowFlags_NoMove | 
-		ImGuiWindowFlags_NoResize | 
-		ImGuiWindowFlags_NoTitleBar | 
-		ImGuiWindowFlags_NoFocusOnAppearing | 
-		ImGuiWindowFlags_NoBringToFrontOnFocus);
+	if (!ImGui::Begin("Command Search"))
+	{
+		ImGui::End();
+		return;
+	}
+
+	if (ImGui::BeginChild("ScrollingRegion"))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
+
+		ImGuiListClipper clipper;
+		clipper.Begin((int)gCookingSystem.mCommands.size());
+		while (clipper.Step())
+		{
+			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+			{
+				const CookingCommand& command = gCookingSystem.GetCommand(CookingCommandID{ (uint32)i });
+				gDrawCookingCommand(command);
+			}
+		}
+
+		clipper.End();
+
+		ImGui::PopStyleVar();
+	}
+	ImGui::EndChild();
 
 	ImGui::End();
+}
+
+
+
+void gDrawMain()
+{
+	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton);
 
 	if (gDrawAppLog)
-		gApp.mLog.Draw(cAppLogName, &gDrawAppLog);
+		gApp.mLog.Draw(cAppLogWindowName, &gDrawAppLog);
 
-	gUIDrawCookingQueue();
+	gDrawCookingQueue();
 
-	gUIDrawCookingLog();
-
-	gUIDrawSelectedCookingLogEntry();
+	gDrawCookingLog();
+	gDrawCommandSearch();
+	gDrawSelectedCookingLogEntry();
 
 	if (gDrawImGuiDemo)
 		ImGui::ShowDemoWindow(&gDrawImGuiDemo);

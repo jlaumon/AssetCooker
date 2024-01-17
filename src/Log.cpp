@@ -81,7 +81,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 		std::lock_guard lock(mMutex);
 
 		ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-		TempString32 title("{} ({})###{}", inName, SizeInBytes(mStringPool.GetTotalAllocatedSize()), inName);
+		TempString32 title("{}", inName);
 		if (!ImGui::Begin(title.AsCStr(), ioOpen))
 		{
 			ImGui::End();

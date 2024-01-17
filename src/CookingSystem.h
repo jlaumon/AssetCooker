@@ -221,7 +221,8 @@ struct CookingSystem : NoCopy
 
 private:
 	friend struct CookingCommand;
-	friend void gUIDrawCookingQueue();
+	friend void gDrawCookingQueue();
+	friend void gDrawCommandSearch();
 	struct CookingThread;
 
 	void                                  CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken);
@@ -251,8 +252,8 @@ private:
 	std::counting_semaphore<>                mCookingThreadsSemaphore  = std::counting_semaphore(0);
 	bool                                     mCookingPaused          = false;
 
-	friend void                              gUIDrawCookingLog();
-	friend void                              gUIDrawSelectedCookingLogEntry();
+	friend void                              gDrawCookingLog();
+	friend void                              gDrawSelectedCookingLogEntry();
 	SegmentedVector<CookingLogEntry>         mCookingLog;
 	std::mutex                               mCookingLogMutex;
 

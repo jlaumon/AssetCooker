@@ -18,7 +18,6 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 
-#define IMGUI_VIEWPORTS
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -69,7 +68,7 @@ int WinMain(
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-	//io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
 	//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
 	//io.ConfigViewportsNoAutoMerge = true;
 	//io.ConfigViewportsNoTaskBarIcon = true;
@@ -83,7 +82,7 @@ int WinMain(
 	ImGui::StyleColorsDark();
 	//ImGui::StyleColorsLight();
 
-#ifdef IMGUI_VIEWPORTS
+#ifdef IMGUI_HAS_VIEWPORT
 	// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
 	ImGuiStyle& style = ImGui::GetStyle();
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -171,15 +170,15 @@ int WinMain(
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 
-		gUIDrawMainMenuBar();
-		gUIDrawMain();
+		gDrawMainMenuBar();
+		gDrawMain();
 
 		// Rendering
 		ImGui::Render();
 		g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-#ifdef IMGUI_VIEWPORTS
+#ifdef IMGUI_HAS_VIEWPORT
 		// Update and Render additional Platform Windows
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 		{
@@ -303,7 +302,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		const float dpi_scale = (float)dpi / 96.0f;
 		gUISetDPIScale(dpi_scale);
 
-#ifdef IMGUI_VIEWPORTS
+#ifdef IMGUI_HAS_VIEWPORT
 		if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports)
 		{
 			//const int dpi = HIWORD(wParam);
