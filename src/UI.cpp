@@ -11,9 +11,9 @@
 
 ImGuiStyle             gStyle                           = {};
 
-bool                   gDrawAppLog                      = true;
-bool                   gDrawImGuiDemo                   = false;
-int                    gSelectedCookingLogEntry         = -1;
+bool                   gOpenImGuiDemo                   = false;
+bool                   gOpenDebugWindow                 = false;
+CookingLogEntryID      gSelectedCookingLogEntry         = {};
 bool                   gScrollToSelectedCookingLogEntry = false;
 
 constexpr const char*  cAppLogWindowName                = "App Log";
@@ -125,13 +125,6 @@ void gDrawMainMenuBar()
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu("View"))
-		{
-			ImGui::MenuItem(cAppLogWindowName, nullptr, &gDrawAppLog);
-
-			ImGui::EndMenu();
-		}
-
 		if (ImGui::BeginMenu("Settings"))
 		{
 			float ui_scale = gUIScale.mFromSettings;
@@ -156,7 +149,10 @@ void gDrawMainMenuBar()
 				ImGui::EndMenu();
 			}
 
-			ImGui::MenuItem("ImGui Demo Window", nullptr, &gDrawImGuiDemo);
+			ImGui::MenuItem("ImGui Demo Window", nullptr, &gOpenImGuiDemo);
+			ImGui::MenuItem("Debug Window", nullptr, &gOpenDebugWindow);
+
+			ImGui::MenuItem("Make Cooking Slower", nullptr, &gCookingSystem.mSlowMode);
 
 			ImGui::EndMenu();
 		}
@@ -259,6 +255,14 @@ void gDrawFileInfo(const FileInfo& inFile)
 }
 
 
+void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID)
+{
+	gSelectedCookingLogEntry         = inLogEntryID;
+	gScrollToSelectedCookingLogEntry = true;
+	ImGui::SetWindowFocus(cCommandOutputWindowName);
+}
+
+
 void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 {
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
@@ -273,8 +277,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 		ImGui::SameLine();
 		if (ImGui::ButtonGrad("Select last Log"))
 		{
-			gSelectedCookingLogEntry         = inCommand.mLastCookingLog->mIndex;
-			gScrollToSelectedCookingLogEntry = true;
+			gSelectCookingLogEntry(inCommand.mLastCookingLog->mID);
 		}
 	}
 
@@ -430,25 +433,24 @@ void gDrawCookingLog()
 		clipper.Begin((int)gCookingSystem.mCookingLog.size());
 		while (clipper.Step())
 		{
-			if (gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry != -1)
+			if (gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry.IsValid())
 			{
 				// TODO test this
 				gScrollToSelectedCookingLogEntry = false;
-                ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + gSelectedCookingLogEntry * clipper.ItemsHeight);
+                ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + (float)gSelectedCookingLogEntry.mIndex * clipper.ItemsHeight);
 			}
 
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 			{
 				const CookingLogEntry& log_entry     = gCookingSystem.mCookingLog[i];
-				bool                   selected      = (gSelectedCookingLogEntry == i);
+				bool                   selected      = (gSelectedCookingLogEntry.mIndex == (uint32)i);
 
 				ImGui::PushID(&log_entry);
 
 				// TODO draw spinner and change color based on cooking state
 				if (ImGui::Selectable(gFormat(log_entry).AsCStr(), selected))
 				{
-					gSelectedCookingLogEntry = i;
-					ImGui::SetWindowFocus(cCommandOutputWindowName);
+					gSelectCookingLogEntry({ (uint32)i });
 				}
 
 				bool open = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
@@ -480,10 +482,10 @@ void gDrawSelectedCookingLogEntry()
 	bool opened = ImGui::Begin(cCommandOutputWindowName);
 	defer { ImGui::End(); };
 
-	if (!opened || gSelectedCookingLogEntry == -1)
+	if (!opened || !gSelectedCookingLogEntry.IsValid())
 		return;
 
-	const CookingLogEntry& log_entry = gCookingSystem.mCookingLog[gSelectedCookingLogEntry];
+	const CookingLogEntry& log_entry = gCookingSystem.GetLogEntry(gSelectedCookingLogEntry);
 
 	ImGui::TextUnformatted(gFormat(log_entry));
 
@@ -534,20 +536,137 @@ void gDrawCommandSearch()
 }
 
 
+void gDrawCookingThreads()
+{
+	if (!ImGui::Begin("Worker Threads", nullptr, ImGuiWindowFlags_NoScrollbar))
+	{
+		ImGui::End();
+		return;
+	}
+
+	int thread_count = (int)gCookingSystem.mCookingThreads.size();
+	int columns      = sqrt(thread_count); // TODO need a max number of columns instead, they're useless if too short
+
+	if (ImGui::BeginTable("Threads", columns, ImGuiTableFlags_SizingStretchSame))
+	{
+		ImGui::TableNextRow();
+
+		for (auto& thread : gCookingSystem.mCookingThreads)
+		{
+			ImGui::TableNextColumn();
+			ImGui::BeginChild(ImGui::GetID(&thread), ImVec2(0, ImGui::GetFrameHeight()), ImGuiChildFlags_FrameStyle);
+			
+			CookingLogEntryID entry_id = thread.mCurrentLogEntry.load();
+			if (entry_id.IsValid())
+			{
+				const CookingLogEntry& entry_log = gCookingSystem.GetLogEntry(entry_id);
+				const CookingCommand&  command   = gCookingSystem.GetCommand(entry_log.mCommandID);
+
+				ImGui::Text(TempString128("{} {}", command.GetRule().mName, command.GetMainInput().GetFile().mPath));
+
+				if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(0))
+					gSelectCookingLogEntry(entry_id);
+			}
+			else
+			{
+				ImGui::TextUnformatted("Idle");
+			}
+
+			ImGui::EndChild();
+		}
+
+		ImGui::EndTable();
+	}
+
+	ImGui::End();
+}
+
+
+void gDrawDebugWindow()
+{
+	if (!ImGui::Begin("Debug", &gOpenDebugWindow, ImGuiWindowFlags_NoDocking))
+	{
+		ImGui::End();
+		return;
+	}
+
+	if (ImGui::ButtonGrad("Cook 100"))
+	{
+		for (int i = 0; i<gMin(100, (int)gCookingSystem.mCommands.size()); ++i)
+			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
+	}
+
+	ImGui::SameLine();
+	if (ImGui::ButtonGrad("Cook 1000"))
+	{
+		for (int i = 0; i<gMin(1000, (int)gCookingSystem.mCommands.size()); ++i)
+			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
+	}
+
+	ImGui::Checkbox("Slow mode", &gCookingSystem.mSlowMode);
+
+	if (ImGui::CollapsingHeader(TempString64("Rules ({})##Rules", gCookingSystem.mRules.size()).AsCStr()))
+	{
+		ImGuiListClipper clipper;
+		clipper.Begin((int)gCookingSystem.mRules.size());
+		while (clipper.Step())
+		{
+			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+			{
+				const CookingRule& rule = gCookingSystem.mRules[i];
+				ImGui::Text(rule.mName);
+				// TODO add a gDrawCookingRule
+			}
+		}
+		clipper.End();
+	}
+
+	if (ImGui::CollapsingHeader(TempString64("Commands ({})##Commands", gCookingSystem.mCommands.size()).AsCStr()))
+	{
+		ImGuiListClipper clipper;
+		clipper.Begin((int)gCookingSystem.mCommands.size());
+		while (clipper.Step())
+		{
+			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+				gDrawCookingCommand(gCookingSystem.mCommands[i]);
+		}
+		clipper.End();
+	}
+
+	for (FileRepo& repo : gFileSystem.mRepos)
+	{
+		ImGui::PushID(&repo);
+		if (ImGui::CollapsingHeader(TempString128("{} ({}) - {} Files##Repo", repo.mName, repo.mRootPath,repo.mFiles.size()).AsCStr()))
+		{
+			ImGuiListClipper clipper;
+			clipper.Begin((int)repo.mFiles.size());
+			while (clipper.Step())
+			{
+				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+					gDrawFileInfo(repo.mFiles[i]);
+			}
+			clipper.End();
+		}
+		ImGui::PopID();
+	}
+
+	ImGui::End();
+}
+
 
 void gDrawMain()
 {
 	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton);
 
-	if (gDrawAppLog)
-		gApp.mLog.Draw(cAppLogWindowName, &gDrawAppLog);
+	gApp.mLog.Draw(cAppLogWindowName);
 
 	gDrawCookingQueue();
-
+	gDrawCookingThreads();
 	gDrawCookingLog();
 	gDrawCommandSearch();
 	gDrawSelectedCookingLogEntry();
+	gDrawDebugWindow();
 
-	if (gDrawImGuiDemo)
-		ImGui::ShowDemoWindow(&gDrawImGuiDemo);
+	if (gOpenImGuiDemo)
+		ImGui::ShowDemoWindow(&gOpenImGuiDemo);
 }

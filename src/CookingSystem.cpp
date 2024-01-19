@@ -2,6 +2,7 @@
 #include "App.h"
 #include "Debug.h"
 #include "subprocess/subprocess.h"
+#include "win32/misc.h"
 
 
 // Return a StringView on the text part of {text}.
@@ -612,16 +613,19 @@ bool CookingSystem::ValidateRules()
 
 void CookingSystem::StartCooking()
 {
-	// TODO: add more threads
-	int thread_count = 1;
+	// TODO make this configurable
+	int thread_count = (int)std::thread::hardware_concurrency();
 
 	gApp.Log("Starting {} Cooking Threads.", thread_count);
 
-	mCookingThreads.resize(thread_count);
+	mCookingThreads.reserve(thread_count);
 
 	// Start the cooking thread.
-	for (auto& thread : mCookingThreads)
+	for (int i = 0; i < thread_count; ++i)
+	{
+		auto& thread = mCookingThreads.emplace_back();
 		thread.mThread = std::jthread(std::bind_front(&CookingSystem::CookingThreadFunction, this, &thread));
+	}
 
 	// Start the thread updating the time outs.
 	mTimeOutUpdateThread = std::jthread(std::bind_front(&CookingSystem::TimeOutUpdateThread, this));
@@ -685,27 +689,34 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 }
 
 
-void CookingSystem::CookCommand(CookingCommand& ioCommand, StringPool& ioStringPool)
+void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThread)
 {
 	CookingLogEntry& log_entry = AllocateCookingLogEntry(ioCommand.mID);
 
 	// Set the start time.
 	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
 
+	ioThread.mCurrentLogEntry  = log_entry.mID;
+	defer { ioThread.mCurrentLogEntry = CookingLogEntryID::cInvalid(); };
+
 	// Set the log entry on the command.
 	ioCommand.mLastCookingLog = &log_entry;
+
+	// Sleep to make things slow (for debugging).
+	if (mSlowMode)
+		Sleep(100 + gRand32() % 5000);
 
 	// Build the command line.
 	const CookingRule& rule         = gCookingSystem.GetRule(ioCommand.mRuleID);
 	std::optional      command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
 	if (!command_line)
 	{
-		log_entry.mOutput       = ioStringPool.AllocateCopy("[error] Failed to format command line.\n");
+		log_entry.mOutput       = ioThread.mStringPool.AllocateCopy("[error] Failed to format command line.\n");
 		log_entry.mCookingState = CookingState::Error;
 		return;
 	}
 
-	StringPool::ResizableStringView output_str     = ioStringPool.CreateResizableString();
+	StringPool::ResizableStringView output_str     = ioThread.mStringPool.CreateResizableString();
 	output_str.AppendFormat("Command Line: {}\n\n", StringView(*command_line));
 
 	// Make sure all inputs exist.
@@ -945,7 +956,7 @@ void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_tok
 		// TODO need to wait until all commands of prio N have properly finished cooking before starting prio N + 1
 		if (command_id.IsValid())
 		{
-			CookCommand(GetCommand(command_id), ioThread->mStringPool);
+			CookCommand(GetCommand(command_id), *ioThread);
 		}
 	}
 }
@@ -955,9 +966,10 @@ CookingLogEntry& CookingSystem::AllocateCookingLogEntry(CookingCommandID inComma
 {
 	std::lock_guard lock(mCookingLogMutex);
 
+	// TODO this isn't super thread safe since the UI doesn't lock all the time, replace by VMemArray and add a "safe to read" size that gets bumped only after construction
 	CookingLogEntry& log_entry = mCookingLog.emplace_back();
+	log_entry.mID              = { (uint32)mCookingLog.size() - 1 };
 	log_entry.mCommandID       = inCommandID;
-	log_entry.mIndex           = (int)mCookingLog.size() - 1;
 	log_entry.mCookingState    = CookingState::Cooking;
 
 	return log_entry;

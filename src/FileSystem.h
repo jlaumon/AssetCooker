@@ -302,6 +302,7 @@ private:
 
 	FileDrive&		GetOrAddDrive(char inDriveLetter);
 
+	friend void     gDrawDebugWindow();
 
 	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
 	using FilesByPathHash = SegmentedHashMap<Hash128, FileID>;

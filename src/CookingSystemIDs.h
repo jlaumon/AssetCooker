@@ -24,3 +24,13 @@ struct CookingCommandID
 };
 
 template <> struct ankerl::unordered_dense::hash<CookingCommandID> : MemoryHasher<CookingCommandID> {};
+
+
+struct CookingLogEntryID
+{
+	uint32 mIndex = (uint32)-1;
+
+	bool  IsValid() const { return *this != cInvalid(); }
+	static constexpr CookingLogEntryID cInvalid() { return {}; }
+	auto  operator<=>(const CookingLogEntryID& inOther) const = default;
+};

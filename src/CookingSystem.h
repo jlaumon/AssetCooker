@@ -110,12 +110,12 @@ constexpr StringView gToStringView(CookingState inVar)
 
 struct CookingLogEntry
 {
+	CookingLogEntryID         mID;
 	CookingCommandID          mCommandID;
-	int                       mIndex = -1;
 	FileTime                  mTimeStart;
-	FileTime                  mTimeEnd;
 	std::atomic<CookingState> mCookingState = CookingState::Unknown;
-	StringView                mOutput;
+	FileTime                  mTimeEnd;		// Unsafe to read unless CookingState is > Cooking. TODO add getters that assert this
+	StringView                mOutput;		// Unsafe to read unless CookingState is > Cooking.
 };
 
 
@@ -204,6 +204,7 @@ struct CookingSystem : NoCopy
 
 	const CookingRule&                    GetRule(CookingRuleID inID) const { return mRules[inID.mIndex]; }
 	CookingCommand&                       GetCommand(CookingCommandID inID) { return mCommands[inID.mIndex]; }
+	CookingLogEntry&                      GetLogEntry(CookingLogEntryID inID) { return mCookingLog[inID.mIndex]; }
 
 	CookingRule&                          AddRule() { return mRules.emplace_back(CookingRuleID{ (int16)mRules.size() }); }
 	void                                  CreateCommandsForFile(FileInfo& ioFile);
@@ -219,15 +220,18 @@ struct CookingSystem : NoCopy
 
 	void                                  ForceCook(CookingCommandID inCommandID);
 
+	bool                                  mSlowMode = false; // Slows down cooking, for debugging.
 private:
 	friend struct CookingCommand;
 	friend void gDrawCookingQueue();
 	friend void gDrawCommandSearch();
+	friend void gDrawCookingThreads();
+	friend void gDrawDebugWindow();
 	struct CookingThread;
 
 	void                                  CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken);
 	CookingLogEntry&                      AllocateCookingLogEntry(CookingCommandID inCommandID);
-	void                                  CookCommand(CookingCommand& ioCommand, StringPool& ioStringPool);
+	void                                  CookCommand(CookingCommand& ioCommand, CookingThread& ioThread);
 	void                                  AddTimeOut(CookingLogEntry* inLogEntry);
 	void                                  ProcessTimeOuts();
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
@@ -245,10 +249,11 @@ private:
 
 	struct CookingThread
 	{
-		std::jthread mThread;
-		StringPool   mStringPool;
+		std::jthread                   mThread;
+		StringPool                     mStringPool;
+		std::atomic<CookingLogEntryID> mCurrentLogEntry;
 	};
-	std::vector<CookingThread>               mCookingThreads;
+	SegmentedVector<CookingThread, 64>       mCookingThreads;
 	std::counting_semaphore<>                mCookingThreadsSemaphore  = std::counting_semaphore(0);
 	bool                                     mCookingPaused          = false;
 
