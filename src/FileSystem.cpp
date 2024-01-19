@@ -748,8 +748,22 @@ USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
 	if (!DeviceIoControl(inFileHandle, FSCTL_READ_FILE_USN_DATA, nullptr, 0, buffer.data(), buffer.size() * sizeof(buffer[0]), &available_bytes, nullptr))
 		gApp.FatalError("Failed to get USN data"); // TODO add file path to message
 
-	USN_RECORD_V3* record = (USN_RECORD_V3*)buffer.data();
-	return record->Usn;	
+	auto record_header = (USN_RECORD_COMMON_HEADER*)buffer.data();
+	if (record_header->MajorVersion == 2)
+	{
+		auto record = (USN_RECORD_V2*)buffer.data();
+		return record->Usn;	
+	}
+	else if (record_header->MajorVersion == 3)
+	{
+		auto record = (USN_RECORD_V3*)buffer.data();
+		return record->Usn;
+	}
+	else
+	{
+		gApp.FatalError("Got unexpected USN record version ({}.{})", record_header->MajorVersion, record_header->MinorVersion);
+		return 0;
+	}
 }
 
 
