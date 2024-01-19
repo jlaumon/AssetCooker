@@ -9,6 +9,8 @@ void App::Init(void* inHwnd)
 {
 	mMainWindowHwnd = inHwnd;
 
+	mLog.mAutoAddTime = true;
+
 	// The application includes a manifest that should make the default code page be UTF8 (if at least Windows 10 1903).
 	// This in turn should mean that most ANSI win32 functions actually support UTF8.
 	// TODO: use A version of windows functions wherever possible

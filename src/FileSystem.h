@@ -15,6 +15,7 @@ struct FileDrive;
 struct FileSystem;
 struct FileTime;
 struct SystemTime;
+struct LocalTime;
 
 
 static constexpr int cFileRepoIndexBits = 6;
@@ -101,15 +102,13 @@ struct FileTime
 	int64                     operator-(FileTime inOther) const { return ((int64)mDateTime - (int64)inOther.mDateTime) * 100; } // Difference in nano seconds.
 
 	SystemTime                ToSystemTime() const;
-	SystemTime                ToLocalTime() const;
+	LocalTime                 ToLocalTime() const;
 
 	constexpr bool            IsValid() const { return *this != cInvalid(); }
 	static constexpr FileTime cInvalid() { return {}; }
 };
 static_assert(sizeof(FileTime) == 8);
 
-SystemTime gGetSystemTime();
-FileTime   gGetSystemTimeAsFileTime();
 
 // Alias for SYSTEMTIME.
 struct SystemTime
@@ -135,14 +134,34 @@ struct SystemTime
 	SystemTime&                 operator=(const _SYSTEMTIME&);
 
 	FileTime                    ToFileTime() const;
-	SystemTime                  ToLocalTime() const;
-
-	SystemTime                  sGetCurrent();	// Get the current System Time (not Local)
+	LocalTime                   ToLocalTime() const;
 
 	constexpr bool              IsValid() const { return *this != cInvalid(); }
 	static constexpr SystemTime cInvalid() { return {}; }
 };
 static_assert(sizeof(SystemTime) == 16);
+
+
+struct LocalTime : SystemTime
+{
+	constexpr LocalTime()                                           = default;
+	constexpr LocalTime(const LocalTime&)                           = default;
+	constexpr ~LocalTime()                                          = default;
+	constexpr LocalTime& operator=(const LocalTime&)                = default;
+	constexpr bool       operator==(const LocalTime& inOther) const = default;
+
+private:
+	// LocalTime is the final type used, don't allow converting to anything.
+	using SystemTime::SystemTime;
+	using SystemTime::ToLocalTime;
+	using SystemTime::ToFileTime;
+};
+static_assert(sizeof(SystemTime) == 16);
+
+
+SystemTime gGetSystemTime();
+LocalTime  gGetLocalTime();
+FileTime   gGetSystemTimeAsFileTime();
 
 
 // Wrapper for a 128-bits hash value.

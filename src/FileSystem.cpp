@@ -183,7 +183,7 @@ SystemTime FileTime::ToSystemTime() const
 }
 
 
-SystemTime FileTime::ToLocalTime() const
+LocalTime FileTime::ToLocalTime() const
 {
 	return ToSystemTime().ToLocalTime();
 }
@@ -219,7 +219,7 @@ FileTime SystemTime::ToFileTime() const
 }
 
 
-SystemTime SystemTime::ToLocalTime() const
+LocalTime SystemTime::ToLocalTime() const
 {
 	const SYSTEMTIME st = ToWin32();
 	SYSTEMTIME       local_st = {};
@@ -233,6 +233,12 @@ SystemTime gGetSystemTime()
 	SYSTEMTIME st = {};
 	GetSystemTime(&st);
 	return st;
+}
+
+
+LocalTime  gGetLocalTime()
+{
+	return gGetSystemTime().ToLocalTime();
 }
 
 

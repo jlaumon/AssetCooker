@@ -1,6 +1,8 @@
 #include "Log.h"
 
+#include "FileSystem.h"
 #include "imgui.h"
+#include "Ticks.h"
 
 
 StringPool::ResizableStringView Log::StartLine(LogType inType)
@@ -9,7 +11,10 @@ StringPool::ResizableStringView Log::StartLine(LogType inType)
 
 	if (mAutoAddTime)
 	{
-		// TODO: add date/time
+		//double time = gTicksToSeconds(gGetTickCount() - gProcessStartTicks);
+		//resizable_str.AppendFormat("[{:.3f}] ", time);
+		auto time = gGetLocalTime();
+		resizable_str.AppendFormat("[{:02}:{:02}:{:02}.{:02}] ", time.mHour, time.mMinute, time.mSecond, time.mMilliseconds / 10);
 	}
 
 	if (mAutoAddErrorTag && inType == LogType::Error)
