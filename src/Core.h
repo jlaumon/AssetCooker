@@ -220,3 +220,25 @@ inline uint32 gRand32(uint32 inSeed = 0)
 	constexpr uint32 cMod = 2147483647;
 	return inSeed * cMul % cMod;
 }
+
+constexpr bool   gIsPow2(uint64 inValue)							{ return inValue != 0 && (inValue & (inValue - 1)) == 0; }
+constexpr uint64 gAlignUp(uint64 inValue, uint64 inPow2Alignment)	{ return (inValue + (inPow2Alignment - 1)) & ~(inPow2Alignment - 1); }
+constexpr uint64 gAlignDown(uint64 inValue, uint64 inPow2Alignment) { return inValue & ~(inPow2Alignment - 1); }
+
+// Forward declarations of std types we don't want to include here.
+namespace std
+{
+template <class T, size_t Extent> class span;
+template <class T> class optional;
+template <class T> class reference_wrapper;
+}
+
+// Typedef for Span, until we have a custom version.
+template <typename taType>
+using Span = std::span<taType, -1>;
+
+// Typedef for Optional, until we have a custom version.
+template <typename taType>
+using Optional = std::optional<taType>;
+template <typename taType>
+using OptionalRef = std::optional<std::reference_wrapper<taType>>;
