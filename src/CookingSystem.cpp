@@ -223,13 +223,26 @@ void CookingCommand::UpdateDirtyState()
 {
 	DirtyState dirty_state = NotDirty;
 
+	USN last_cook = mLastCook;
+
+	// If we don't have a last cook USN, estimate one.
+	// Normally this should be stored in the cooking database and read on start up,
+	// but when doing an initial scan we use the oldest output (ie. min USN) as the
+	// probable last point when the command was cooked.
+	if (last_cook == 0 && !mOutputs.empty())
+	{
+		last_cook = cMaxUSN;
+		for (auto& file_id : mOutputs)
+			last_cook = gMin(last_cook, file_id.GetFile().mLastChangeUSN);
+	}
+
 	for (FileID file_id : mInputs)
 	{
-		const FileInfo& file = gFileSystem.GetFile(file_id);
+		const FileInfo& file = file_id.GetFile();
 
 		if (file.IsDeleted())
 			dirty_state |= InputMissing;
-		else if (file.mLastChangeUSN > mLastCook)
+		else if (file.mLastChangeUSN > last_cook)
 			dirty_state |= InputChanged;
 	}
 
@@ -237,7 +250,7 @@ void CookingCommand::UpdateDirtyState()
 
 	for (FileID file_id : mOutputs)
 	{
-		const FileInfo& file = gFileSystem.GetFile(file_id);
+		const FileInfo& file = file_id.GetFile();
 
 		if (file.IsDeleted())
 			dirty_state |= OutputMissing;
