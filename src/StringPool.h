@@ -20,7 +20,7 @@ struct StringPool
 	MutStringView Allocate(size_t inSize, const OptionalRef<const VMemArrayLock>& inLock = {})
 	{
 		// If no lock was provided, make a new one.
-		const VMemArrayLock& lock = inLock.value_or((const VMemArrayLock&)mBuffer.Lock());
+		const VMemArrayLock& lock = inLock ? (const VMemArrayLock&)*inLock : (const VMemArrayLock&)mBuffer.Lock();
 
 		// Add one for the null terminator.
 		size_t alloc_size = inSize + 1;

@@ -56,7 +56,7 @@ struct VMemArray : NoCopy
 	void Add(const taType& inElement, const OptionalRef<const VMemArrayLock>& inLock = {})
 	{
 		// If no lock was provided, make a new one.
-		const VMemArrayLock& lock = inLock.value_or((const VMemArrayLock&)Lock());
+		const VMemArrayLock& lock = inLock ? (const VMemArrayLock&)*inLock : (const VMemArrayLock&)Lock();
 
 		taType* new_element = &EnsureCapacity(1, lock)[0];
 
@@ -71,7 +71,7 @@ struct VMemArray : NoCopy
 	taType& Emplace(const OptionalRef<const VMemArrayLock>& inLock = {}, taArgs&&... inArgs)
 	{
 		// If no lock was provided, make a new one.
-		const VMemArrayLock& lock = inLock.value_or((const VMemArrayLock&)Lock());
+		const VMemArrayLock& lock = inLock ? (const VMemArrayLock&)*inLock : (const VMemArrayLock&)Lock();
 
 		taType* new_element = &EnsureCapacity(1, lock)[0];
 
