@@ -1,5 +1,6 @@
 #pragma once
 #include "Strings.h"
+#include "VMemArray.h"
 #include <vector>
 #include <memory>
 
@@ -7,55 +8,37 @@
 // Simple linear allocator for strings.
 struct StringPool
 {
-	struct Chunk
-	{
-		std::unique_ptr<char[]> mData;
-		size_t                  mSize;
-	};
-	size_t                               mDefaultChunkSize  = 1024 * 1024ull;
-	std::vector<Chunk>                   mChunks;
-	char*                                mLastChunk         = nullptr;
-	size_t                               mLastChunkCapacity = 0;
+	VMemArray<char> mBuffer;
 
 	struct ResizableStringView;
 
 	void Clear()
 	{
-		if (!mChunks.empty())
-		{
-			// Keep just one chunk.
-			mChunks.resize(1);
-
-			// Reset to its start.
-			mLastChunk         = mChunks.back().mData.get();
-			mLastChunkCapacity = mChunks.back().mSize;
-		}
+		mBuffer.Clear();
 	}
 
-	MutStringView Allocate(size_t inSize)
+	MutStringView Allocate(size_t inSize, const OptionalRef<const VMemArrayLock>& inLock = {})
 	{
+		// If no lock was provided, make a new one.
+		const VMemArrayLock& lock = inLock.value_or((const VMemArrayLock&)mBuffer.Lock());
+
 		// Add one for the null terminator.
 		size_t alloc_size = inSize + 1;
 
-		// Do we need a new chunk?
-		if (alloc_size > mLastChunkCapacity)
-			AddChunk(alloc_size);
-
-		// Allocate the string.
-		MutStringView str = { mLastChunk, alloc_size };
-		mLastChunk += alloc_size;
-		mLastChunkCapacity -= alloc_size;
+		MutStringView str = mBuffer.EnsureCapacity(alloc_size, lock);
 
 		// Put the null terminator preemptively.
 		str[inSize] = 0;
+
+		mBuffer.IncreaseSize(alloc_size, lock);
 
 		return str;
 	}
 
 
-	MutStringView AllocateCopy(StringView inString)
+	MutStringView AllocateCopy(StringView inString, const OptionalRef<const VMemArrayLock>& inLock = {})
 	{
-		auto storage = Allocate(inString.size());
+		auto storage = Allocate(inString.size(), inLock);
 
 		gAppend(storage, inString);
 
@@ -63,23 +46,9 @@ struct StringPool
 	}
 
 
-	void AddChunk(size_t inMinSize)
-	{
-		// Make sure the chunk is always large enough for the requested size.
-		size_t chunk_size = gMax(mDefaultChunkSize, inMinSize);
-
-		// Allocate the chunk.
-		mChunks.push_back({ std::make_unique<char[]>(chunk_size), chunk_size });
-		mLastChunk         = mChunks.back().mData.get();
-		mLastChunkCapacity = chunk_size;
-	}
-
 	size_t GetTotalAllocatedSize() const
 	{
-		size_t total = 0;
-		for (const Chunk& chunk : mChunks)
-			total += chunk.mSize;
-		return total;
+		return mBuffer.CapacityInBytes();
 	}
 
 	struct ResizableStringView
@@ -89,6 +58,7 @@ struct StringPool
 		char*           mData     = nullptr;
 		size_t          mSize     = 0;
 		StringPool&     mPool;
+		VMemArrayLock   mPoolLock;	// Pool is locked while we have one resizable string being used.
 
 		MutStringView	AsMutStringView()		{ return { mData, mSize }; }
 		StringView		AsStringView() const	{ return { mData, mSize - 1 }; }
@@ -97,33 +67,13 @@ struct StringPool
 		void Append(StringView inStr)
 		{
 			// String needs to be the last alloc in the pool to allow resizing.
-			gAssert(mPool.mLastChunk == mData + mSize);
+			// Though that should always be the case since we have locked the pool.
+			gAssert(mPool.mBuffer.End() == mData + mSize);
 
 			size_t additional_size = inStr.size();
+			mPool.mBuffer.EnsureCapacity(additional_size, mPoolLock);
 
-			// Check if it would it fit in the current chunk.
-			if (additional_size > mPool.mLastChunkCapacity)
-			{
-				size_t min_chunk_size = mSize + additional_size;
-
-				// If the string size is already larger than a chunk, grow more aggressively to avoid allocating a new chunk at each append.
-				// This is a lot more aggressive than eg. std::vector because we're wasting the memory of the chunks where the string doesn't fit,
-				// so we really want to make sure the next size fits everything! 
-				if (min_chunk_size > mPool.mDefaultChunkSize)
-					min_chunk_size *= 4;
-
-				// Add a new chunk.
-				mPool.AddChunk(min_chunk_size);
-
-				// Copy the string into it.
-				auto new_str = mPool.AllocateCopy(AsStringView());
-
-				// Update data with re-allocated string.
-				mData = new_str.data();
-				mSize = new_str.size();
-			}
-
-			// Now append the new part.
+			// Append the new part.
 			// Note: -1 because we write over the null terminator of the current string.
 			char* current_end = mData + mSize - 1;
 			for (size_t i = 0; i < additional_size; i++)
@@ -133,8 +83,7 @@ struct StringPool
 			current_end[additional_size] = 0;
 
 			mSize += additional_size;
-			mPool.mLastChunk += additional_size;
-			mPool.mLastChunkCapacity -= additional_size;
+			mPool.mBuffer.IncreaseSize(additional_size, mPoolLock);
 		}
 
 		template<typename... taArgs> void AppendFormat(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
@@ -153,7 +102,7 @@ struct StringPool
 	{
 		// Allocate an empty string (actually allocates a null terminator).
 		auto str = Allocate(0);
-		return { str.data(), str.size(), *this };
+		return { str.data(), str.size(), *this, this->mBuffer.Lock() };
 	}
 
 };
