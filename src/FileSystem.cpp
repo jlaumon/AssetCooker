@@ -67,8 +67,8 @@ Hash128 gHashPath(StringView inRootPath, StringView inPath)
 	gAssert(gIsAbsolute(abs_path));
 
 	// Convert it to wide char.
-	PathBufferUTF16 wpath_buffer;
-	std::optional wpath = gUtf8ToWideChar(abs_path, wpath_buffer);
+	PathBufferUTF16     wpath_buffer;
+	OptionalWStringView wpath = gUtf8ToWideChar(abs_path, wpath_buffer);
 	if (!wpath)
 		gApp.FatalError("Failed to convert path {} to WideChar", inPath);
 
@@ -78,7 +78,7 @@ Hash128 gHashPath(StringView inRootPath, StringView inPath)
 	if (uppercase_size == 0)
 		gApp.FatalError("Failed to convert path {} to uppercase", inPath);
 
-	std::wstring_view uppercase_wpath = { uppercase_buffer.data(), (size_t)uppercase_size };
+	WStringView uppercase_wpath = { uppercase_buffer.data(), (size_t)uppercase_size };
 
 	// Hash the uppercase version.
 	XXH128_hash_t hash_xx = XXH3_128bits(uppercase_wpath.data(), uppercase_wpath.size() * sizeof(uppercase_wpath[0]));
@@ -295,7 +295,7 @@ FileInfo::FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType 
 }
 
 
-static bool sDirectoryExistsW(std::wstring_view inPath)
+static bool sDirectoryExistsW(WStringView inPath)
 {
 	gAssert(!inPath.ends_with(L'\\'));
 	gAssert(*(inPath.data() + inPath.size()) == 0);
@@ -305,7 +305,7 @@ static bool sDirectoryExistsW(std::wstring_view inPath)
 	return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
 }
 
-static bool sCreateDirectoryW(std::wstring_view inPath)
+static bool sCreateDirectoryW(WStringView inPath)
 {
 	gAssert(!inPath.ends_with(L'\\'));
 	gAssert(*(inPath.data() + inPath.size()) == 0);
@@ -316,14 +316,14 @@ static bool sCreateDirectoryW(std::wstring_view inPath)
 }
 
 
-static bool sCreateDirectoryRecursiveW(std::span<wchar_t> ioPath)
+static bool sCreateDirectoryRecursiveW(Span<wchar_t> ioPath)
 {
 	gAssert(ioPath[ioPath.size() - 1] == 0);
 	gAssert(ioPath[ioPath.size() - 2] != L'\\');
 	gAssert(ioPath.size() > 3 && ioPath[1] == L':' && ioPath[2] == L'\\'); // We expect an absolute path, first three characters should be the drive.
 
 	// Early out if the directory already exists.
-	if (sDirectoryExistsW(std::wstring_view(ioPath.data(), ioPath.size() - 1)))
+	if (sDirectoryExistsW(WStringView(ioPath.data(), ioPath.size() - 1)))
 		return true;
 
 	// Otherwise try to create every parent directory.
@@ -356,12 +356,12 @@ bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 {
 	gAssert(gIsNormalized(inAbsolutePath) && gIsAbsolute(inAbsolutePath));
 
-	PathBufferUTF16 wpath_buffer;
-	std::optional   wpath_optional = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
+	PathBufferUTF16     wpath_buffer;
+	OptionalWStringView wpath_optional = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
 	if (!wpath_optional)
 		return false;
 
-	std::wstring_view wpath = *wpath_optional;
+	WStringView wpath = *wpath_optional;
 
 	// If the path ends with a slash, remove it, because that's what the other functions expect.
 	if (wpath.back() == L'\\')
@@ -389,8 +389,8 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 	gCreateDirectoryRecursive(mRootPath);
 
 	// Convert the root path to wchars.
-	PathBufferUTF16 root_path_buffer;
-	std::optional   root_path_wchar = gUtf8ToWideChar(mRootPath, root_path_buffer);
+	PathBufferUTF16     root_path_buffer;
+	OptionalWStringView root_path_wchar = gUtf8ToWideChar(mRootPath, root_path_buffer);
 	if (!root_path_wchar)
 		gApp.FatalError("Failed to convert root path {} to WideChar", mRootPath);
 
@@ -532,7 +532,7 @@ StringView FileRepo::RemoveRootPath(StringView inFullPath)
 
 
 
-static std::optional<StringView> sBuildFilePath(StringView inParentDirPath, std::wstring_view inFileNameW, MutStringView ioBuffer)
+static OptionalStringView sBuildFilePath(StringView inParentDirPath, WStringView inFileNameW, MutStringView ioBuffer)
 {
 	MutStringView file_path = ioBuffer;
 
@@ -543,20 +543,20 @@ static std::optional<StringView> sBuildFilePath(StringView inParentDirPath, std:
 		ioBuffer = gAppend(ioBuffer, "\\");
 	}
 
-	std::optional file_name = gWideCharToUtf8(inFileNameW, ioBuffer);
+	OptionalStringView file_name = gWideCharToUtf8(inFileNameW, ioBuffer);
 	if (!file_name)
 	{
 		// Failed for some reason. Buffer too small?
 		gAssert(false); // Investigate.
 
-		return std::nullopt;
+		return {};
 	}
 
 	return StringView{ file_path.data(), gEndPtr(*file_name) };
 }
 
 
-void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> ioBuffer)
+void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, Span<uint8> ioBuffer)
 {
 	// Grab one directory from the queue.
 	FileID dir_id = ioScanQueue.back();
@@ -608,15 +608,15 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> 
 				entry = (PFILE_ID_EXTD_DIR_INFO)((uint8*)entry + entry->NextEntryOffset);
 			};
 
-			std::wstring_view wfilename = { entry->FileName, entry->FileNameLength / 2 };
+			WStringView wfilename = { entry->FileName, entry->FileNameLength / 2 };
 
 			// Ignore current/parent dir.
 			if (wfilename == L"." || wfilename == L"..")
 				continue;
 
 			// Build the file path.
-			PathBufferUTF8 path_buffer;
-			std::optional path = sBuildFilePath(dir.mPath, wfilename, path_buffer);
+			PathBufferUTF8     path_buffer;
+			OptionalStringView path = sBuildFilePath(dir.mPath, wfilename, path_buffer);
 
 			// If it fails, ignore the file.
 			if (!path)
@@ -723,7 +723,7 @@ OwnedHandle FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber) const
 }
 
 
-std::optional<StringView> FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const
+OptionalStringView FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const
 {
 	// Get the full path as utf16.
 	// PFILE_NAME_INFO contains the filename without the drive letter and column in front (ie. without the C:).
@@ -732,14 +732,14 @@ std::optional<StringView> FileDrive::GetFullPath(const OwnedHandle& inFileHandle
 	if (!GetFileInformationByHandleEx(inFileHandle, FileNameInfo, file_name_info, wpath_buffer.size() * sizeof(wpath_buffer[0])))
 		return {};
 
-	std::wstring_view wpath = { file_name_info->FileName, file_name_info->FileNameLength / 2 };
+	WStringView wpath = { file_name_info->FileName, file_name_info->FileNameLength / 2 };
 
 	// Write the drive part.
 	ioBuffer[0] = mLetter;
 	ioBuffer[1] = ':';
 
 	// Write the path part.
-	std::optional path_part = gWideCharToUtf8(wpath, ioBuffer.subspan(2));
+	OptionalStringView path_part = gWideCharToUtf8(wpath, ioBuffer.subspan(2));
 	if (!path_part)
 		return {};
 
@@ -773,7 +773,7 @@ USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
 }
 
 
-bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<uint8> ioDirScanBuffer)
+bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioDirScanBuffer)
 {
 	constexpr uint32 cInterestingReasons =	USN_REASON_FILE_CREATE |		// File was created.
 											USN_REASON_FILE_DELETE |		// File was deleted.
@@ -800,7 +800,7 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 		gApp.FatalError("Failed to read USN journal for {}:\\ - {}", mLetter, GetLastErrorString());
 	}
 
-	std::span<uint8> available_buffer = ioUSNBuffer.subspan(0, available_bytes);
+	Span<uint8> available_buffer = ioUSNBuffer.subspan(0, available_bytes);
 
 	USN next_usn = *(USN*)available_buffer.data();
 	available_buffer = available_buffer.subspan(sizeof(USN));
@@ -882,8 +882,8 @@ bool FileDrive::ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<
 			}
 
 			// Get its path.
-			PathBufferUTF8 buffer;
-			std::optional full_path = GetFullPath(file_handle, buffer);
+			PathBufferUTF8     buffer;
+			OptionalStringView full_path = GetFullPath(file_handle, buffer);
 			if (!full_path)
 			{
 				// TODO: same remark as failing to open
@@ -1093,7 +1093,7 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 
 
 
-void FileSystem::InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer)
+void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBuffer)
 {
 	gApp.Log("Starting initial scan.");
 	int64 ticks_start = gGetTickCount();
@@ -1149,8 +1149,8 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	defer { free(buffer_ptr); };
 
 	// Split it in two, one for USN reads, one for directory reads.
-	std::span buffer_USN  = { buffer_ptr,					cBufferSize / 2 };
-	std::span buffer_scan = { buffer_ptr + cBufferSize / 2, cBufferSize / 2 };
+	Span buffer_USN  = { buffer_ptr,					cBufferSize / 2 };
+	Span buffer_scan = { buffer_ptr + cBufferSize / 2, cBufferSize / 2 };
 
 	// Scan the repos.
 	InitialScan(inStopToken, buffer_scan);

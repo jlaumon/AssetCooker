@@ -260,7 +260,7 @@ struct FileRepo : NoCopy
 
 	StringView                      RemoveRootPath(StringView inFullPath);
 
-	void                            ScanDirectory(std::vector<FileID>& ioScanQueue, std::span<uint8> ioBuffer);
+	void                            ScanDirectory(std::vector<FileID>& ioScanQueue, Span<uint8> ioBuffer);
 
 	uint32                          mIndex = 0;     // The index of this repo.
 	StringView                      mName;          // A named used to identify the repo.
@@ -278,11 +278,11 @@ struct FileDrive : NoCopy
 {
 	FileDrive(char inDriveLetter);
 
-	bool        ProcessMonitorDirectory(std::span<uint8> ioUSNBuffer, std::span<uint8> ioDirScanBuffer); // Check if files changed. Return false if there were no changes.
+	bool        ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioDirScanBuffer); // Check if files changed. Return false if there were no changes.
 	FileRepo*   FindRepoForPath(StringView inFullPath);                                                  // Return nullptr if not in any repo.
 
 	OwnedHandle               OpenFileByRefNumber(FileRefNumber inRefNumber) const;
-	std::optional<StringView> GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const;  // Get the full path of this file, including the drive letter part.
+	OptionalStringView        GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const; // Get the full path of this file, including the drive letter part.
 	USN                       GetUSN(const OwnedHandle& inFileHandle) const;
 
 	char                      mLetter = 'C';
@@ -316,7 +316,7 @@ struct FileSystem : NoCopy
 
 	void			KickMonitorDirectoryThread();
 private:
-	void            InitialScan(std::stop_token inStopToken, std::span<uint8> ioBuffer);
+	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBuffer);
 	void			MonitorDirectoryThread(std::stop_token inStopToken);
 
 	FileDrive&		GetOrAddDrive(char inDriveLetter);

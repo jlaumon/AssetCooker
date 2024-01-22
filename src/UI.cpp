@@ -20,7 +20,7 @@ constexpr const char*  cAppLogWindowName                = "App Log";
 constexpr const char*  cCommandOutputWindowName         = "Command Output";
 
 
-std::span<const uint8> gGetEmbeddedFont(StringView inName)
+Span<const uint8> gGetEmbeddedFont(StringView inName)
 {
 	HRSRC   resource             = FindResourceA(nullptr, inName.AsCStr(), "FONTFILE");
 	DWORD   resource_data_size   = SizeofResource(nullptr, resource);
@@ -163,8 +163,8 @@ void gDrawMainMenuBar()
 
 
 
-void gDrawFileInfoSpan(StringView inListName, std::span<const FileID> inFileIDs);
-void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingCommandID> inCommandIDs);
+void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs);
+void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs);
 
 
 TempString256 gFormat(const CookingCommand& inCommand)
@@ -334,7 +334,7 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 
 
 
-void gDrawFileInfoSpan(StringView inListName, std::span<const FileID> inFileIDs)
+void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
 	ImGui::SetNextItemOpen(inListName.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
@@ -350,7 +350,7 @@ void gDrawFileInfoSpan(StringView inListName, std::span<const FileID> inFileIDs)
 };
 
 
-void gDrawCookingCommandSpan(StringView inListName, std::span<const CookingCommandID> inCommandIDs)
+void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
 	ImGui::SetNextItemOpen(inListName.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
@@ -547,7 +547,7 @@ void gDrawCookingThreads()
 	int thread_count = (int)gCookingSystem.mCookingThreads.size();
 	int columns      = sqrt(thread_count); // TODO need a max number of columns instead, they're useless if too short
 
-	if (ImGui::BeginTable("Threads", columns, ImGuiTableFlags_SizingStretchSame))
+	if (thread_count && ImGui::BeginTable("Threads", columns, ImGuiTableFlags_SizingStretchSame))
 	{
 		ImGui::TableNextRow();
 
@@ -656,7 +656,7 @@ void gDrawDebugWindow()
 
 void gDrawMain()
 {
-	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton);
+	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode/* | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton*/);
 
 	gApp.mLog.Draw(cAppLogWindowName);
 

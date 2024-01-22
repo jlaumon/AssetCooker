@@ -36,7 +36,7 @@ constexpr StringView gToStringView(CommandVariables inVar)
 
 // Check for CommandVariables and replace them by the corresponding part of inFile.
 // Eg. "copy.exe {Repo:Source}{FullPath} {Repo:Bin}" will turn into "copy.exe D:/src/file.txt D:/bin/"
-std::optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile);
+Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile);
 
 struct RepoAndFilePath
 {
@@ -45,7 +45,7 @@ struct RepoAndFilePath
 };
 // Check for CommandVariables and replace them by the corresponding part of inFile but expects the string to be a single file path.
 // One Repo var is needed at the start and of the path and the corresponding FileRepo will be returned instead of be replaced by its path.
-std::optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile);
+Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile);
 
 
 // Format the file path and get (or add) the corresponding file. Return an invalid FileID if the format is invalid.

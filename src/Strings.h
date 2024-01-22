@@ -12,8 +12,8 @@ struct StringView;
 constexpr bool gIsNullTerminated(StringView inString);
 
 
-// Mutable StringView. Size includes the null-terminator.
-using MutStringView = std::span<char>;
+// Mutable StringView. Size is fixed but content is mutable. Size includes the null-terminator.
+using MutStringView = Span<char>;
 
 // Mutable String. Allocates its own memory; size doesn't include the null-terminator.
 using String		= std::string;
@@ -65,6 +65,13 @@ struct StringView : public std::string_view
 		return data();
 	}
 };
+
+// WStringView.
+using WStringView = std::wstring_view;
+
+// Typedefs for Optional StringViews.
+using OptionalStringView = Optional<StringView>;
+using OptionalWStringView = Optional<WStringView>;
 
 
 // Fixed size string meant for temporaries.
@@ -211,10 +218,10 @@ template <> struct std::formatter<SizeInBytes> : std::formatter<std::string_view
 
 
 // Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
-std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer);
+OptionalStringView gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer);
 
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
-std::optional<std::wstring_view> gUtf8ToWideChar(StringView inString, std::span<wchar_t> ioBuffer);
+OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer);
 
 
 // Helper to format a string into a fixed size buffer.

@@ -30,7 +30,7 @@ static StringView sParseArgument(const char*& ioPtr, const char* inPtrEnd)
 
 
 template<class taFormatter>
-static std::optional<String> sParseCommandVariables(StringView inFormatStr, const taFormatter& inFormatter)
+static Optional<String> sParseCommandVariables(StringView inFormatStr, const taFormatter& inFormatter)
 {
 	String str;
 	const char* p_begin = inFormatStr.data();
@@ -96,7 +96,7 @@ static std::optional<String> sParseCommandVariables(StringView inFormatStr, cons
 }
 
 
-std::optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
+Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
 {
 	if (inFormatStr.empty())
 		return {}; // Consider empty format string is an error.
@@ -137,10 +137,10 @@ std::optional<String> gFormatCommandString(StringView inFormatStr, const FileInf
 }
 
 
-std::optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile)
+Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile)
 {
-	FileRepo*             repo = nullptr;
-	std::optional<String> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, String& outStr) 
+	FileRepo*        repo = nullptr;
+	Optional<String> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, String& outStr) 
 	{
 		switch (inVar)
 		{
@@ -179,7 +179,7 @@ std::optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const Fil
 
 FileID gGetOrAddFileFromFormat(StringView inFormatStr, const FileInfo& inFile)
 {
-	std::optional repo_and_path = gFormatFilePath(inFormatStr, inFile);
+	Optional repo_and_path = gFormatFilePath(inFormatStr, inFile);
 	if (!repo_and_path)
 		return FileID::cInvalid();
 
@@ -708,7 +708,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Build the command line.
 	const CookingRule& rule         = gCookingSystem.GetRule(ioCommand.mRuleID);
-	std::optional      command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
+	Optional<String>   command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
 	if (!command_line)
 	{
 		log_entry.mOutput       = ioThread.mStringPool.AllocateCopy("[error] Failed to format command line.\n");

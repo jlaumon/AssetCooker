@@ -34,7 +34,7 @@ bool gEndsWithNoCase(StringView inString, StringView inEnd)
 
 
 // Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
-std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer)
+OptionalStringView gWideCharToUtf8(WStringView inWString, MutStringView ioBuffer)
 {
 	// If a null terminator is included in the source, WideCharToMultiByte will also add it in the destination.
 	// Otherwise we'll need to add it manually.
@@ -49,10 +49,10 @@ std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutString
 	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), ioBuffer.data(), available_bytes, nullptr, nullptr);
 
 	if (written_bytes == 0 && !inWString.empty())
-		return std::nullopt; // Failed to convert.
+		return {}; // Failed to convert.
 
 	if (written_bytes == available_bytes)
-		return std::nullopt; // Might be cropped, consider failed.
+		return {}; // Might be cropped, consider failed.
 
 	// If there isn't a null terminator, add it.
 	if (!source_is_null_terminated)
@@ -67,7 +67,7 @@ std::optional<StringView> gWideCharToUtf8(std::wstring_view inWString, MutString
 }
 
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
-std::optional<std::wstring_view> gUtf8ToWideChar(StringView inString, std::span<wchar_t> ioBuffer)
+OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 {
 	// If a null terminator is included in the source, WideCharToMultiByte will also add it in the destination.
 	// Otherwise we'll need to add it manually.
@@ -82,10 +82,10 @@ std::optional<std::wstring_view> gUtf8ToWideChar(StringView inString, std::span<
 	int written_wchars = MultiByteToWideChar(CP_UTF8, 0, inString.data(), (int)inString.size(), ioBuffer.data(), available_wchars);
 
 	if (written_wchars == 0 && !inString.empty())
-		return std::nullopt; // Failed to convert.
+		return {}; // Failed to convert.
 
 	if (written_wchars == available_wchars)
-		return std::nullopt; // Might be cropped, consider failed.
+		return {}; // Might be cropped, consider failed.
 
 	// If there isn't a null terminator, add it.
 	if (!source_is_null_terminated)
@@ -96,5 +96,5 @@ std::optional<std::wstring_view> gUtf8ToWideChar(StringView inString, std::span<
 		written_wchars--; // Don't count the null terminator in the returned string view.
 	}
 
-	return std::wstring_view{ ioBuffer.data(), (size_t)written_wchars };
+	return WStringView{ ioBuffer.data(), (size_t)written_wchars };
 }

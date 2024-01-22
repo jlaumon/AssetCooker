@@ -102,8 +102,8 @@ struct VMemArray : NoCopy
 		// If no lock was provided, make a new one.
 		const VMemArrayLock& lock = inLock.value_or((const VMemArrayLock&)Lock());
 
-		std::span elements = *this;
-		mEnd               = mBegin;
+		Span elements = *this;
+		mEnd          = mBegin;
 
 		for (taType& element :elements)
 			element.~taType();
