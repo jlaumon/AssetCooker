@@ -516,7 +516,7 @@ void gDrawCommandSearch()
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
 
 		ImGuiListClipper clipper;
-		clipper.Begin((int)gCookingSystem.mCommands.size());
+		clipper.Begin((int)gCookingSystem.mCommands.Size());
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -592,14 +592,14 @@ void gDrawDebugWindow()
 
 	if (ImGui::ButtonGrad("Cook 100"))
 	{
-		for (int i = 0; i<gMin(100, (int)gCookingSystem.mCommands.size()); ++i)
+		for (int i = 0; i<gMin(100, (int)gCookingSystem.mCommands.Size()); ++i)
 			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
 	}
 
 	ImGui::SameLine();
 	if (ImGui::ButtonGrad("Cook 1000"))
 	{
-		for (int i = 0; i<gMin(1000, (int)gCookingSystem.mCommands.size()); ++i)
+		for (int i = 0; i<gMin(1000, (int)gCookingSystem.mCommands.Size()); ++i)
 			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
 	}
 
@@ -621,10 +621,10 @@ void gDrawDebugWindow()
 		clipper.End();
 	}
 
-	if (ImGui::CollapsingHeader(TempString64("Commands ({})##Commands", gCookingSystem.mCommands.size()).AsCStr()))
+	if (ImGui::CollapsingHeader(TempString64("Commands ({})##Commands", gCookingSystem.mCommands.Size()).AsCStr()))
 	{
 		ImGuiListClipper clipper;
-		clipper.Begin((int)gCookingSystem.mCommands.size());
+		clipper.Begin((int)gCookingSystem.mCommands.Size());
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)

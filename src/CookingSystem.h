@@ -237,9 +237,7 @@ private:
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
 
 	SegmentedVector<CookingRule, 256>     mRules;
-
-	SegmentedVector<CookingCommand, 4096> mCommands;
-	std::mutex                            mCommandsMutex;
+	VMemArray<CookingCommand>             mCommands;
 
 	SegmentedHashSet<CookingCommandID>    mCommandsQueuedForUpdateDirtyState;
 	std::mutex                            mCommandsQueuedForUpdateDirtyStateMutex;

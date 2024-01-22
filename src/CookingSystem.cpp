@@ -496,13 +496,13 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 
 			// Add the command to the global list.
 			{
-				std::lock_guard lock(mCommandsMutex);
+				auto lock = mCommands.Lock();
 
 				// Build the ID now that we have the mutex.
-				command_id              = CookingCommandID{ (uint32)mCommands.size() };
+				command_id              = CookingCommandID{ (uint32)mCommands.SizeRelaxed() };
 
 				// Create the command.
-				CookingCommand& command = mCommands.emplace_back();
+				CookingCommand& command = mCommands.Emplace(lock);
 				command.mID             = command_id;
 				command.mRuleID         = rule.mID;
 				command.mInputs         = std::move(inputs);
