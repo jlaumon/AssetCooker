@@ -253,3 +253,5 @@ template <> struct ankerl::unordered_dense::hash<StringView>
         return detail::wyhash::hash(inString.data(), inString.size());
     }
 };
+
+inline uint64 gHash(StringView inString) { return ankerl::unordered_dense::detail::wyhash::hash(inString.data(), inString.size()); }

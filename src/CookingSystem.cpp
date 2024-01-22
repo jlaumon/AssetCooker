@@ -716,8 +716,9 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	ioCommand.mLastCookingLog = &log_entry;
 
 	// Sleep to make things slow (for debugging).
+	// Note: use the command main input path as seed to make it consistent accross runs (to test loading bars).
 	if (mSlowMode)
-		Sleep(100 + gRand32() % 5000);
+		Sleep(100 + gRand32((uint32)gHash(ioCommand.GetMainInput().GetFile().mPath)) % 5000);
 
 	// Build the command line.
 	const CookingRule& rule         = gCookingSystem.GetRule(ioCommand.mRuleID);
