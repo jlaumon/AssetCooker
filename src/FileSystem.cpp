@@ -425,8 +425,8 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		std::unique_lock lock(gFileSystem.mFilesMutex);
 
 		// Prepare a new FileID in case this file wasn't already added.
-		FileID          new_file_id = { mIndex, (uint32)mFiles.size() };
-		FileID          actual_file_id;
+		FileID           new_file_id = { mIndex, (uint32)mFiles.Size() };
+		FileID           actual_file_id;
 
 		// Try to insert it to the path hash map.
 		{
@@ -479,7 +479,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		if (actual_file_id == new_file_id)
 		{
 			// The file wasn't already known, add it to the list.
-			file = &mFiles.emplace_back(new_file_id, gNormalizePath(mStringPool.AllocateCopy(inPath)), path_hash, inType, inRefNumber);
+			file = &mFiles.Emplace({}, new_file_id, gNormalizePath(mStringPool.AllocateCopy(inPath)), path_hash, inType, inRefNumber);
 		}
 		else
 		{
@@ -1120,9 +1120,8 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBuffer)
 
 	size_t total_files = 0;
 	{
-		std::lock_guard lock(mFilesMutex);
 		for (auto& repo : mRepos)
-			total_files += repo.mFiles.size();
+			total_files += repo.mFiles.Size();
 	}
 
 	mInitialScanCompleted = true;

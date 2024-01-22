@@ -111,6 +111,7 @@ static_assert(sizeof(FileTime) == 8);
 
 
 // Alias for SYSTEMTIME.
+// TODO all time stuff to its own file
 struct SystemTime
 {
 	uint16 mYear                                                      = 0;
@@ -223,7 +224,7 @@ struct FileInfo : NoCopy
 	const StringView              mPath;                // Path relative to the root directory.
 	const Hash128                 mPathHash;            // Case-insensitive hash of the path.
 
-	bool                          mIsDirectory     : 1; // Is this a directory or a file. Note: might change if a file is deleted then a directory of the same name is created.
+	bool                          mIsDirectory     : 1; // Is this a directory or a file. Note: could change if a file is deleted then a directory of the same name is created.
 	bool                          mCommandsCreated : 1; // Are cooking commands already created for this file.
 	FileRefNumber                 mRefNumber      = {}; // File ID used by Windows. Can change when the file is deleted and re-created.
 	FileTime                      mCreationTime   = {}; // Time of the creation of this file (or its deletion if the file is deleted).
@@ -253,24 +254,24 @@ struct FileRepo : NoCopy
 	FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, FileDrive& inDrive);
 	~FileRepo() = default;
 
-	FileInfo&						GetFile(FileID inFileID)	{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
-	FileInfo&                       GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
-	void                            MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp);
-	void                            MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std::unique_lock<std::mutex>& inLock);
+	FileInfo&			GetFile(FileID inFileID)	{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
+	FileInfo&           GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
+	void                MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp);
+	void                MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std::unique_lock<std::mutex>& inLock);
 
-	StringView                      RemoveRootPath(StringView inFullPath);
+	StringView          RemoveRootPath(StringView inFullPath);
 
-	void                            ScanDirectory(std::vector<FileID>& ioScanQueue, Span<uint8> ioBuffer);
+	void                ScanDirectory(std::vector<FileID>& ioScanQueue, Span<uint8> ioBuffer);
 
-	uint32                          mIndex = 0;     // The index of this repo.
-	StringView                      mName;          // A named used to identify the repo.
-	StringView                      mRootPath;      // Absolute path to the repo. Starts with the drive letter, ends with a slash.
-	FileDrive&                      mDrive;         // The drive this repo is on.
-	FileID                          mRootDirID;     // The FileID of the root dir.
+	uint32              mIndex = 0;  // The index of this repo.
+	StringView          mName;       // A named used to identify the repo.
+	StringView          mRootPath;   // Absolute path to the repo. Starts with the drive letter, ends with a slash.
+	FileDrive&          mDrive;      // The drive this repo is on.
+	FileID              mRootDirID;  // The FileID of the root dir.
 
-	SegmentedVector<FileInfo, 4096> mFiles;         // All the files in this repo.
+	VMemArray<FileInfo> mFiles;      // All the files in this repo.
 
-	StringPool                      mStringPool;    // Pool for storing all the paths.
+	StringPool          mStringPool; // Pool for storing all the paths.
 };
 
 
@@ -278,18 +279,18 @@ struct FileDrive : NoCopy
 {
 	FileDrive(char inDriveLetter);
 
-	bool        ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioDirScanBuffer); // Check if files changed. Return false if there were no changes.
-	FileRepo*   FindRepoForPath(StringView inFullPath);                                                  // Return nullptr if not in any repo.
+	bool                   ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioDirScanBuffer); // Check if files changed. Return false if there were no changes.
+	FileRepo*              FindRepoForPath(StringView inFullPath);                                        // Return nullptr if not in any repo.
 
-	OwnedHandle               OpenFileByRefNumber(FileRefNumber inRefNumber) const;
-	OptionalStringView        GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const; // Get the full path of this file, including the drive letter part.
-	USN                       GetUSN(const OwnedHandle& inFileHandle) const;
+	OwnedHandle            OpenFileByRefNumber(FileRefNumber inRefNumber) const;
+	OptionalStringView     GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const;    // Get the full path of this file, including the drive letter part.
+	USN                    GetUSN(const OwnedHandle& inFileHandle) const;
 
-	char                      mLetter = 'C';
-	OwnedHandle               mHandle;           // Handle to the drive, needed to open files with ref numbers.
-	uint64                    mUSNJournalID = 0;                                                         // Journal ID, needed to query the USN journal.
-	USN                       mNextUSN      = 0;
-	std::vector<FileRepo*>    mRepos;
+	char                   mLetter = 'C';
+	OwnedHandle            mHandle;           // Handle to the drive, needed to open files with ref numbers.
+	uint64                 mUSNJournalID = 0; // Journal ID, needed to query the USN journal.
+	USN                    mNextUSN      = 0;
+	std::vector<FileRepo*> mRepos;
 };
 
 
@@ -303,13 +304,12 @@ struct FileSystem : NoCopy
 
 	bool            IsMonitoringStarted() const			{ return mMonitorDirThread.joinable(); }
 
-	// TODO: these getters aren't thread safe, SegmentedVector contains a std::vector that might grow, replace with virtual mem array!
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 
 	FileRepo*       FindRepo(StringView inRepoName);	// Return nullptr if not found.
 
-	FileID			FindFileID(FileRefNumber inRefNumber) const;				// Return an invalid FileID if not found.
+	FileID			FindFileID(FileRefNumber inRefNumber) const;		// Return an invalid FileID if not found.
 	FileInfo*		FindFile(FileRefNumber inRefNumber);				// Return nullptr if not found.
 
 	bool            CreateDirectory(FileID inFileID);
@@ -326,13 +326,13 @@ private:
 	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
 	using FilesByPathHash = SegmentedHashMap<Hash128, FileID>;
 
-	SegmentedVector<FileRepo> mRepos;
+	SegmentedVector<FileRepo>  mRepos;
 	SegmentedVector<FileDrive> mDrives;					// All the drives that have at least one repo on them.
 
 	friend struct FileRepo;
 	FilesByRefNumberMap      mFilesByRefNumber;         // Map to find files by ref number.
 	FilesByPathHash          mFilesByPathHash;          // Map to find files by path hash.
-	mutable std::mutex       mFilesMutex;
+	mutable std::mutex       mFilesMutex;				// Mutex to protect access to the maps.
 
 	bool                     mInitialScanCompleted = false;
 

@@ -636,10 +636,10 @@ void gDrawDebugWindow()
 	for (FileRepo& repo : gFileSystem.mRepos)
 	{
 		ImGui::PushID(&repo);
-		if (ImGui::CollapsingHeader(TempString128("{} ({}) - {} Files##Repo", repo.mName, repo.mRootPath,repo.mFiles.size()).AsCStr()))
+		if (ImGui::CollapsingHeader(TempString128("{} ({}) - {} Files##Repo", repo.mName, repo.mRootPath, repo.mFiles.Size()).AsCStr()))
 		{
 			ImGuiListClipper clipper;
-			clipper.Begin((int)repo.mFiles.size());
+			clipper.Begin((int)repo.mFiles.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
