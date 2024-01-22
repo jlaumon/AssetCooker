@@ -257,7 +257,7 @@ private:
 
 	friend void                              gDrawCookingLog();
 	friend void                              gDrawSelectedCookingLogEntry();
-	SegmentedVector<CookingLogEntry>         mCookingLog;
+	VMemArray<CookingLogEntry>               mCookingLog;
 	std::mutex                               mCookingLogMutex;
 
 	std::array<HashSet<CookingLogEntry*>, 2> mTimeOutBatches;

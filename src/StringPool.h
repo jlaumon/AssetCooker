@@ -88,6 +88,7 @@ struct StringPool
 
 		template<typename... taArgs> void AppendFormat(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
 		{
+			// TODO this adds bytes 1 by 1, probably stupidly inefficient, parse first to get the size?
 			std::vformat_to(std::back_inserter(*this), inFmt.get(), std::make_format_args(inArgs...));
 		}
 

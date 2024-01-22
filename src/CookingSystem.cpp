@@ -978,11 +978,10 @@ void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_tok
 
 CookingLogEntry& CookingSystem::AllocateCookingLogEntry(CookingCommandID inCommandID)
 {
-	std::lock_guard lock(mCookingLogMutex);
+	auto             lock      = mCookingLog.Lock();
 
-	// TODO this isn't super thread safe since the UI doesn't lock all the time, replace by VMemArray and add a "safe to read" size that gets bumped only after construction
-	CookingLogEntry& log_entry = mCookingLog.emplace_back();
-	log_entry.mID              = { (uint32)mCookingLog.size() - 1 };
+	CookingLogEntry& log_entry = mCookingLog.Emplace(lock);
+	log_entry.mID              = { (uint32)mCookingLog.SizeRelaxed() - 1 };
 	log_entry.mCommandID       = inCommandID;
 	log_entry.mCookingState    = CookingState::Cooking;
 

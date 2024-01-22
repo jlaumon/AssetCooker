@@ -421,16 +421,12 @@ void gDrawCookingLog()
 		return;
 	}
 
-	// Lock the log while we're browsing it.
-	// TODO: would not be necessary with a virtual mem array, just need to read size atomically
-	std::lock_guard lock(gCookingSystem.mCookingLogMutex);
-
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
 
 		ImGuiListClipper clipper;
-		clipper.Begin((int)gCookingSystem.mCookingLog.size());
+		clipper.Begin((int)gCookingSystem.mCookingLog.Size());
 		while (clipper.Step())
 		{
 			if (gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry.IsValid())
