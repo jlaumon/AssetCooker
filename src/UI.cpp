@@ -665,7 +665,9 @@ void gDrawMain()
 	gDrawCookingLog();
 	gDrawCommandSearch();
 	gDrawSelectedCookingLogEntry();
-	gDrawDebugWindow();
+
+	if (gOpenDebugWindow)
+		gDrawDebugWindow();
 
 	if (gOpenImGuiDemo)
 		ImGui::ShowDemoWindow(&gOpenImGuiDemo);
