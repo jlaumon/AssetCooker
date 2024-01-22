@@ -9,4 +9,4 @@ void gDrawMainMenuBar();
 void gDrawMain();
 void gDrawCookingQueue();
 
-void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID);
+void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID, bool inScrollLog);

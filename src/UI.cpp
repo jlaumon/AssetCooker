@@ -255,10 +255,10 @@ void gDrawFileInfo(const FileInfo& inFile)
 }
 
 
-void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID)
+void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID, bool inScrollLog)
 {
 	gSelectedCookingLogEntry         = inLogEntryID;
-	gScrollToSelectedCookingLogEntry = true;
+	gScrollToSelectedCookingLogEntry = inScrollLog;
 	ImGui::SetWindowFocus(cCommandOutputWindowName);
 }
 
@@ -277,7 +277,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 		ImGui::SameLine();
 		if (ImGui::ButtonGrad("Select last Log"))
 		{
-			gSelectCookingLogEntry(inCommand.mLastCookingLog->mID);
+			gSelectCookingLogEntry(inCommand.mLastCookingLog->mID, true);
 		}
 	}
 
@@ -429,9 +429,8 @@ void gDrawCookingLog()
 		clipper.Begin((int)gCookingSystem.mCookingLog.Size());
 		while (clipper.Step())
 		{
-			if (gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry.IsValid())
+			if (clipper.ItemsHeight != -1.f && gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry.IsValid())
 			{
-				// TODO test this
 				gScrollToSelectedCookingLogEntry = false;
                 ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + (float)gSelectedCookingLogEntry.mIndex * clipper.ItemsHeight);
 			}
@@ -446,7 +445,7 @@ void gDrawCookingLog()
 				// TODO draw spinner and change color based on cooking state
 				if (ImGui::Selectable(gFormat(log_entry).AsCStr(), selected))
 				{
-					gSelectCookingLogEntry({ (uint32)i });
+					gSelectCookingLogEntry({ (uint32)i }, false);
 				}
 
 				bool open = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
@@ -561,7 +560,7 @@ void gDrawCookingThreads()
 				ImGui::Text(TempString128("{} {}", command.GetRule().mName, command.GetMainInput().GetFile().mPath));
 
 				if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(0))
-					gSelectCookingLogEntry(entry_id);
+					gSelectCookingLogEntry(entry_id, true);
 			}
 			else
 			{
