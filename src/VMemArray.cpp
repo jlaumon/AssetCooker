@@ -58,7 +58,7 @@ VMemBlock gVMemReserve(size_t inSize)
 
 void gVMemFree(VMemBlock inBlock)
 {
-	if (!VirtualFree(inBlock.mBegin, inBlock.Size(), MEM_RELEASE))
+	if (!VirtualFree(inBlock.mBegin, 0, MEM_RELEASE))
 		gApp.FatalError("VirtualFree failed - {}", GetLastErrorString());
 }
 
