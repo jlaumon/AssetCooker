@@ -17,13 +17,19 @@ struct FileTime;
 struct SystemTime;
 struct LocalTime;
 
+// Forward declarations of Win32 types.
+struct _FILE_ID_128;
+struct _FILETIME;
+struct _SYSTEMTIME;
+using USN = int64;
+
+constexpr USN cMaxUSN = 9223372036854775807;
 
 static constexpr int cFileRepoIndexBits = 6;
 static constexpr int cFileIndexBits     = 26;
 
 static constexpr uint32 cMaxFileRepos   = (1u << cFileRepoIndexBits) - 1;
 static constexpr uint32 cMaxFilePerRepo = (1u << cFileIndexBits) - 1;
-
 
 
 // Wrapper for a HANDLE that closes it on destruction.
@@ -42,15 +48,6 @@ struct OwnedHandle : NoCopy
 
 	void* mHandle = cInvalid;
 };
-
-
-// Forward declarations of Win32 types.
-struct _FILE_ID_128;
-struct _FILETIME;
-struct _SYSTEMTIME;
-using USN = int64;
-
-constexpr USN cMaxUSN = 9223372036854775807;
 
 
 // Alias for FILE_ID_128.
@@ -232,7 +229,7 @@ struct FileInfo : NoCopy
 	FileTime                      mLastChangeTime = {}; // Time of the last change to this file.
 
 	std::vector<CookingCommandID> mInputOf;             // List of commands that use this file as input.
-	std::vector<CookingCommandID> mOutputOf;            // List of commands that use this file as output. There should be only one // TODO tiny vector optimization
+	std::vector<CookingCommandID> mOutputOf;            // List of commands that use this file as output. There should be only one, othewise it's an error. // TODO tiny vector optimization // TODO actually detect that error
 
 	bool                          IsDeleted() const { return !mRefNumber.IsValid(); }
 	bool                          IsDirectory() const { return mIsDirectory != 0; }
@@ -247,6 +244,30 @@ struct FileInfo : NoCopy
 };
 
 
+struct ScanQueue
+{
+	void Push(FileID inDirID)
+	{
+		std::lock_guard lock(mMutex);
+		mDirectories.push_back(inDirID);
+	}
+
+	FileID Pop()
+	{
+		std::lock_guard lock(mMutex);
+
+		if (mDirectories.empty())
+			return FileID::cInvalid();
+
+		FileID dir = mDirectories.back();
+		mDirectories.pop_back();
+		return dir;
+	}
+
+	std::vector<FileID> mDirectories;
+	std::mutex          mMutex;
+};
+
 
 // Top level container for files.
 struct FileRepo : NoCopy
@@ -254,14 +275,15 @@ struct FileRepo : NoCopy
 	FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, FileDrive& inDrive);
 	~FileRepo() = default;
 
-	FileInfo&			GetFile(FileID inFileID)	{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
+	FileInfo&			GetFile(FileID inFileID)		{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
+	const FileInfo&		GetFile(FileID inFileID) const	{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
 	FileInfo&           GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
 	void                MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp);
 	void                MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std::unique_lock<std::mutex>& inLock);
 
 	StringView          RemoveRootPath(StringView inFullPath);
 
-	void                ScanDirectory(std::vector<FileID>& ioScanQueue, Span<uint8> ioBuffer);
+	void                ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<uint8> ioBuffer);
 
 	uint32              mIndex = 0;  // The index of this repo.
 	StringView          mName;       // A named used to identify the repo.
@@ -279,7 +301,9 @@ struct FileDrive : NoCopy
 {
 	FileDrive(char inDriveLetter);
 
-	bool                   ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioDirScanBuffer); // Check if files changed. Return false if there were no changes.
+	template <typename taFunctionType>
+	USN                    ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionType inRecordCallback) const; // TODO replace template by a typed std::function_ref equivalent
+	bool                   ProcessMonitorDirectory(Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan); // Check if files changed. Return false if there were no changes.
 	FileRepo*              FindRepoForPath(StringView inFullPath);                                        // Return nullptr if not in any repo.
 
 	OwnedHandle            OpenFileByRefNumber(FileRefNumber inRefNumber) const;
@@ -316,7 +340,7 @@ struct FileSystem : NoCopy
 
 	void			KickMonitorDirectoryThread();
 private:
-	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBuffer);
+	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan);
 	void			MonitorDirectoryThread(std::stop_token inStopToken);
 
 	FileDrive&		GetOrAddDrive(char inDriveLetter);

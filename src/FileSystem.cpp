@@ -2,6 +2,7 @@
 #include "App.h"
 #include "Debug.h"
 #include "Ticks.h"
+#include "CookingSystem.h"
 
 #include "win32/misc.h"
 #include "win32/file.h"
@@ -12,7 +13,6 @@
 
 #include <array>
 
-#include "CookingSystem.h"
 
 // These are not exactly the max path length allowed by Windows in all cases, but should be good enough.
 // TODO: these numbers are actually ridiculously high, lower them (except maybe in scanning code) and crash hard and blame user if they need more
@@ -556,13 +556,9 @@ static OptionalStringView sBuildFilePath(StringView inParentDirPath, WStringView
 }
 
 
-void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, Span<uint8> ioBuffer)
+void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<uint8> ioBuffer)
 {
-	// Grab one directory from the queue.
-	FileID dir_id = ioScanQueue.back();
-	ioScanQueue.pop_back();
-
-	FileInfo& dir = GetFile(dir_id); 
+	const FileInfo& dir = GetFile(inDirectoryID); 
 	gAssert(dir.IsDirectory());
 
 	OwnedHandle dir_handle = mDrive.OpenFileByRefNumber(dir.mRefNumber);
@@ -638,11 +634,11 @@ void FileRepo::ScanDirectory(std::vector<FileID>& ioScanQueue, Span<uint8> ioBuf
 			if (file.IsDirectory())
 			{
 				// Add directories to the scan queue.
-				ioScanQueue.push_back(file.mID);
+				ioScanQueue.Push(file.mID);
 			}
 			else
 			{
-				file.mCreationTime   = entry->ChangeTime.QuadPart;
+				file.mCreationTime   = entry->CreationTime.QuadPart;
 				file.mLastChangeTime = entry->ChangeTime.QuadPart;
 
 				// Update the USN.
@@ -772,71 +768,86 @@ USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
 	}
 }
 
-
-bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioDirScanBuffer)
+template <typename taFunctionType>
+USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionType inRecordCallback) const
 {
-	constexpr uint32 cInterestingReasons =	USN_REASON_FILE_CREATE |		// File was created.
-											USN_REASON_FILE_DELETE |		// File was deleted.
-											USN_REASON_DATA_OVERWRITE |		// File was modified.
-											USN_REASON_DATA_EXTEND |		// File was modified.
-											USN_REASON_DATA_TRUNCATION |	// File was modified.
-											USN_REASON_RENAME_NEW_NAME;		// File was renamed or moved (possibly to the recyle bin). That's essentially a delete and a create.
+	USN start_usn = inStartUSN;
 
-	READ_USN_JOURNAL_DATA_V1 journal_data;
-	journal_data.StartUsn          = mNextUSN;
-	journal_data.ReasonMask        = cInterestingReasons | USN_REASON_CLOSE; 
-	journal_data.ReturnOnlyOnClose = true;			// Only get events when the file is closed (ie. USN_REASON_CLOSE is present). We don't care about earlier events.
-	journal_data.Timeout           = 0;				// Never wait.
-	journal_data.BytesToWaitFor    = 0;				// Never wait.
-	journal_data.UsnJournalID      = mUSNJournalID;	// The journal we're querying.
-	journal_data.MinMajorVersion   = 3;				// Doc says it needs to be 3 to use 128-bit file identifiers (ie. FileRefNumbers).
-	journal_data.MaxMajorVersion   = 3;				// Don't want to support anything else.
-	
-	// Note: Use FSCTL_READ_UNPRIVILEGED_USN_JOURNAL to make that work without admin rights.
-	uint32 available_bytes;
-	if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioUSNBuffer.data(), (uint32)ioUSNBuffer.size(), &available_bytes, nullptr))
+	while (true)
 	{
-		// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
-		gApp.FatalError("Failed to read USN journal for {}:\\ - {}", mLetter, GetLastErrorString());
+		constexpr uint32 cInterestingReasons =	USN_REASON_FILE_CREATE |		// File was created.
+												USN_REASON_FILE_DELETE |		// File was deleted.
+												USN_REASON_DATA_OVERWRITE |		// File was modified.
+												USN_REASON_DATA_EXTEND |		// File was modified.
+												USN_REASON_DATA_TRUNCATION |	// File was modified.
+												USN_REASON_RENAME_NEW_NAME;		// File was renamed or moved (possibly to the recyle bin). That's essentially a delete and a create.
+
+		READ_USN_JOURNAL_DATA_V1 journal_data;
+		journal_data.StartUsn          = start_usn;
+		journal_data.ReasonMask        = cInterestingReasons | USN_REASON_CLOSE; 
+		journal_data.ReturnOnlyOnClose = true;			// Only get events when the file is closed (ie. USN_REASON_CLOSE is present). We don't care about earlier events.
+		journal_data.Timeout           = 0;				// Never wait.
+		journal_data.BytesToWaitFor    = 0;				// Never wait.
+		journal_data.UsnJournalID      = mUSNJournalID;	// The journal we're querying.
+		journal_data.MinMajorVersion   = 3;				// Doc says it needs to be 3 to use 128-bit file identifiers (ie. FileRefNumbers).
+		journal_data.MaxMajorVersion   = 3;				// Don't want to support anything else.
+		
+		// Note: Use FSCTL_READ_UNPRIVILEGED_USN_JOURNAL to make that work without admin rights.
+		uint32 available_bytes;
+		if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioBuffer.data(), (uint32)ioBuffer.size(), &available_bytes, nullptr))
+		{
+			// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
+			gApp.FatalError("Failed to read USN journal for {}:\\ - {}", mLetter, GetLastErrorString());
+		}
+
+		Span<uint8> available_buffer = ioBuffer.subspan(0, available_bytes);
+
+		USN next_usn = *(USN*)available_buffer.data();
+		available_buffer = available_buffer.subspan(sizeof(USN));
+
+		if (next_usn == start_usn)
+		{
+			// Nothing more to read.
+			break;
+		}
+
+		// Update the USN for next time.
+		start_usn = next_usn;
+
+		while (!available_buffer.empty())
+		{
+			const USN_RECORD_V3* record = (USN_RECORD_V3*)available_buffer.data();
+
+			// Defer iterating to the next record so that we can use continue.
+			defer { available_buffer = available_buffer.subspan(record->RecordLength); };
+
+			// We get all events where USN_REASON_CLOSE is present, but we don't care about all of them.
+			if ((record->Reason & cInterestingReasons) == 0)
+				continue;
+
+			inRecordCallback(*record);
+		}
 	}
 
-	Span<uint8> available_buffer = ioUSNBuffer.subspan(0, available_bytes);
+	return start_usn;
+}
 
-	USN next_usn = *(USN*)available_buffer.data();
-	available_buffer = available_buffer.subspan(sizeof(USN));
 
-	if (next_usn == mNextUSN)
+bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan)
+{
+	ScanQueue scan_queue;
+
+	USN next_usn = ReadUSNJournal(mNextUSN, ioBufferUSN, [this, ioBufferScan, &scan_queue](const USN_RECORD_V3& inRecord)
 	{
-		// Nothing happened.
-		return false;
-	}
+		bool is_directory = (inRecord.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
-	// Update the USN for next time.
-	mNextUSN = next_usn;
-
-	// Keep a scan queue outside the loop, to re-use it if we need to scan new directories.
-	std::vector<FileID> scan_queue;
-
-	while (!available_buffer.empty())
-	{
-		const USN_RECORD_V3* record = (USN_RECORD_V3*)available_buffer.data();
-
-		// Defer iterating to the next record so that we can use continue.
-		defer { available_buffer = available_buffer.subspan(record->RecordLength); };
-
-		// We get all events where USN_REASON_CLOSE is present, but we don't care about all of them.
-		if ((record->Reason & cInterestingReasons) == 0)
-			continue;
-
-		bool is_directory = (record->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-
-		if (record->Reason & (USN_REASON_FILE_DELETE | USN_REASON_RENAME_NEW_NAME))
+		if (inRecord.Reason & (USN_REASON_FILE_DELETE | USN_REASON_RENAME_NEW_NAME))
 		{
 			// If the file is in a repo, mark it as deleted.
-			FileInfo* deleted_file = gFileSystem.FindFile(record->FileReferenceNumber);
+			FileInfo* deleted_file = gFileSystem.FindFile(inRecord.FileReferenceNumber);
 			if (deleted_file)
 			{
-				FileTime  timestamp = record->TimeStamp.QuadPart;
+				FileTime  timestamp = inRecord.TimeStamp.QuadPart;
 
 				FileRepo& repo = gFileSystem.GetRepo(deleted_file->mID);
 
@@ -870,15 +881,15 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioD
 
 		}
 
-		if (record->Reason & (USN_REASON_FILE_CREATE | USN_REASON_RENAME_NEW_NAME))
+		if (inRecord.Reason & (USN_REASON_FILE_CREATE | USN_REASON_RENAME_NEW_NAME))
 		{
 			// Get a handle to the file.
-			OwnedHandle file_handle = OpenFileByRefNumber(record->FileReferenceNumber);
+			OwnedHandle file_handle = OpenFileByRefNumber(inRecord.FileReferenceNumber);
 			if (!file_handle.IsValid())
 			{
 				// TODO: probably need to retry later or something depending on the error, or scan the parent dir instead? we can't just ignore it (unless it's because the file was deleted already)
-				gApp.LogError("Failed to open newly created file {} - {}", FileRefNumber(record->FileReferenceNumber), GetLastErrorString());
-				continue;
+				gApp.LogError("Failed to open newly created file {} - {}", FileRefNumber(inRecord.FileReferenceNumber), GetLastErrorString());
+				return;
 			}
 
 			// Get its path.
@@ -887,8 +898,8 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioD
 			if (!full_path)
 			{
 				// TODO: same remark as failing to open
-				gApp.LogError("Failed to get path for newly created file {} - {}", FileRefNumber(record->FileReferenceNumber), GetLastErrorString());
-				continue;
+				gApp.LogError("Failed to get path for newly created file {} - {}", FileRefNumber(inRecord.FileReferenceNumber), GetLastErrorString());
+				return;
 			}
 
 			// Check if it's in a repo, otherwise ignore.
@@ -899,15 +910,16 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioD
 				StringView file_path = repo->RemoveRootPath(*full_path);
 
 				// Add the file.
-				FileInfo& file = repo->GetOrAddFile(file_path, is_directory ? FileType::Directory : FileType::File, record->FileReferenceNumber);
+				FileInfo& file = repo->GetOrAddFile(file_path, is_directory ? FileType::Directory : FileType::File, inRecord.FileReferenceNumber);
 
 				if (is_directory)
 				{
 					// If it's a directory, scan it to add all the files inside.
-					scan_queue = { file.mID };
+					scan_queue.Push(file.mID);
 
-					while (!scan_queue.empty())
-						repo->ScanDirectory(scan_queue, ioDirScanBuffer);
+					FileID dir_id;
+					while ((dir_id = scan_queue.Pop()) != FileID::cInvalid())
+						repo->ScanDirectory(dir_id, scan_queue, ioBufferScan);
 				}
 				else
 				{
@@ -915,8 +927,8 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioD
 					if (gApp.mLogFSActivity >= LogLevel::Verbose)
 						gApp.Log("Added {})", file);
 
-					file.mLastChangeUSN  = record->Usn;
-					file.mLastChangeTime = record->TimeStamp.QuadPart;
+					file.mLastChangeUSN  = inRecord.Usn;
+					file.mLastChangeTime = inRecord.TimeStamp.QuadPart;
 
 					gCookingSystem.QueueUpdateDirtyStates(file.mID);
 				}
@@ -925,26 +937,24 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioUSNBuffer, Span<uint8> ioD
 		else
 		{
 			// The file was just modified, update its USN.
-			FileInfo* file = gFileSystem.FindFile(record->FileReferenceNumber);
+			FileInfo* file = gFileSystem.FindFile(inRecord.FileReferenceNumber);
 			if (file)
 			{
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
 					gApp.Log("Modified {}", *file);
 
-				file->mLastChangeUSN  = record->Usn;
-				file->mLastChangeTime = record->TimeStamp.QuadPart;
+				file->mLastChangeUSN  = inRecord.Usn;
+				file->mLastChangeTime = inRecord.TimeStamp.QuadPart;
 
 				gCookingSystem.QueueUpdateDirtyStates(file->mID);
 			}
 		}
-	}
+	});
 
-	if (false && gApp.mLogFSActivity >= LogLevel::Verbose)
-	{
-		// Print how much of the buffer was used, to help sizing that buffer.
-		gApp.Log("Used {} of {} buffer.", SizeInBytes(available_bytes), SizeInBytes(ioUSNBuffer.size()));
-	}
+	if (next_usn == mNextUSN)
+		return false;
 
+	mNextUSN = next_usn;
 	return true;
 }
 
@@ -1093,41 +1103,82 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 
 
 
-void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBuffer)
+void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan)
 {
 	gApp.Log("Starting initial scan.");
 	int64 ticks_start = gGetTickCount();
 
-	std::vector<FileID> scan_queue;
-	scan_queue.reserve(1024);
+	ScanQueue scan_queue;
+	scan_queue.mDirectories.reserve(1024);
+
+	size_t total_files = 0;
 
 	// Check every repo.
 	for (auto& repo : mRepos)
 	{
 		// Initialize the scan queue.
-		scan_queue = { repo.mRootDirID };
+		scan_queue.Push(repo.mRootDirID);
 
 		// Process the queue.
-		do
+		FileID dir_id;
+		while ((dir_id = scan_queue.Pop()) != FileID::cInvalid())
 		{
-			repo.ScanDirectory(scan_queue, ioBuffer);
+			repo.ScanDirectory(dir_id, scan_queue, ioBufferScan);
 
 			if (inStopToken.stop_requested())
 				break;
+		}
 
-		} while (!scan_queue.empty());
+		total_files += repo.mFiles.Size();
 	}
-
-	size_t total_files = 0;
-	{
-		for (auto& repo : mRepos)
-			total_files += repo.mFiles.Size();
-	}
-
-	mInitialScanCompleted = true;
 
 	gApp.Log("Initial scan complete ({} files in {:.2f} seconds).", 
 		total_files, gTicksToSeconds(gGetTickCount() - ticks_start));
+
+	gApp.Log("Starting initial USN journal read.");
+	ticks_start   = gGetTickCount();
+
+	for (FileDrive& drive : mDrives)
+	{
+		// Read the entire USN journal to get the last USN for as many files as possible.
+		// This is faster than requesting USN for individual files even though we have to browse a lot of record.
+		USN start_usn = 0;
+		drive.ReadUSNJournal(start_usn, ioBufferUSN, [this, ioBufferScan, &scan_queue](const USN_RECORD_V3& inRecord) 
+		{
+			// If the file is in one of the repos, update its USN.
+			FileInfo* file = FindFile(inRecord.FileReferenceNumber);
+			if (file)
+				file->mLastChangeUSN = inRecord.Usn;
+		});
+	}
+
+	// Files that haven't been touched in a while might not be referenced in the USN journal anymore.
+	// For these, we'll need to fetch the last USN manually.
+	for (auto& repo : mRepos)
+		for (auto& file : repo.mFiles)
+		{
+			if (file.IsDeleted() || file.IsDirectory())
+				continue;
+
+			// Did already get a USN?
+			if (file.mLastChangeUSN == 0)
+			{
+				OwnedHandle file_handle = repo.mDrive.OpenFileByRefNumber(file.mRefNumber);
+				if (!file_handle.IsValid())
+				{
+					// TODO: depending on error, we should probably re-queue for scan later
+					if (gApp.mLogFSActivity>= LogLevel::Normal)
+						gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
+				}
+
+				file.mLastChangeUSN = repo.mDrive.GetUSN(file_handle);
+			}
+		}
+
+	mInitialScanCompleted = true;
+
+	gApp.Log("Initial USN journal read complete ({:.2f} seconds).", 
+		gTicksToSeconds(gGetTickCount() - ticks_start));
 }
 
 
@@ -1149,10 +1200,10 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 
 	// Split it in two, one for USN reads, one for directory reads.
 	Span buffer_USN  = { buffer_ptr,					cBufferSize / 2 };
-	Span buffer_scan = { buffer_ptr + cBufferSize / 2, cBufferSize / 2 };
+	Span buffer_scan = { buffer_ptr + cBufferSize / 2,	cBufferSize / 2 };
 
 	// Scan the repos.
-	InitialScan(inStopToken, buffer_scan);
+	InitialScan(inStopToken, buffer_USN, buffer_scan);
 
 	gCookingSystem.ProcessUpdateDirtyStates();
 
