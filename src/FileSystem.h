@@ -340,14 +340,14 @@ struct FileSystem : NoCopy
 
 	void			KickMonitorDirectoryThread();
 
-	enum class InitialScanState
+	enum class InitState
 	{
-		NotStarted,
+		NotInitialized,
 		Scanning,
 		ReadingUSNJournal,
-		Complete
+		Ready
 	};
-	InitialScanState GetInitialScanState() const { return mInitialScanState; }
+	InitState GetInitialScanState() const { return mInitState; }
 
 private:
 	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan);
@@ -356,25 +356,27 @@ private:
 	FileDrive&		GetOrAddDrive(char inDriveLetter);
 
 	friend void     gDrawDebugWindow();
+	friend void     gDrawStatusBar();
+	friend struct FileRepo;
 
 	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
 	using FilesByPathHash = SegmentedHashMap<Hash128, FileID>;
 
 	SegmentedVector<FileRepo>  mRepos;
-	SegmentedVector<FileDrive> mDrives;					// All the drives that have at least one repo on them.
+	SegmentedVector<FileDrive> mDrives;           // All the drives that have at least one repo on them.
 
-	friend struct FileRepo;
-	FilesByRefNumberMap      mFilesByRefNumber;         // Map to find files by ref number.
-	FilesByPathHash          mFilesByPathHash;          // Map to find files by path hash.
-	mutable std::mutex       mFilesMutex;				// Mutex to protect access to the maps.
+	FilesByRefNumberMap        mFilesByRefNumber; // Map to find files by ref number.
+	FilesByPathHash            mFilesByPathHash;  // Map to find files by path hash.
+	mutable std::mutex         mFilesMutex;       // Mutex to protect access to the maps.
 
-	InitialScanState         mInitialScanState = InitialScanState::NotStarted;
+	std::atomic<InitState>     mInitState = InitState::NotInitialized;
+	int64                      mInitTicks = 0;    // Time between the start of the process and the end of init.
 
-	std::mutex               mChangedFilesMutex;
-	SegmentedHashSet<FileID> mChangedFiles;
+	std::mutex                 mChangedFilesMutex;
+	SegmentedHashSet<FileID>   mChangedFiles;
 
-	std::jthread             mMonitorDirThread;
-	std::binary_semaphore    mMonitorDirThreadSignal = std::binary_semaphore(0);
+	std::jthread               mMonitorDirThread;
+	std::binary_semaphore      mMonitorDirThreadSignal = std::binary_semaphore(0);
 };
 
 

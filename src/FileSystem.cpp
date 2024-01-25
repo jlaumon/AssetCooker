@@ -1107,7 +1107,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 {
 	gApp.Log("Starting initial scan.");
 	Timer timer;
-	mInitialScanState = InitialScanState::Scanning;
+	mInitState = InitState::Scanning;
 
 	ScanQueue scan_queue;
 	scan_queue.mDirectories.reserve(1024);
@@ -1136,7 +1136,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
 		total_files, gTicksToSeconds(timer.GetTicks()));
 
-	mInitialScanState = InitialScanState::ReadingUSNJournal;
+	mInitState = InitState::ReadingUSNJournal;
 
 	for (FileDrive& drive : mDrives)
 	{
@@ -1189,7 +1189,8 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 			}
 		}
 
-	mInitialScanState = InitialScanState::Complete;
+	mInitTicks = gGetTickCount() - gProcessStartTicks;
+	mInitState = InitState::Ready;
 
 	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
 		files_without_usn, gTicksToSeconds(timer.GetTicks()));

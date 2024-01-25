@@ -6,6 +6,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
+#include "Ticks.h"
 
 #include "win32/misc.h"
 
@@ -649,6 +650,49 @@ void gDrawDebugWindow()
 }
 
 
+void gDrawStatusBar()
+{
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
+	float            height       = ImGui::GetFrameHeight();
+	if (ImGui::BeginViewportSideBar("##MainStatusBar", nullptr, ImGuiDir_Down, height, window_flags))
+	{
+		if (ImGui::BeginMenuBar())
+		{
+			switch (gFileSystem.GetInitialScanState())
+			{
+			case FileSystem::InitState::NotInitialized:
+			{
+				ImGui::TextUnformatted("Bonjour.");
+				break;
+			}
+			case FileSystem::InitState::Scanning: 
+			{
+				size_t file_count = 0;
+				for (const FileRepo& repo : gFileSystem.mRepos)
+					file_count += repo.mFiles.Size();
+
+				ImGui::Text(TempString128("Scanning... {} files found.", file_count));
+				break;
+			}
+			case FileSystem::InitState::ReadingUSNJournal: 
+			{
+				ImGui::TextUnformatted("Reading USN journal...");
+				break;
+			}
+			case FileSystem::InitState::Ready: 
+			{
+				ImGui::Text(TempString128("Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitTicks)));
+				break;
+			}
+			}
+
+			ImGui::EndMenuBar();
+		}
+		ImGui::End();
+	}
+}
+
+
 void gDrawMain()
 {
 	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode/* | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton*/);
@@ -660,6 +704,7 @@ void gDrawMain()
 	gDrawCookingLog();
 	gDrawCommandSearch();
 	gDrawSelectedCookingLogEntry();
+	gDrawStatusBar();
 
 	if (gOpenDebugWindow)
 		gDrawDebugWindow();
