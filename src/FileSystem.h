@@ -339,6 +339,16 @@ struct FileSystem : NoCopy
 	bool            CreateDirectory(FileID inFileID);
 
 	void			KickMonitorDirectoryThread();
+
+	enum class InitialScanState
+	{
+		NotStarted,
+		Scanning,
+		ReadingUSNJournal,
+		Complete
+	};
+	InitialScanState GetInitialScanState() const { return mInitialScanState; }
+
 private:
 	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan);
 	void			MonitorDirectoryThread(std::stop_token inStopToken);
@@ -358,7 +368,7 @@ private:
 	FilesByPathHash          mFilesByPathHash;          // Map to find files by path hash.
 	mutable std::mutex       mFilesMutex;				// Mutex to protect access to the maps.
 
-	bool                     mInitialScanCompleted = false;
+	InitialScanState         mInitialScanState = InitialScanState::NotStarted;
 
 	std::mutex               mChangedFilesMutex;
 	SegmentedHashSet<FileID> mChangedFiles;

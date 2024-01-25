@@ -1106,7 +1106,8 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan)
 {
 	gApp.Log("Starting initial scan.");
-	int64 ticks_start = gGetTickCount();
+	Timer timer;
+	mInitialScanState = InitialScanState::Scanning;
 
 	ScanQueue scan_queue;
 	scan_queue.mDirectories.reserve(1024);
@@ -1132,37 +1133,50 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		total_files += repo.mFiles.Size();
 	}
 
-	gApp.Log("Initial scan complete ({} files in {:.2f} seconds).", 
-		total_files, gTicksToSeconds(gGetTickCount() - ticks_start));
+	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
+		total_files, gTicksToSeconds(timer.GetTicks()));
 
-	gApp.Log("Starting initial USN journal read.");
-	ticks_start   = gGetTickCount();
+	mInitialScanState = InitialScanState::ReadingUSNJournal;
 
 	for (FileDrive& drive : mDrives)
 	{
+		timer.Reset();
+		gApp.Log("Reading USN journal for {}:\\.", drive.mLetter);
+
+		int record_count = 0;
+
 		// Read the entire USN journal to get the last USN for as many files as possible.
 		// This is faster than requesting USN for individual files even though we have to browse a lot of record.
 		USN start_usn = 0;
-		drive.ReadUSNJournal(start_usn, ioBufferUSN, [this, ioBufferScan, &scan_queue](const USN_RECORD_V3& inRecord) 
+		drive.ReadUSNJournal(start_usn, ioBufferUSN, [this, ioBufferScan, &scan_queue, &record_count](const USN_RECORD_V3& inRecord) 
 		{
 			// If the file is in one of the repos, update its USN.
 			FileInfo* file = FindFile(inRecord.FileReferenceNumber);
 			if (file)
 				file->mLastChangeUSN = inRecord.Usn;
+
+			record_count++;
 		});
+
+		gApp.Log("Done. Processed {} records in {:.2f} seconds.", record_count, gTicksToSeconds(timer.GetTicks()));
 	}
+
+	gApp.Log("Looking for files not present in the USN journal.");
 
 	// Files that haven't been touched in a while might not be referenced in the USN journal anymore.
 	// For these, we'll need to fetch the last USN manually.
+	int files_without_usn = 0;
 	for (auto& repo : mRepos)
 		for (auto& file : repo.mFiles)
 		{
 			if (file.IsDeleted() || file.IsDirectory())
 				continue;
 
-			// Did already get a USN?
+			// Already got a USN?
 			if (file.mLastChangeUSN == 0)
 			{
+				files_without_usn++;
+
 				OwnedHandle file_handle = repo.mDrive.OpenFileByRefNumber(file.mRefNumber);
 				if (!file_handle.IsValid())
 				{
@@ -1175,10 +1189,10 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 			}
 		}
 
-	mInitialScanCompleted = true;
+	mInitialScanState = InitialScanState::Complete;
 
-	gApp.Log("Initial USN journal read complete ({:.2f} seconds).", 
-		gTicksToSeconds(gGetTickCount() - ticks_start));
+	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
+		files_without_usn, gTicksToSeconds(timer.GetTicks()));
 }
 
 
