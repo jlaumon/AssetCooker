@@ -642,7 +642,8 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 				file.mLastChangeTime = entry->ChangeTime.QuadPart;
 
 				// Update the USN.
-				// TODO: this is by far the slowest part, find another way? FSCTL_ENUM_USN_DATA maybe?
+				// Note: Don't do it during the initial scan because it's not fast enough to do it on many files. We'll read the entire USN journal later instead.
+				if (gFileSystem.GetInitState() == FileSystem::InitState::Ready)
 				{
 					OwnedHandle file_handle = mDrive.OpenFileByRefNumber(file.mRefNumber);
 					if (!dir_handle.IsValid())
