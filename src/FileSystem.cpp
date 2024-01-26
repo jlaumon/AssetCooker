@@ -1104,35 +1104,63 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 
 
 
-void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan)
+
+void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN)
 {
 	gApp.Log("Starting initial scan.");
 	Timer timer;
 	mInitState = InitState::Scanning;
 
+	// Don't use too many threads otherwise they'll just spend their time on the hashmap mutex.
+	// TODO this could be improved
+	const int scan_thread_count = gMin((int)std::thread::hardware_concurrency(), 4);
+
+	// Prepare a scan queue that can be used by multiple threads.
 	ScanQueue scan_queue;
 	scan_queue.mDirectories.reserve(1024);
+	scan_queue.mThreadsBusy = scan_thread_count; // All threads start busy.
 
-	size_t total_files = 0;
-
-	// Check every repo.
+	// Put the root dir of each repo in the queue.
 	for (auto& repo : mRepos)
-	{
-		// Initialize the scan queue.
 		scan_queue.Push(repo.mRootDirID);
 
-		// Process the queue.
-		FileID dir_id;
-		while ((dir_id = scan_queue.Pop()) != FileID::cInvalid())
+	// Create temporary worker threads to scan directories.
+	{
+		std::vector<std::thread> scan_threads;
+		scan_threads.resize(scan_thread_count);
+		for (auto& thread : scan_threads)
 		{
-			repo.ScanDirectory(dir_id, scan_queue, ioBufferScan);
+			thread = std::thread([&]() 
+			{
+				gSetCurrentThreadName(L"Scan Directory Thread");
 
-			if (inStopToken.stop_requested())
-				break;
+				uint8 buffer_scan[32 * 1024];
+
+				// Process the queue until it's empty.
+				FileID dir_id;
+				while ((dir_id = scan_queue.Pop()) != FileID::cInvalid())
+				{
+					FileRepo& repo = gFileSystem.GetRepo(dir_id);
+
+					repo.ScanDirectory(dir_id, scan_queue, buffer_scan);
+
+					if (inStopToken.stop_requested())
+						return;
+				}
+			});
 		}
 
-		total_files += repo.mFiles.Size();
+		// Wait for the threads to finish their work.
+		for (auto& thread : scan_threads)
+			thread.join();
 	}
+
+	gAssert(scan_queue.mDirectories.empty());
+	gAssert(scan_queue.mThreadsBusy == 0);
+
+	size_t total_files = 0;
+	for (auto& repo : mRepos)
+		total_files += repo.mFiles.SizeRelaxed();
 
 	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
 		total_files, gTicksToSeconds(timer.GetTicks()));
@@ -1144,29 +1172,28 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		timer.Reset();
 		gApp.Log("Reading USN journal for {}:\\.", drive.mLetter);
 
-		int record_count = 0;
+		int file_count = 0;
 
 		// Read the entire USN journal to get the last USN for as many files as possible.
 		// This is faster than requesting USN for individual files even though we have to browse a lot of record.
 		USN start_usn = 0;
-		drive.ReadUSNJournal(start_usn, ioBufferUSN, [this, ioBufferScan, &scan_queue, &record_count](const USN_RECORD_V3& inRecord) 
+		drive.ReadUSNJournal(start_usn, ioBufferUSN, [this, &file_count](const USN_RECORD_V3& inRecord) 
 		{
 			// If the file is in one of the repos, update its USN.
 			FileInfo* file = FindFile(inRecord.FileReferenceNumber);
 			if (file)
+			{
+				file_count++;
 				file->mLastChangeUSN = inRecord.Usn;
-
-			record_count++;
+			}
 		});
 
-		gApp.Log("Done. Processed {} records in {:.2f} seconds.", record_count, gTicksToSeconds(timer.GetTicks()));
+		gApp.Log("Done. Found USN for {} files in {:.2f} seconds.", file_count, gTicksToSeconds(timer.GetTicks()));
 	}
-
-	gApp.Log("Looking for files not present in the USN journal.");
 
 	// Files that haven't been touched in a while might not be referenced in the USN journal anymore.
 	// For these, we'll need to fetch the last USN manually.
-	int files_without_usn = 0;
+	SegmentedVector<FileID> files_without_usn;
 	for (auto& repo : mRepos)
 		for (auto& file : repo.mFiles)
 		{
@@ -1175,26 +1202,59 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 
 			// Already got a USN?
 			if (file.mLastChangeUSN == 0)
-			{
-				files_without_usn++;
-
-				OwnedHandle file_handle = repo.mDrive.OpenFileByRefNumber(file.mRefNumber);
-				if (!file_handle.IsValid())
-				{
-					// TODO: depending on error, we should probably re-queue for scan later
-					if (gApp.mLogFSActivity>= LogLevel::Normal)
-						gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
-				}
-
-				file.mLastChangeUSN = repo.mDrive.GetUSN(file_handle);
-			}
+				files_without_usn.emplace_back(file.mID);
 		}
 
+	gApp.Log("{} files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.size());
+
+	if (!files_without_usn.empty())
+	{
+		// Don't create too many threads because they'll get stuck in locks in OpenFileByRefNumber if the cache is warm,
+		// or they'll be bottlenecked by IO otherwise.
+		const int usn_thread_count = gMin((int)std::thread::hardware_concurrency(), 4);
+
+		// Create temporary worker threads to get all the missing USNs.
+		std::vector<std::thread> usn_threads;
+		usn_threads.resize(usn_thread_count);
+		std::atomic_int current_index = 0;
+		for (auto& thread : usn_threads)
+		{
+			thread = std::thread([&]() 
+			{
+				gSetCurrentThreadName(L"USN Read Thread");
+
+				// Note: Could do better than having all threads hammer the same atomic, but the cost is negligible compared to OpenFileByRefNumber.
+				int index;
+				while ((index = current_index++) < (int)files_without_usn.size())
+				{
+					FileID      file_id     = files_without_usn[index];
+					FileRepo&   repo        = file_id.GetRepo();
+					FileInfo&   file        = file_id.GetFile();
+
+					OwnedHandle file_handle = repo.mDrive.OpenFileByRefNumber(file.mRefNumber);
+					if (!file_handle.IsValid())
+					{
+						// TODO: depending on error, we should probably re-queue for scan later
+						if (gApp.mLogFSActivity>= LogLevel::Normal)
+							gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
+					}
+
+					if (inStopToken.stop_requested())
+						return;
+				}
+			});
+		}
+
+		// Wait for the threads to finish their work.
+		for (auto& thread : usn_threads)
+			thread.join();
+	}
+	
 	mInitTicks = gGetTickCount() - gProcessStartTicks;
 	mInitState = InitState::Ready;
 
-	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
-		files_without_usn, gTicksToSeconds(timer.GetTicks()));
+	gApp.Log("Done. Fetched {} individual USNs in {:.2f} seconds.", 
+		files_without_usn.size(), gTicksToSeconds(timer.GetTicks()));
 }
 
 
@@ -1219,7 +1279,7 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	Span buffer_scan = { buffer_ptr + cBufferSize / 2,	cBufferSize / 2 };
 
 	// Scan the repos.
-	InitialScan(inStopToken, buffer_USN, buffer_scan);
+	InitialScan(inStopToken, buffer_USN);
 
 	gCookingSystem.ProcessUpdateDirtyStates();
 

@@ -658,7 +658,7 @@ void gDrawStatusBar()
 	{
 		if (ImGui::BeginMenuBar())
 		{
-			switch (gFileSystem.GetInitialScanState())
+			switch (gFileSystem.GetInitState())
 			{
 			case FileSystem::InitState::NotInitialized:
 			{

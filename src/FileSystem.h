@@ -186,8 +186,8 @@ struct FileID
 	uint32                  mRepoIndex : cFileRepoIndexBits = cMaxFileRepos;
 	uint32                  mFileIndex : cFileIndexBits     = cMaxFilePerRepo;
 
-	const FileInfo&         GetFile() const; // Convenience getter for the FileInfo itself.
-	const FileRepo&         GetRepo() const; // Convenience getter for the FileRepo.
+	FileInfo&				GetFile() const; // Convenience getter for the FileInfo itself.
+	FileRepo&				GetRepo() const; // Convenience getter for the FileRepo.
 
 	bool                    IsValid() const { return *this != cInvalid(); }
 	static constexpr FileID cInvalid() { return {}; }
@@ -248,24 +248,53 @@ struct ScanQueue
 {
 	void Push(FileID inDirID)
 	{
-		std::lock_guard lock(mMutex);
-		mDirectories.push_back(inDirID);
+		{
+			std::lock_guard lock(mMutex);
+			mDirectories.push_back(inDirID);
+		}
+
+		// Wake up any waiting thread.
+		mConditionVariable.notify_one();
 	}
 
 	FileID Pop()
 	{
-		std::lock_guard lock(mMutex);
+		std::unique_lock lock(mMutex);
 
+		// When the queue appears empty, we need to wait until all the other workers are also idle, because they may add more work to the queue.
 		if (mDirectories.empty())
-			return FileID::cInvalid();
+		{
+			if (mThreadsBusy-- == 1)
+			{
+				// This is the last thread, all the others are already idle/waiting.
+				// Wake them up and exit.
+				mConditionVariable.notify_all();
+				return FileID::cInvalid();
+			}
+			else
+			{
+				// Wait until more work is pushed into the queue, or all other threads are also idle.
+				// Note: while loop needed because there can be spurious wake ups.
+				while (mDirectories.empty() && mThreadsBusy > 0)
+					mConditionVariable.wait(lock);
+
+				// If the queue is indeed empty, exit.
+				if (mDirectories.empty())
+					return FileID::cInvalid();
+				else
+					mThreadsBusy++; // Otherwise this thread is busy again.
+			}
+		}
 
 		FileID dir = mDirectories.back();
 		mDirectories.pop_back();
 		return dir;
 	}
 
-	std::vector<FileID> mDirectories;
-	std::mutex          mMutex;
+	std::vector<FileID>     mDirectories;
+	std::mutex              mMutex;
+	std::condition_variable mConditionVariable;
+	int                     mThreadsBusy = 1;
 };
 
 
@@ -347,10 +376,10 @@ struct FileSystem : NoCopy
 		ReadingUSNJournal,
 		Ready
 	};
-	InitState GetInitialScanState() const { return mInitState; }
+	InitState       GetInitState() const { return mInitState; }
 
 private:
-	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan);
+	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN);
 	void			MonitorDirectoryThread(std::stop_token inStopToken);
 
 	FileDrive&		GetOrAddDrive(char inDriveLetter);
@@ -383,13 +412,13 @@ private:
 inline FileSystem gFileSystem;
 
 
-inline const FileInfo& FileID::GetFile() const
+inline FileInfo& FileID::GetFile() const
 {
 	return gFileSystem.GetFile(*this);
 }
 
 
-inline const FileRepo& FileID::GetRepo() const
+inline FileRepo& FileID::GetRepo() const
 {
 	return gFileSystem.GetRepo(*this);
 }
