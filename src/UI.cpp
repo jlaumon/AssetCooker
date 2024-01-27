@@ -1,14 +1,20 @@
 #include "App.h"
 #include "UI.h"
 
+
 #include "FileSystem.h"
 #include "CookingSystem.h"
+#include "Debug.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
 #include "Ticks.h"
 
 #include "win32/misc.h"
+#include "win32/window.h"
+
+extern "C" __declspec(dllimport) HINSTANCE WINAPI ShellExecuteA(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShowCmd);
+
 
 ImGuiStyle             gStyle                           = {};
 
@@ -207,9 +213,14 @@ void gDrawFileInfo(const FileInfo& inFile)
 	{
 		ImGui::Text(gFormat(inFile).AsStringView());
 
-		ImGui::ButtonGrad("Open Dir");
-		ImGui::SameLine();
-		ImGui::ButtonGrad("Open File");
+		if (ImGui::ButtonGrad("Show in Explorer"))
+		{
+			// The more common version, doesn't open a new window if there's already one, but doesn't allow selecting a file. 
+			//ShellExecuteA(nullptr, "explore", TempString512("{}{}", inFile.GetRepo().mRootPath, inFile.GetDirectory()).AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
+
+			// Always open a new window, but at least selects the file.
+			ShellExecuteA(nullptr, nullptr, "explorer", TempString512("/select, {}{}", inFile.GetRepo().mRootPath, inFile.mPath).AsCStr(), nullptr, SW_SHOWDEFAULT);
+		}
 
 		ImGui::SeparatorText("Details");
 
