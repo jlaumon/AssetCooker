@@ -656,39 +656,57 @@ void gDrawStatusBar()
 	float            height       = ImGui::GetFrameHeight();
 	if (ImGui::BeginViewportSideBar("##MainStatusBar", nullptr, ImGuiDir_Down, height, window_flags))
 	{
+		defer { ImGui::End(); };
+
 		if (ImGui::BeginMenuBar())
 		{
-			switch (gFileSystem.GetInitState())
-			{
-			case FileSystem::InitState::NotInitialized:
-			{
-				ImGui::TextUnformatted("Bonjour.");
-				break;
-			}
-			case FileSystem::InitState::Scanning: 
-			{
-				size_t file_count = 0;
-				for (const FileRepo& repo : gFileSystem.mRepos)
-					file_count += repo.mFiles.Size();
+			defer { ImGui::EndMenuBar(); };
 
-				ImGui::Text(TempString128("Scanning... {} files found.", file_count));
-				break;
-			}
-			case FileSystem::InitState::ReadingUSNJournal: 
+			auto init_state = gFileSystem.GetInitState();
+			if (init_state < FileSystem::InitState::Ready)
 			{
-				ImGui::TextUnformatted("Reading USN journal...");
-				break;
-			}
-			case FileSystem::InitState::Ready: 
-			{
-				ImGui::Text(TempString128("Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitTicks)));
-				break;
-			}
-			}
+				switch (init_state)
+				{
+				default:
+				case FileSystem::InitState::NotInitialized:
+				{
+					ImGui::TextUnformatted("Bonjour.");
+					break;
+				}
+				case FileSystem::InitState::Scanning: 
+				{
+					size_t file_count = 0;
+					for (const FileRepo& repo : gFileSystem.mRepos)
+						file_count += repo.mFiles.Size();
 
-			ImGui::EndMenuBar();
+					ImGui::Text(TempString128("Scanning... {} files found.", file_count));
+					break;
+				}
+				case FileSystem::InitState::ReadingUSNJournal: 
+				{
+					ImGui::TextUnformatted("Reading USN journal...");
+					break;
+				}
+				case FileSystem::InitState::ReadingIndividualUSNs: 
+				{
+					ImGui::TextUnformatted(TempString128("Reading individual USNs... {:5}/{}", gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch));
+					break;
+				}
+				}
+			}
+			else
+			{
+				double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
+				if (seconds_since_ready < 5.0)
+				{
+					ImGui::Text(TempString128("Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
+				}
+				else
+				{
+					ImGui::TextUnformatted("Let's get cooking.");
+				}
+			}
 		}
-		ImGui::End();
 	}
 }
 

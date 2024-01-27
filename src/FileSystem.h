@@ -374,6 +374,7 @@ struct FileSystem : NoCopy
 		NotInitialized,
 		Scanning,
 		ReadingUSNJournal,
+		ReadingIndividualUSNs,
 		Ready
 	};
 	InitState       GetInitState() const { return mInitState; }
@@ -399,7 +400,13 @@ private:
 	mutable std::mutex         mFilesMutex;       // Mutex to protect access to the maps.
 
 	std::atomic<InitState>     mInitState = InitState::NotInitialized;
-	int64                      mInitTicks = 0;    // Time between the start of the process and the end of init.
+	struct InitStats
+	{
+		int             mIndividualUSNToFetch = 0;
+		std::atomic_int mIndividualUSNFetched = 0;
+		int64           mReadyTicks           = 0; // Tick count when the Ready state was reached.
+	};
+	InitStats                  mInitStats;
 
 	std::mutex                 mChangedFilesMutex;
 	SegmentedHashSet<FileID>   mChangedFiles;

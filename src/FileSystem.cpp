@@ -1205,6 +1205,10 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 				files_without_usn.emplace_back(file.mID);
 		}
 
+	mInitStats.mIndividualUSNToFetch = (int)files_without_usn.size();
+	mInitStats.mIndividualUSNFetched = 0;
+	mInitState = InitState::ReadingIndividualUSNs;
+
 	gApp.Log("{} files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.size());
 
 	if (!files_without_usn.empty())
@@ -1239,6 +1243,8 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 							gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
 					}
 
+					mInitStats.mIndividualUSNFetched++;
+
 					if (inStopToken.stop_requested())
 						return;
 				}
@@ -1250,7 +1256,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 			thread.join();
 	}
 	
-	mInitTicks = gGetTickCount() - gProcessStartTicks;
+	mInitStats.mReadyTicks = gGetTickCount();
 	mInitState = InitState::Ready;
 
 	gApp.Log("Done. Fetched {} individual USNs in {:.2f} seconds.", 
