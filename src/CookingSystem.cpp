@@ -221,6 +221,9 @@ FileID CookingCommand::GetDepFile() const
 
 void CookingCommand::UpdateDirtyState()
 {
+	// Dirty state should not be updated while still cooking!
+	gAssert(!mLastCookingLog || mLastCookingLog->mCookingState > CookingState::Cooking);
+
 	DirtyState dirty_state = NotDirty;
 
 	USN last_cook = mLastCook;
@@ -236,52 +239,79 @@ void CookingCommand::UpdateDirtyState()
 			last_cook = gMin(last_cook, file_id.GetFile().mLastChangeUSN);
 	}
 
+	bool all_input_missing = true;
 	for (FileID file_id : mInputs)
 	{
 		const FileInfo& file = file_id.GetFile();
 
 		if (file.IsDeleted())
+		{
 			dirty_state |= InputMissing;
-		else if (file.mLastChangeUSN > last_cook)
-			dirty_state |= InputChanged;
+		}
+		else
+		{
+			all_input_missing = false;
+
+			if (file.mLastChangeUSN > last_cook)
+				dirty_state |= InputChanged;
+		}
 	}
+	
+	if (all_input_missing)
+		dirty_state |= AllInputsMissing;
 
-	USN min_output_usn = cMaxUSN;
-
+	bool all_output_written = true;
+	bool all_output_missing = true;
 	for (FileID file_id : mOutputs)
 	{
 		const FileInfo& file = file_id.GetFile();
 
 		if (file.IsDeleted())
 			dirty_state |= OutputMissing;
+		else
+			all_output_missing = false;
 
-		min_output_usn = gMin(min_output_usn, file.mLastChangeUSN);
+		if (file.mLastChangeUSN < mLastCook)
+			all_output_written = false;
 	}
+	
+	if (all_output_missing)
+		dirty_state |= AllOutputsMissing;
 
-	// If the command is waiting for results and all outputs were written, change its state to success.
-	if (mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting)
+	bool last_cook_is_waiting = mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting;
+	bool last_cook_is_cleanup = mLastCookingLog && mLastCookingLog->mIsCleanup;
+
+	// If the command is waiting for results and all outputs were written (or deleted in case of cleanup), change its state to success.
+	if (last_cook_is_waiting)
 	{
-		if (min_output_usn >= mLastCook)
+		if (!last_cook_is_cleanup && all_output_written ||
+			last_cook_is_cleanup && all_output_missing)
+		{
 			mLastCookingLog->mCookingState = CookingState::Success;
+			last_cook_is_waiting = false;
+		}
 	}
-
-	bool was_dirty = IsDirty();
 
 	mDirtyState = dirty_state;
 
-	if (was_dirty == IsDirty())
+	// Wait until the last cook is finished before re-adding to the queue (or removing it from the queue).
+	if (last_cook_is_waiting)
 		return;
 
-	if (IsDirty())
+	if (IsDirty() && !mIsQueued)
 	{
 		// TODO move all that to functions in CookingSystem and remove friend
+		mIsQueued = true;
+
 		gCookingSystem.mCommandsDirty.Push(mID);
 
 		if (!gCookingSystem.IsCookingPaused())
 			gCookingSystem.mCommandsToCook.Push(mID);
 	}
-	else
+	else if (!IsDirty() && mIsQueued)
 	{
+		mIsQueued = false;
+
 		// Keep the order because it makes the UI much nicer.
 		gCookingSystem.mCommandsDirty.Remove(mID, RemoveOption::KeepOrder | RemoveOption::ExpectFound);
 
@@ -716,7 +746,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	ioCommand.mLastCookingLog = &log_entry;
 
 	// Sleep to make things slow (for debugging).
-	// Note: use the command main input path as seed to make it consistent accross runs (to test loading bars).
+	// Note: use the command main input path as seed to make it consistent accross runs (useful if we want to add loading bars).
 	if (mSlowMode)
 		Sleep(100 + gRand32((uint32)gHash(ioCommand.GetMainInput().GetFile().mPath)) % 5000);
 
@@ -855,6 +885,54 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 }
 
 
+void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioThread)
+{
+	CookingLogEntry& log_entry = AllocateCookingLogEntry(ioCommand.mID);
+	log_entry.mIsCleanup       = true;
+
+	// Set the start time.
+	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
+
+	ioThread.mCurrentLogEntry  = log_entry.mID;
+	defer { ioThread.mCurrentLogEntry = CookingLogEntryID::cInvalid(); };
+
+	// Set the log entry on the command.
+	ioCommand.mLastCookingLog = &log_entry;
+
+	StringPool::ResizableStringView output_str = ioThread.mStringPool.CreateResizableString();
+
+	bool error = false;
+	for (FileID output_id : ioCommand.mOutputs)
+	{
+		if (gFileSystem.DeleteFile(output_id))
+		{
+			output_str.AppendFormat("Deleted {}{}", output_id.GetRepo().mRootPath, output_id.GetFile().mPath);
+		}
+		else
+		{
+			output_str.AppendFormat("[error] Failed to delete {}{}", output_id.GetRepo().mRootPath, output_id.GetFile().mPath);
+			error = true;
+		}
+	}
+
+	log_entry.mOutput       = output_str.AsStringView();
+	log_entry.mTimeEnd      = gGetSystemTimeAsFileTime();
+
+	if (error)
+	{
+		log_entry.mCookingState = CookingState::Error;
+	}
+	else
+	{
+		log_entry.mCookingState = CookingState::Waiting;
+		AddTimeOut(&log_entry);
+
+		// Make sure the file changes are processed as soon as possible.
+		gFileSystem.KickMonitorDirectoryThread();
+	}
+}
+
+
 void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 {
 	std::lock_guard lock(mTimeOutsMutex);
@@ -970,7 +1048,11 @@ void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_tok
 		// TODO need to wait until all commands of prio N have properly finished cooking before starting prio N + 1
 		if (command_id.IsValid())
 		{
-			CookCommand(GetCommand(command_id), *ioThread);
+			auto& command = GetCommand(command_id);
+			if (command.mDirtyState & CookingCommand::AllInputsMissing)
+				CleanupCommand(command, *ioThread);
+			else
+				CookCommand(command, *ioThread);
 		}
 	}
 }

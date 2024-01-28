@@ -366,6 +366,7 @@ struct FileSystem : NoCopy
 	FileInfo*		FindFile(FileRefNumber inRefNumber);				// Return nullptr if not found.
 
 	bool            CreateDirectory(FileID inFileID);
+	bool            DeleteFile(FileID inFileID);
 
 	void			KickMonitorDirectoryThread();
 

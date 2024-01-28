@@ -112,8 +112,9 @@ struct CookingLogEntry
 {
 	CookingLogEntryID         mID;
 	CookingCommandID          mCommandID;
-	FileTime                  mTimeStart;
 	std::atomic<CookingState> mCookingState = CookingState::Unknown;
+	bool                      mIsCleanup    = false;
+	FileTime                  mTimeStart;
 	FileTime                  mTimeEnd;		// Unsafe to read unless CookingState is > Cooking. TODO add getters that assert this
 	StringView                mOutput;		// Unsafe to read unless CookingState is > Cooking.
 };
@@ -129,19 +130,23 @@ struct CookingCommand : NoCopy
 
 	enum DirtyState : uint8
 	{
-		NotDirty      = 0,
-		InputMissing  = 0b0001,	// Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error (bad ordering, or truly missing input).
-		InputChanged  = 0b0010,
-		OutputMissing = 0b0100,
+		NotDirty          = 0,
+		InputMissing      = 0b00001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
+		InputChanged      = 0b00010,
+		OutputMissing     = 0b00100,
+		AllInputsMissing  = 0b01000, // Command needs to be cleaned up.
+		AllOutputsMissing = 0b10000,
 	};
-	// TODO is InputMissing really needed? and is its comment still true?
 
 	DirtyState                mDirtyState     = NotDirty;
+	bool                      mIsQueued       = false;
 	USN                       mLastCook       = 0;
 	CookingLogEntry*          mLastCookingLog = nullptr;
 
 	void                      UpdateDirtyState();
-	bool                      IsDirty() const { return mDirtyState != NotDirty; }
+	bool                      IsDirty() const { return mDirtyState != NotDirty && !IsCleanedUp(); }
+	bool                      NeedsCleanup() const { return (mDirtyState & AllInputsMissing) && !IsCleanedUp(); }
+	bool                      IsCleanedUp() const { return (mDirtyState & (AllInputsMissing | AllOutputsMissing)) == (AllInputsMissing | AllOutputsMissing); }
 
 	CookingState              GetCookingState() const { return mLastCookingLog ? mLastCookingLog->mCookingState.load() : CookingState::Unknown; }
 
@@ -232,6 +237,7 @@ private:
 	void                                  CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken);
 	CookingLogEntry&                      AllocateCookingLogEntry(CookingCommandID inCommandID);
 	void                                  CookCommand(CookingCommand& ioCommand, CookingThread& ioThread);
+	void                                  CleanupCommand(CookingCommand& ioCommand, CookingThread& ioThread); // Delete all outputs.
 	void                                  AddTimeOut(CookingLogEntry* inLogEntry);
 	void                                  ProcessTimeOuts();
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);

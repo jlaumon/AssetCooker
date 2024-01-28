@@ -176,7 +176,10 @@ void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID>
 
 TempString256 gFormat(const CookingCommand& inCommand)
 {
-	return { "Command: {} {}", inCommand.GetRule().mName, inCommand.GetMainInput().GetFile().mPath };
+	return { "Command: {}{} {}",
+		inCommand.GetRule().mName,
+		inCommand.NeedsCleanup() ? " (Cleanup)" : "",
+		inCommand.GetMainInput().GetFile().mPath };
 }
 
 
@@ -185,10 +188,12 @@ TempString256 gFormat(const CookingLogEntry& inLogEntry)
 	const CookingCommand& command = gCookingSystem.GetCommand(inLogEntry.mCommandID);
 	const CookingRule&    rule    = gCookingSystem.GetRule(command.mRuleID);
 	SystemTime            start_time = inLogEntry.mTimeStart.ToLocalTime();
-	return { "[#{} {:02}:{:02}:{:02}] {:8} {} - {}",
+	return { "[#{} {:02}:{:02}:{:02}] {}{:10} {} - {}",
 		rule.mPriority,
 		start_time.mHour, start_time.mMinute, start_time.mSecond,
-		command.GetRule().mName, command.GetMainInput().GetFile().mPath, gToStringView(inLogEntry.mCookingState) };
+		command.GetRule().mName,
+		inLogEntry.mIsCleanup ? " (Cleanup)" : "",
+		command.GetMainInput().GetFile().mPath, gToStringView(inLogEntry.mCookingState) };
 }
 
 
@@ -281,7 +286,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	ImGui::Text(gFormat(inCommand));
 
-	if (ImGui::ButtonGrad("Cook"))
+	if (!inCommand.IsCleanedUp() && ImGui::ButtonGrad("Cook"))
 		gCookingSystem.ForceCook(inCommand.mID);
 
 	if (inCommand.mLastCookingLog)
@@ -301,18 +306,28 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 		ImGui::Indent();
 
-		if (inCommand.mDirtyState & CookingCommand::InputMissing)
-			ImGui::TextUnformatted("Input Missing");
-		if (inCommand.mDirtyState & CookingCommand::InputChanged)
-			ImGui::TextUnformatted("Input Changed");
-		if (inCommand.mDirtyState & CookingCommand::OutputMissing)
-			ImGui::TextUnformatted("Output Missing");
+		if (inCommand.mDirtyState & CookingCommand::AllInputsMissing)
+		{
+			ImGui::TextUnformatted("All Inputs Missing - Needs cleanup");
+		}
+		else
+		{
+			if (inCommand.mDirtyState & CookingCommand::InputMissing)
+				ImGui::TextUnformatted("Input Missing");
+			if (inCommand.mDirtyState & CookingCommand::InputChanged)
+				ImGui::TextUnformatted("Input Changed");
+			if (inCommand.mDirtyState & CookingCommand::OutputMissing)
+				ImGui::TextUnformatted("Output Missing");
+		}
 
 		ImGui::Unindent();
 	}
 	else
 	{
-		ImGui::TextUnformatted("Up To Date");
+		if (inCommand.IsCleanedUp())
+			ImGui::TextUnformatted("Cleaned Up");
+		else
+			ImGui::TextUnformatted("Up To Date");
 	}
 
 	ImGui::SeparatorText("Related Files");

@@ -1103,6 +1103,21 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 }
 
 
+bool FileSystem::DeleteFile(FileID inFileID)
+{
+	const FileInfo& file = GetFile(inFileID);
+	const FileRepo& repo = GetRepo(inFileID);
+
+	PathBufferUTF8 abs_path_buffer;
+	StringView abs_path = gConcat(abs_path_buffer, repo.mRootPath, file.mPath);
+
+	bool success = DeleteFileA(abs_path.AsCStr());
+
+	if (!success)
+		gApp.LogError("Failed to delete {} - {}", abs_path, GetLastErrorString());
+
+	return success;
+}
 
 
 void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN)
