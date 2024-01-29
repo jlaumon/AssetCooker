@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Strings.h"
-#include "data/fonts/vscode-codicons/IconsCodicons.h"
+#include "data/fonts/Fork-Awesome/IconsForkAwesome.h"
 
 namespace ImGui
 {
@@ -14,4 +14,6 @@ template <size_t taSize> inline void SeparatorText(const TempString<taSize>& inT
 
 bool                                 ColoredButtonV1(const char* label, const ImVec2& size, ImU32 text_color, ImU32 bg_color_1, ImU32 bg_color_2);
 bool                                 ButtonGrad(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+bool                                 BeginPopupWithTitle(const char* str_id, StringView inTitle, ImGuiWindowFlags flags = ImGuiWindowFlags_None);
 }

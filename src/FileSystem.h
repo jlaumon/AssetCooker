@@ -139,7 +139,7 @@ struct SystemTime
 };
 static_assert(sizeof(SystemTime) == 16);
 
-
+// TODO implicit conversion from LocalTime to SystemTime should not be allowed
 struct LocalTime : SystemTime
 {
 	constexpr LocalTime()                                           = default;

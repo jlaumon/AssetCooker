@@ -106,12 +106,12 @@ void gUIUpdate()
 		{
 			ImFontConfig icons_config          = font_config;
 			icons_config.MergeMode             = true; // Merge inot the default font.
-			icons_config.GlyphOffset.y         = 3.f * gUIScale.GetFinalScale();
+			icons_config.GlyphOffset.y         = 0;
 
-			static const ImWchar icon_ranges[] = { ICON_MIN_CI, ICON_MAX_CI, 0 };
+			static const ImWchar icon_ranges[] = { ICON_MIN_FK, ICON_MAX_FK, 0 };
 
-			auto codicon_ttf = gGetEmbeddedFont("codicon");
-			io.Fonts->AddFontFromMemoryTTF((void*)codicon_ttf.data(), (int)codicon_ttf.size(), 14.0f * gUIScale.GetFinalScale(), &icons_config, icon_ranges);
+			auto ttf_data = gGetEmbeddedFont("forkawesome");
+			io.Fonts->AddFontFromMemoryTTF((void*)ttf_data.data(), (int)ttf_data.size(), 14.0f * gUIScale.GetFinalScale(), &icons_config, icon_ranges);
 		}
 
 		// Re-create the DX11 objects.
@@ -176,10 +176,10 @@ void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID>
 
 TempString256 gFormat(const CookingCommand& inCommand)
 {
-	return { "Command: {}{} {}",
+	return { "{}{} {}",
 		inCommand.GetRule().mName,
 		inCommand.NeedsCleanup() ? " (Cleanup)" : "",
-		inCommand.GetMainInput().GetFile().mPath };
+		inCommand.GetMainInput().GetFile() };
 }
 
 
@@ -214,11 +214,21 @@ void gDrawFileInfo(const FileInfo& inFile)
 	if (open)
 		ImGui::OpenPopup("Popup");
 
-	if (ImGui::BeginPopup("Popup"))
+	if (ImGui::IsPopupOpen("Popup") && 
+		ImGui::BeginPopupWithTitle("Popup", TempString128(ICON_FK_FILE_O " {}: ...\\{}", inFile.GetRepo().mName, inFile.GetName()).AsCStr()))
+		//ImGui::BeginPopup("Popup"))
 	{
-		ImGui::Text(gFormat(inFile).AsStringView());
+		ImGui::Spacing();
+		// TODO auto wrapping is kind of incompatible with window auto resizing, need to provide a wrap position, or maybe make sure it isn't the first item drawn?
+		// https://github.com/ocornut/imgui/issues/778#issuecomment-239696811
+		//ImGui::PushTextWrapPos(0.0f);
+		ImGui::Text(gFormat(inFile));
+		//ImGui::PopTextWrapPos();
+		ImGui::Spacing();
 
-		if (ImGui::ButtonGrad("Show in Explorer"))
+		// TODO make it clearer when we're looking at a deleted file
+
+		if (!inFile.IsDeleted() && ImGui::ButtonGrad("Show in Explorer"))
 		{
 			// The more common version, doesn't open a new window if there's already one, but doesn't allow selecting a file. 
 			//ShellExecuteA(nullptr, "explore", TempString512("{}{}", inFile.GetRepo().mRootPath, inFile.GetDirectory()).AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
@@ -282,9 +292,18 @@ void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID, bool inScrollLog)
 
 void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 {
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
+	if (!ImGui::IsPopupOpen("Popup"))
+		return;
 
-	ImGui::Text(gFormat(inCommand));
+	if (!ImGui::BeginPopupWithTitle("Popup", TempString512(ICON_FK_CUTLERY " {}{} ...\\{}",
+		inCommand.GetRule().mName,
+		inCommand.NeedsCleanup() ? " (Cleanup)" : "",
+		inCommand.GetMainInput().GetFile().GetName()).AsStringView()))
+		return;
+
+	defer { ImGui::EndPopup(); };
+
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
 
 	if (!inCommand.IsCleanedUp() && ImGui::ButtonGrad("Cook"))
 		gCookingSystem.ForceCook(inCommand.mID);
@@ -347,16 +366,10 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 	bool clicked = ImGui::Selectable(gFormat(inCommand).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
-	// TODO add tooltip when hovering the selectable? or just over the icon (if there's one)
-
 	if (open)
 		ImGui::OpenPopup("Popup");
 
-	if (ImGui::BeginPopup("Popup"))
-	{
-		gDrawCookingCommandPopup(inCommand);
-		ImGui::EndPopup();
-	}
+	gDrawCookingCommandPopup(inCommand);
 }
 
 
@@ -442,35 +455,48 @@ void gDrawCookingQueue()
 
 void gDrawCookingLog()
 {
-	if (!ImGui::Begin("Cooking Log"))
-	{
-		ImGui::End();
+	bool visible = ImGui::Begin("Cooking Log");
+	defer { ImGui::End(); };
+
+	if (!visible)
 		return;
-	}
 
-	if (ImGui::BeginChild("ScrollingRegion"))
+	if (!ImGui::BeginTable("CookingLog", 4, ImGuiTableFlags_ScrollY))
+		return;
+	defer { ImGui::EndTable(); };
+
+	ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed);
+	ImGui::TableSetupColumn("Rule", ImGuiTableColumnFlags_WidthFixed);
+	ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch);
+	ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed);
+
+	ImGui::TableNextRow();
+
+	ImGuiListClipper clipper;
+	clipper.Begin((int)gCookingSystem.mCookingLog.Size());
+	defer { clipper.End(); };
+	while (clipper.Step())
 	{
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
-
-		ImGuiListClipper clipper;
-		clipper.Begin((int)gCookingSystem.mCookingLog.Size());
-		while (clipper.Step())
+		if (clipper.ItemsHeight != -1.f && gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry.IsValid())
 		{
-			if (clipper.ItemsHeight != -1.f && gScrollToSelectedCookingLogEntry && gSelectedCookingLogEntry.IsValid())
+			gScrollToSelectedCookingLogEntry = false;
+            ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + (float)gSelectedCookingLogEntry.mIndex * clipper.ItemsHeight);
+		}
+
+		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+		{
+			const CookingLogEntry& log_entry = gCookingSystem.mCookingLog[i];
+			const CookingCommand&  command   = gCookingSystem.GetCommand(log_entry.mCommandID);
+			const CookingRule&     rule      = gCookingSystem.GetRule(command.mRuleID);
+			bool                   selected  = (gSelectedCookingLogEntry.mIndex == (uint32)i);
+
+			ImGui::PushID(&log_entry);
+			defer { ImGui::PopID(); };
+
+			ImGui::TableNextColumn();
 			{
-				gScrollToSelectedCookingLogEntry = false;
-                ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + (float)gSelectedCookingLogEntry.mIndex * clipper.ItemsHeight);
-			}
-
-			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-			{
-				const CookingLogEntry& log_entry     = gCookingSystem.mCookingLog[i];
-				bool                   selected      = (gSelectedCookingLogEntry.mIndex == (uint32)i);
-
-				ImGui::PushID(&log_entry);
-
-				// TODO draw spinner and change color based on cooking state
-				if (ImGui::Selectable(gFormat(log_entry).AsCStr(), selected))
+				LocalTime start_time = log_entry.mTimeStart.ToLocalTime();
+				if (ImGui::Selectable(TempString32("[#{} {:02}:{:02}:{:02}]", rule.mPriority, start_time.mHour, start_time.mMinute, start_time.mSecond).AsCStr(), selected, ImGuiSelectableFlags_SpanAllColumns))
 				{
 					gSelectCookingLogEntry({ (uint32)i }, false);
 				}
@@ -479,23 +505,29 @@ void gDrawCookingLog()
 				if (open)
 					ImGui::OpenPopup("Popup");
 
-				if (ImGui::BeginPopup("Popup"))
-				{
-					gDrawCookingCommandPopup(gCookingSystem.GetCommand(log_entry.mCommandID));
-					ImGui::EndPopup();
-				}
-
-				ImGui::PopID();
 			}
+
+			ImGui::TableNextColumn();
+			{
+				ImGui::TextUnformatted(command.GetRule().mName);
+			}
+
+			ImGui::TableNextColumn();
+			{
+				ImGui::Text(TempString512("{}", command.GetMainInput().GetFile()));
+			}
+
+			ImGui::TableNextColumn();
+			{
+				ImGui::TextUnformatted(gToStringView(log_entry.mCookingState));
+			}
+
+			//// TODO draw spinner and change color based on cooking state
+
+			gDrawCookingCommandPopup(gCookingSystem.GetCommand(log_entry.mCommandID));
+			
 		}
-		clipper.End();
-
-		ImGui::PopStyleVar();
 	}
-	ImGui::EndChild();
-
-	ImGui::End();
-	
 }
 
 
