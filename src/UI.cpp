@@ -26,6 +26,15 @@ bool                   gScrollToSelectedCookingLogEntry = false;
 constexpr const char*  cAppLogWindowName                = "App Log";
 constexpr const char*  cCommandOutputWindowName         = "Command Output";
 
+int64                  gCurrentTimeInTicks              = 0;
+
+
+StringView gGetAnimatedHourglass()
+{
+	constexpr StringView hourglass[] = { ICON_FK_HOURGLASS_START, ICON_FK_HOURGLASS_HALF, ICON_FK_HOURGLASS_END };
+	return hourglass[(int)(gTicksToSeconds(gCurrentTimeInTicks) * 4.0) % gElemCount(hourglass)];
+}
+
 
 Span<const uint8> gGetEmbeddedFont(StringView inName)
 {
@@ -215,8 +224,9 @@ void gDrawFileInfo(const FileInfo& inFile)
 		ImGui::OpenPopup("Popup");
 
 	if (ImGui::IsPopupOpen("Popup") && 
-		ImGui::BeginPopupWithTitle("Popup", TempString128(ICON_FK_FILE_O " {}: ...\\{}", inFile.GetRepo().mName, inFile.GetName()).AsCStr()))
-		//ImGui::BeginPopup("Popup"))
+		ImGui::BeginPopupWithTitle("Popup", TempString128("{} {}: ...\\{}", 
+			inFile.IsDirectory() ? ICON_FK_FOLDER_OPEN_O : ICON_FK_FILE_O,
+			inFile.GetRepo().mName, inFile.GetName()).AsCStr()))
 	{
 		ImGui::Spacing();
 		// TODO auto wrapping is kind of incompatible with window auto resizing, need to provide a wrap position, or maybe make sure it isn't the first item drawn?
@@ -519,13 +529,27 @@ void gDrawCookingLog()
 
 			ImGui::TableNextColumn();
 			{
-				ImGui::TextUnformatted(gToStringView(log_entry.mCookingState));
+				constexpr StringView cIcons[]
+				{
+					ICON_FK_QUESTION,
+					ICON_FK_HOURGLASS,
+					ICON_FK_HOURGLASS,
+					ICON_FK_TIMES,
+					ICON_FK_CHECK,
+				};
+				static_assert(gElemCount(cIcons) == (size_t)CookingState::_Count);
+
+				auto cooking_state = log_entry.mCookingState.load();
+				auto icon          = cIcons[(int)cooking_state];
+
+				if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
+					icon = gGetAnimatedHourglass();
+
+				ImGui::Text(TempString32(" {} ", icon));
+				ImGui::SetItemTooltip(gToStringView(cooking_state).AsCStr());
 			}
 
-			//// TODO draw spinner and change color based on cooking state
-
 			gDrawCookingCommandPopup(gCookingSystem.GetCommand(log_entry.mCommandID));
-			
 		}
 	}
 }
@@ -737,17 +761,19 @@ void gDrawStatusBar()
 					for (const FileRepo& repo : gFileSystem.mRepos)
 						file_count += repo.mFiles.Size();
 
-					ImGui::Text(TempString128("Scanning... {} files found.", file_count));
+					ImGui::Text(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), file_count));
 					break;
 				}
 				case FileSystem::InitState::ReadingUSNJournal: 
 				{
-					ImGui::TextUnformatted("Reading USN journal...");
+					ImGui::TextUnformatted(TempString32("{} Reading USN journal...", gGetAnimatedHourglass()));
 					break;
 				}
 				case FileSystem::InitState::ReadingIndividualUSNs: 
 				{
-					ImGui::TextUnformatted(TempString128("Reading individual USNs... {:5}/{}", gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch));
+					ImGui::TextUnformatted(TempString128("{} Reading individual USNs... {:5}/{}", gGetAnimatedHourglass(),
+						gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch
+					));
 					break;
 				}
 				}
@@ -755,13 +781,13 @@ void gDrawStatusBar()
 			else
 			{
 				double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
-				if (seconds_since_ready < 5.0)
+				if (seconds_since_ready < 8.0)
 				{
-					ImGui::Text(TempString128("Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
+					ImGui::Text(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
 				}
 				else
 				{
-					ImGui::TextUnformatted("Let's get cooking.");
+					ImGui::TextUnformatted(ICON_FK_CUTLERY" Let's get cooking.");
 				}
 			}
 		}
@@ -771,6 +797,8 @@ void gDrawStatusBar()
 
 void gDrawMain()
 {
+	gCurrentTimeInTicks = gGetTickCount() - gProcessStartTicks;
+
 	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode/* | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton*/);
 
 	gApp.mLog.Draw(cAppLogWindowName);
