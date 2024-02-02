@@ -5,25 +5,40 @@
 #include "win32/misc.h"
 
 
+static bool sIsSpace(char inChar)
+{
+	return inChar == ' ' || inChar == '\t';
+}
+
+
 // Return a StringView on the text part of {text}.
 static StringView sParseArgument(const char*& ioPtr, const char* inPtrEnd)
 {
 	gAssert(*ioPtr == '{');
 	ioPtr++;
+
+	// Skip white space before the argument.
+	while (ioPtr != inPtrEnd && sIsSpace(*ioPtr))
+		++ioPtr;
+
 	const char* arg_begin = ioPtr;
 	const char* arg_end   = ioPtr;
 
 	while (ioPtr != inPtrEnd)
 	{
-		if (*ioPtr == '}')
+		if (*ioPtr == '}' || sIsSpace(*ioPtr))
 		{
 			arg_end = ioPtr;
-			ioPtr++;
+			++ioPtr;
 			break;
 		}
 
 		ioPtr++;
 	}
+
+	// Skip white space and } after the argument.
+	while (ioPtr != inPtrEnd && (*ioPtr == '}' || sIsSpace(*ioPtr)))
+		++ioPtr;
 
 	return { arg_begin, arg_end };
 }
@@ -188,22 +203,42 @@ FileID gGetOrAddFileFromFormat(StringView inFormatStr, const FileInfo& inFile)
 }
 
 
+template <typename taContainer, typename taPredicate>
+bool gAnyOf(taContainer& inContainer, taPredicate inPredicate)
+{
+	for (auto& element : inContainer)
+		if (inPredicate(element))
+			return true;
+	return false;
+}
+
+
+template <typename taContainer, typename taPredicate>
+bool gNoneOf(taContainer& inContainer, taPredicate inPredicate)
+{
+	for (auto& element : inContainer)
+		if (inPredicate(element))
+			return false;
+	return true;
+}
+
+
 
 bool InputFilter::Pass(const FileInfo& inFile) const
 {
 	if (mRepoIndex != inFile.mID.mRepoIndex)
 		return false;
 
-	if (!mExtension.empty() && !gIsEqualNoCase(inFile.GetExtension(), mExtension))
+	if (!mExtensions.empty() && gNoneOf(mExtensions, [&](StringView inExtension) { return gIsEqualNoCase(inFile.GetExtension(), inExtension); }))
 		return false;
 
-	if (!mDirectoryPrefix.empty() && !gStartsWithNoCase(inFile.GetDirectory(), mDirectoryPrefix))
+	if (!mDirectoryPrefixes.empty() && gNoneOf(mDirectoryPrefixes, [&](StringView inDirectoryPrefix) { return gStartsWithNoCase(inFile.GetDirectory(), inDirectoryPrefix); }))
 		return false;
 
-	if (!mNamePrefix.empty() && !gStartsWithNoCase(inFile.GetNameNoExt(), mNamePrefix))
+	if (!mNamePrefixes.empty() && gNoneOf(mNamePrefixes, [&](StringView inNamePrefix) { return gStartsWithNoCase(inFile.GetNameNoExt(), inNamePrefix); }))
 		return false;
 
-	if (!mNameSuffix.empty() && !gEndsWithNoCase(inFile.GetNameNoExt(), mNameSuffix))
+	if (!mNameSuffixes.empty() && gNoneOf(mNameSuffixes, [&](StringView inNameSuffix) { return gEndsWithNoCase(inFile.GetNameNoExt(), inNameSuffix); }))
 		return false;
 
 	return true;
@@ -593,19 +628,23 @@ bool CookingSystem::ValidateRules()
 			const InputFilter& filter = rule.mInputFilters[i];
 
 			// Make sure there's at least one way to filter.
-			if (filter.mExtension.empty() && 
-				filter.mDirectoryPrefix.empty() && 
-				filter.mNamePrefix.empty() && 
-				filter.mNameSuffix.empty())
+			if (filter.mExtensions.empty() && 
+				filter.mDirectoryPrefixes.empty() && 
+				filter.mNamePrefixes.empty() && 
+				filter.mNameSuffixes.empty())
 			{
 				errors++;
-				gApp.LogError(R"(Rule {}, InputFilter[{}] needs at least one way of filtering the inputs (by extension, etc.).)", rule.mName, i, filter.mExtension);
+				gApp.LogError(R"(Rule {}, InputFilter[{}] needs at least one way of filtering the inputs (by extension, etc.).)", rule.mName, i);
 			}
 
-			if (!filter.mExtension.empty() && !gStartsWith(filter.mExtension, "."))
+			if (!filter.mExtensions.empty())
 			{
-				errors++;
-				gApp.LogError(R"(Rule {}, InputFilter[{}]: Extension "{}" must start with a ".")", rule.mName, i, filter.mExtension);
+				for (StringView extension : filter.mExtensions)
+					if (!gStartsWith(extension, "."))
+					{
+						errors++;
+						gApp.LogError(R"(Rule {}, InputFilter[{}]: Extension "{}" must start with a ".")", rule.mName, i, extension);
+					}
 			}
 		}
 
@@ -657,7 +696,7 @@ bool CookingSystem::ValidateRules()
 void CookingSystem::StartCooking()
 {
 	// TODO make this configurable
-	int thread_count = (int)std::thread::hardware_concurrency();
+	int thread_count = 1; //(int)std::thread::hardware_concurrency();
 
 	gApp.Log("Starting {} Cooking Threads.", thread_count);
 
@@ -935,10 +974,15 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 
 void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 {
-	std::lock_guard lock(mTimeOutsMutex);
+	{
+		std::lock_guard lock(mTimeOutsMutex);
 
-	int next_index = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
-	mTimeOutBatches[next_index].insert(inLogEntry);
+		int next_index = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
+		mTimeOutBatches[next_index].insert(inLogEntry);
+	}
+
+	// Tell the thread there are timeouts to process.
+	mTimeOutAddedSignal.release();
 }
 
 
@@ -951,12 +995,11 @@ void CookingSystem::ProcessTimeOuts()
 	for (CookingLogEntry* log_entry : time_outs)
 	{
 		// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
-		if (log_entry->mCookingState != CookingState::Waiting)
+		if (log_entry->mCookingState == CookingState::Waiting)
 			log_entry->mCookingState = CookingState::Error;
 	}
 
 	time_outs.clear();
-	mTimeOutBatchCurrentIndex = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
 }
 
 
@@ -965,12 +1008,19 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 {
 	using namespace std::chrono_literals;
 
+	gSetCurrentThreadName(L"TimeOut Update Thread");
+
 	while (true)
 	{
 		// Wait until there are time outs to update.
 		mTimeOutAddedSignal.acquire();
 
-		// Wait a little to give them a chance to succeed before we declare a timeout.
+		// Swap the buffers and start a time out.
+		{
+			std::lock_guard lock(mTimeOutsMutex);
+			mTimeOutBatchCurrentIndex = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
+		}
+
 		(void)mTimeOutTimerSignal.try_acquire_for(3s);
 
 		if (inStopToken.stop_requested())

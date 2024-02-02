@@ -23,8 +23,9 @@ struct App
 	bool IsExitRequested();
 	bool IsExitReady();
 
-	template <class... taArgs> void FatalError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { FatalErrorV(inFmt.get(), std::make_format_args(inArgs...)); }
-	void                            FatalErrorV(std::string_view inFmt, std::format_args inArgs = {});
+	template <class... taArgs>
+	[[noreturn]] void               FatalError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { FatalErrorV(inFmt.get(), std::make_format_args(inArgs...)); }
+	[[noreturn]] void               FatalErrorV(std::string_view inFmt, std::format_args inArgs = {});
 
 	template <class... taArgs> void Log(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogV(inFmt.get(), std::make_format_args(inArgs...)); }
 	void                            LogV(std::string_view inFmt, std::format_args inArgs = {}, LogType inType = LogType::Normal);

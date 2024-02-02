@@ -92,13 +92,6 @@ Hash128 gHashPath(StringView inRootPath, StringView inPath)
 }
 
 
-// Set the name of the current thread.
-void gSetCurrentThreadName(const wchar_t* inName)
-{
-	SetThreadDescription(GetCurrentThread(), inName);
-}
-
-
 String gUSNReasonToString(uint32 inReason)
 {
 	String str;

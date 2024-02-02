@@ -54,11 +54,11 @@ FileID                         gGetOrAddFileFromFormat(StringView inFormatStr, c
 
 struct InputFilter
 {
-	uint32     mRepoIndex = FileID::cInvalid().mRepoIndex;
-	StringView mExtension;
-	StringView mDirectoryPrefix;
-	StringView mNamePrefix;
-	StringView mNameSuffix;
+	uint32                  mRepoIndex = FileID::cInvalid().mRepoIndex;
+	std::vector<StringView> mExtensions;
+	std::vector<StringView> mDirectoryPrefixes;
+	std::vector<StringView> mNamePrefixes;
+	std::vector<StringView> mNameSuffixes;
 
 	bool       Pass(const FileInfo& inFile) const;
 };
@@ -107,6 +107,7 @@ constexpr StringView gToStringView(CookingState inVar)
 
 	return cNames[(int)inVar];
 };
+
 
 struct CookingLogEntry
 {

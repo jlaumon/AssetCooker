@@ -2,6 +2,7 @@
 
 #include "win32/dbghelp.h"
 #include "win32/misc.h"
+#include "win32/threads.h"
 
 bool gIsDebuggerAttached()
 {
@@ -23,4 +24,11 @@ String GetLastErrorString()
 	// Make sure there is a null terminator (FormatMessage does not always add one).
 	buffer[buffer_len] = 0;
 	return buffer;
+}
+
+
+// Set the name of the current thread.
+void gSetCurrentThreadName(const wchar_t* inName)
+{
+	SetThreadDescription(GetCurrentThread(), inName);
 }
