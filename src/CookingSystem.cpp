@@ -861,6 +861,10 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	// Create the process for the command line.
 	subprocess_s process;
 	int options = subprocess_option_no_window | subprocess_option_combined_stdout_stderr | subprocess_option_single_string_command_line;
+
+	// Not strictly needed but some launched processes fail to read files if not used (access rights issues? unclear).
+	options |= subprocess_option_inherit_environment;
+
 	const char*  command_line_array[] = { command_line->data(), nullptr };
 	if (subprocess_create(command_line_array, options, &process))
 	{
