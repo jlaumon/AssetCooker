@@ -14,6 +14,7 @@ enum class CommandVariables : uint8
 	Ext,
 	File,
 	Dir,
+	Dir_NoTrailingSlash,
 	FullPath,
 	Repo,
 	_Count
@@ -26,6 +27,7 @@ constexpr StringView gToStringView(CommandVariables inVar)
 		"Ext",
 		"File",
 		"Dir",
+		"Dir_NoTrailingSlash",
 		"FullPath",
 		"Repo",
 	};

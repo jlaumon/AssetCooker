@@ -129,6 +129,10 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 		case CommandVariables::Dir:
 			outStr.append(inFile.GetDirectory());
 			break;
+		case CommandVariables::Dir_NoTrailingSlash:
+			if (!inFile.GetDirectory().empty())
+				outStr.append(inFile.GetDirectory().substr(0, inFile.GetDirectory().size() - 1));
+			break;
 		case CommandVariables::FullPath:
 			outStr.append(inFile.mPath);
 			break;
@@ -167,6 +171,10 @@ Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo
 			break;
 		case CommandVariables::Dir:
 			outStr.append(inFile.GetDirectory());
+			break;
+		case CommandVariables::Dir_NoTrailingSlash:
+			if (!inFile.GetDirectory().empty())
+				outStr.append(inFile.GetDirectory().substr(0, inFile.GetDirectory().size() - 1));
 			break;
 		case CommandVariables::FullPath:
 			outStr.append(inFile.mPath);
