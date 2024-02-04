@@ -642,8 +642,9 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 					if (!dir_handle.IsValid())
 					{
 						// TODO: depending on error, we should probably re-queue for scan
-						if (gApp.mLogFSActivity>= LogLevel::Normal)
-							gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
+						// This can happen when cooking a command creates the directory: we try to scan it but the command is still writing the output files.
+						//if (gApp.mLogFSActivity>= LogLevel::Normal)
+						gApp.LogError("Failed to open {} - {}", file, GetLastErrorString());
 					}
 
 					file.mLastChangeUSN = mDrive.GetUSN(file_handle);

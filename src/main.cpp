@@ -18,6 +18,8 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 
+#include "toml++/toml.hpp"
+
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -32,6 +34,31 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+uint32 gRepoIndex(StringView inName)
+{
+	FileRepo* repo = gFileSystem.FindRepo(inName);
+	if (!repo)
+		gApp.FatalError("Could not find FileRepo named {}", inName);
+
+	return repo->mIndex;
+}
+
+
+// Formatter for toml errors.
+template <> struct std::formatter<toml::parse_error> : std::formatter<std::string_view>
+{
+	auto format(const toml::parse_error& inError, format_context& ioCtx) const
+	{
+		return std::format_to(ioCtx.out(), R"({} (line {}, column {}))",
+			inError.description(),
+			inError.source().begin.line,
+			inError.source().begin.column
+			);
+	}
+};
+
+
 
 // Main code
 int WinMain(
@@ -55,6 +82,7 @@ int WinMain(
 	gApp.Init(hwnd);
 
 	// Initialize Direct3D
+	// TODO start the threads before doing this because that's slow (~300ms)
 	if (!CreateDeviceD3D(hwnd))
 		gApp.FatalError("Failed to create D3D device - {}", GetLastErrorString());
 
@@ -132,12 +160,26 @@ int WinMain(
 	copy_txt_rule.mOutputPaths  = { "{Repo:Bin}{Dir}{File}_copy{Ext}" };
 	copy_txt_rule.mCommandLine  = { R"(xcopy.exe "{Repo:Source}{FullPath}" "{Repo:Bin}{Dir}{File}_copy{Ext}" /Y /-I)" };
 
+	StringView         rules_path = "rules.toml";
+
+	toml::parse_result rules_toml = toml::parse_file(rules_path);
+	if (!rules_toml)
+	{
+		gApp.LogError("Failed to parse Rules file: {}", rules_path);
+		gApp.LogError("{}", rules_toml.error());
+		gApp.SetInitError("Failed to parse Rules file. See log for details.");
+	}
+
+	if (!gCookingSystem.ValidateRules())
+	{
+		gApp.SetInitError("Rules validation failed. See log for details.");
+	}
+	
 	// Start paused, for debugging.
 	gCookingSystem.SetCookingPaused(true);
 
 	// If all is good, start adding files.
-	// TODO: otherwise make it clear there's a problem (pop-up the log?)
-	if (gCookingSystem.ValidateRules())
+	if (!gApp.HasInitError())
 		gFileSystem.StartMonitoring();
 
 	// Main loop

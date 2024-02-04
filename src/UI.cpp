@@ -28,6 +28,11 @@ constexpr const char*  cCommandOutputWindowName         = "Command Output";
 
 int64                  gCurrentTimeInTicks              = 0;
 
+// TODO these colors are terrible
+constexpr uint32       cColorTextError                  = IM_COL32(255, 100, 100, 255);
+constexpr uint32       cColorTextSuccess                = IM_COL32( 98, 214,  86, 255);
+constexpr uint32       cColorFrameBgError               = IM_COL32(150,  60,  60, 255);
+
 
 StringView gGetAnimatedHourglass()
 {
@@ -545,7 +550,14 @@ void gDrawCookingLog()
 				if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
 					icon = gGetAnimatedHourglass();
 
+				if (cooking_state == CookingState::Success)
+					ImGui::PushStyleColor(ImGuiCol_Text, cColorTextSuccess);
+
 				ImGui::Text(TempString32(" {} ", icon));
+
+				if (cooking_state == CookingState::Success)
+					ImGui::PopStyleColor();
+
 				ImGui::SetItemTooltip(gToStringView(cooking_state).AsCStr());
 			}
 
@@ -736,61 +748,83 @@ void gDrawStatusBar()
 {
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
 	float            height       = ImGui::GetFrameHeight();
-	if (ImGui::BeginViewportSideBar("##MainStatusBar", nullptr, ImGuiDir_Down, height, window_flags))
+
+	bool             is_error     = gApp.HasInitError();
+	int              pop_color    = 0;
+
+	// Pop any style that was pushed.
+	defer
 	{
-		defer { ImGui::End(); };
+		if (pop_color)
+			ImGui::PopStyleColor(pop_color);
+	};
 
-		if (ImGui::BeginMenuBar())
+	if (is_error)
+	{
+		ImGui::PushStyleColor(ImGuiCol_MenuBarBg, cColorFrameBgError);
+		pop_color++;
+	}
+
+	if (!ImGui::BeginViewportSideBar("##MainStatusBar", nullptr, ImGuiDir_Down, height, window_flags))
+		return;
+
+	defer { ImGui::End(); };
+
+	if (!ImGui::BeginMenuBar())
+		return;
+	defer { ImGui::EndMenuBar(); };
+
+	if (gApp.HasInitError())
+	{
+		ImGui::TextUnformatted(StringView(gApp.mInitError));
+		return;
+	}
+
+	auto init_state = gFileSystem.GetInitState();
+	if (init_state < FileSystem::InitState::Ready)
+	{
+		switch (init_state)
 		{
-			defer { ImGui::EndMenuBar(); };
-
-			auto init_state = gFileSystem.GetInitState();
-			if (init_state < FileSystem::InitState::Ready)
-			{
-				switch (init_state)
-				{
-				default:
-				case FileSystem::InitState::NotInitialized:
-				{
-					ImGui::TextUnformatted("Bonjour.");
-					break;
-				}
-				case FileSystem::InitState::Scanning: 
-				{
-					size_t file_count = 0;
-					for (const FileRepo& repo : gFileSystem.mRepos)
-						file_count += repo.mFiles.Size();
-
-					ImGui::Text(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), file_count));
-					break;
-				}
-				case FileSystem::InitState::ReadingUSNJournal: 
-				{
-					ImGui::TextUnformatted(TempString32("{} Reading USN journal...", gGetAnimatedHourglass()));
-					break;
-				}
-				case FileSystem::InitState::ReadingIndividualUSNs: 
-				{
-					ImGui::TextUnformatted(TempString128("{} Reading individual USNs... {:5}/{}", gGetAnimatedHourglass(),
-						gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch
-					));
-					break;
-				}
-				}
-			}
-			else
-			{
-				double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
-				if (seconds_since_ready < 8.0)
-				{
-					ImGui::Text(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
-				}
-				else
-				{
-					ImGui::TextUnformatted(ICON_FK_CUTLERY" Let's get cooking.");
-				}
-			}
+		default:
+		case FileSystem::InitState::NotInitialized:
+		{
+			ImGui::TextUnformatted("Bonjour.");
+			break;
 		}
+		case FileSystem::InitState::Scanning: 
+		{
+			size_t file_count = 0;
+			for (const FileRepo& repo : gFileSystem.mRepos)
+				file_count += repo.mFiles.Size();
+
+			ImGui::Text(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), file_count));
+			break;
+		}
+		case FileSystem::InitState::ReadingUSNJournal: 
+		{
+			ImGui::TextUnformatted(TempString32("{} Reading USN journal...", gGetAnimatedHourglass()));
+			break;
+		}
+		case FileSystem::InitState::ReadingIndividualUSNs: 
+		{
+			ImGui::TextUnformatted(TempString128("{} Reading individual USNs... {:5}/{}", gGetAnimatedHourglass(),
+				gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch
+			));
+			break;
+		}
+		}
+
+		return;
+	}
+ 
+	double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
+	if (seconds_since_ready < 8.0)
+	{
+		ImGui::Text(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
+	}
+	else
+	{
+		ImGui::TextUnformatted(ICON_FK_CUTLERY" Let's get cooking.");
 	}
 }
 

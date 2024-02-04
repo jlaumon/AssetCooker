@@ -21,7 +21,8 @@ solution "AssetCooker"
         defines
         {
             "_CRT_SECURE_NO_WARNINGS",
-			"IMGUI_USER_CONFIG=<ImGuiConfig.h>"
+			"IMGUI_USER_CONFIG=<ImGuiConfig.h>",
+			"TOML_COMPILER_HAS_EXCEPTIONS=0", -- Not strictly necessart since toml++ detects if exceptions are off, but Intellisense is confused otherwise
         }
 
         filter { "toolset:msc*" }

@@ -23,6 +23,9 @@ struct App
 	bool IsExitRequested();
 	bool IsExitReady();
 
+	bool HasInitError() const { return !mInitError.empty(); }
+	void SetInitError(StringView inText) { mInitError = inText; }
+
 	template <class... taArgs>
 	[[noreturn]] void               FatalError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs) { FatalErrorV(inFmt.get(), std::make_format_args(inArgs...)); }
 	[[noreturn]] void               FatalErrorV(std::string_view inFmt, std::format_args inArgs = {});
@@ -37,6 +40,7 @@ struct App
 	bool                            mExitReady      = false;
 	LogLevel                        mLogFSActivity  = LogLevel::None;
 	struct Log                      mLog;
+	String                          mInitError;
 };
 
 inline App gApp;
