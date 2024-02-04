@@ -704,7 +704,8 @@ bool CookingSystem::ValidateRules()
 void CookingSystem::StartCooking()
 {
 	// TODO make this configurable
-	int thread_count = 1; //(int)std::thread::hardware_concurrency();
+	// Leave one core for the file system monitoring thread (and main thread).
+	int thread_count = gMax(1, (int)std::thread::hardware_concurrency() - 1);
 
 	gApp.Log("Starting {} Cooking Threads.", thread_count);
 
