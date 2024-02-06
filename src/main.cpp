@@ -17,6 +17,7 @@
 #include "Debug.h"
 #include "FileSystem.h"
 #include "CookingSystem.h"
+#include "RuleParser.h"
 
 #include "toml++/toml.hpp"
 
@@ -45,18 +46,6 @@ uint32 gRepoIndex(StringView inName)
 }
 
 
-// Formatter for toml errors.
-template <> struct std::formatter<toml::parse_error> : std::formatter<std::string_view>
-{
-	auto format(const toml::parse_error& inError, format_context& ioCtx) const
-	{
-		return std::format_to(ioCtx.out(), R"({} (line {}, column {}))",
-			inError.description(),
-			inError.source().begin.line,
-			inError.source().begin.column
-			);
-	}
-};
 
 
 
@@ -150,25 +139,10 @@ int WinMain(
 	gFileSystem.AddRepo("Bin", u8R"(D:\output\tëst\)");
 	//gFileSystem.AddRepo("Bin", u8R"(D:\output\)");
 
-	// Add all rules.
-	auto& copy_txt_rule = gCookingSystem.AddRule();
-	copy_txt_rule.mName = "Copy";
-	copy_txt_rule.mInputFilters = {
-		{ .mRepoIndex = gFileSystem.FindRepo("Source")->mIndex, .mExtension = ".txt" },
-		{ .mRepoIndex = gFileSystem.FindRepo("Source")->mIndex, .mExtension = ".png", .mDirectoryPrefix = "yes_copy", .mNamePrefix = "only_this_" },
-	};
-	copy_txt_rule.mOutputPaths  = { "{Repo:Bin}{Dir}{File}_copy{Ext}" };
-	copy_txt_rule.mCommandLine  = { R"(xcopy.exe "{Repo:Source}{FullPath}" "{Repo:Bin}{Dir}{File}_copy{Ext}" /Y /-I)" };
 
 	StringView         rules_path = "rules.toml";
 
-	toml::parse_result rules_toml = toml::parse_file(rules_path);
-	if (!rules_toml)
-	{
-		gApp.LogError("Failed to parse Rules file: {}", rules_path);
-		gApp.LogError("{}", rules_toml.error());
-		gApp.SetInitError("Failed to parse Rules file. See log for details.");
-	}
+	gReadRuleFile(rules_path);
 
 	if (!gCookingSystem.ValidateRules())
 	{

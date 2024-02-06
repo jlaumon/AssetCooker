@@ -215,6 +215,7 @@ struct CookingSystem : NoCopy
 	CookingLogEntry&                      GetLogEntry(CookingLogEntryID inID) { return mCookingLog[inID.mIndex]; }
 
 	CookingRule&                          AddRule() { return mRules.emplace_back(CookingRuleID{ (int16)mRules.size() }); }
+	StringPool&                           GetRuleStringPool() { return mRuleStringPool; }
 	void                                  CreateCommandsForFile(FileInfo& ioFile);
 
 	bool                                  ValidateRules(); // Return false if problems were found (see log).
@@ -246,6 +247,7 @@ private:
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
 
 	SegmentedVector<CookingRule, 256>     mRules;
+	StringPool                            mRuleStringPool = { 64ull * 1024 };
 	VMemArray<CookingCommand>             mCommands;
 
 	SegmentedHashSet<CookingCommandID>    mCommandsQueuedForUpdateDirtyState;

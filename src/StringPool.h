@@ -12,6 +12,8 @@ struct StringPool
 
 	struct ResizableStringView;
 
+	StringPool(size_t inMinGrowSizeInBytes = 0) : mBuffer(0, inMinGrowSizeInBytes) {}
+
 	void Clear()
 	{
 		mBuffer.Clear();

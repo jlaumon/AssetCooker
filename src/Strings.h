@@ -87,6 +87,8 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	// Constructor that also formats the string.
 	template <typename... taArgs> TempString(std::format_string<taArgs...> inFmt, taArgs&&... inArgs);
 
+	TempString(StringView inString);
+
 	StringView  AsStringView() const { return { mBuffer, mSize }; }
 	const char* AsCStr() const { return mBuffer; }
 
@@ -242,6 +244,12 @@ template <typename... taArgs> TempString<taSize>::TempString(std::format_string<
 	mSize               = str_view.size();
 }
 
+template <size_t taSize>
+TempString<taSize>::TempString(StringView inString)
+{
+	StringView str_view = gConcat(mBuffer, inString);
+	mSize               = str_view.size();
+}
 
 
 // Hash for StringView.
