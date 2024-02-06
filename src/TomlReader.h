@@ -1,8 +1,19 @@
-#include "RuleParser.h"
-#include "CookingSystem.h"
-#include "App.h"
+#pragma once
+
+#include "Core.h"
+#include "Strings.h"
 
 #include <toml++/toml.hpp>
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+///
+///
+/// This code is pretty terrible, but it's not the important part. Avert your eyes if you can.
+///
+///
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 // Formatter for toml errors.
@@ -38,7 +49,7 @@ template <> struct std::formatter<toml::path> : std::formatter<std::string_view>
 	}
 };
 
-struct TOMLReader
+struct TomlReader
 {
 	template <typename taType>
 	static constexpr StringView sTypeName()
@@ -139,7 +150,7 @@ struct TOMLReader
 		return true;
 	}
 
-	TOMLReader(const toml::table& inRootTable, StringPool& ioStringPool)
+	TomlReader(const toml::table& inRootTable, StringPool& ioStringPool)
 		: mStringPool(ioStringPool)
 	{
 		mStack.push_back({ &inRootTable });
@@ -285,81 +296,3 @@ struct TOMLReader
 
 
 
-
-void gReadRuleFile(StringView inPath)
-{
-	gApp.Log("Reading Rule file: {}", inPath);
-
-	toml::parse_result rules_toml = toml::parse_file(inPath);
-	if (!rules_toml)
-	{
-		gApp.LogError("Failed to parse Rule file.");
-		gApp.LogError("{}", rules_toml.error());
-		gApp.SetInitError("Failed to parse Rule file. See log for details.");
-	}
-
-	TOMLReader reader(rules_toml.table(), gCookingSystem.GetRuleStringPool());
-
-	defer
-	{
-		// At the end if there were any error, tell the app to not start.
-		if (reader.mErrorCount)
-			gApp.SetInitError("Failed to parse Rule file. See log for details.");
-	};
-
-	if (!reader.OpenArray("Rule"))
-		return;
-
-	while (reader.NextArrayElement())
-	{
-		if (!reader.OpenTable(""))
-			continue;
-
-		defer { reader.CloseTable(); };
-
-		CookingRule& rule = gCookingSystem.AddRule();
-		reader.Read   ("Name",				rule.mName);
-
-		if (reader.OpenArray("InputFilters"))
-		{
-			defer { reader.CloseArray(); };
-
-			while (reader.NextArrayElement())
-			{
-				if (!reader.OpenTable(""))
-					continue;
-				defer { reader.CloseTable(); };
-
-				InputFilter& input_filter = rule.mInputFilters.emplace_back();
-
-				TempString128 repo_name;
-				if (reader.Read("Repo", repo_name))
-				{
-					FileRepo* repo = gFileSystem.FindRepo(repo_name.AsStringView());
-					if (repo == nullptr)
-					{
-						gApp.LogError(R"(Repo "{}" not found.)", repo_name.AsStringView());
-						reader.mErrorCount++;
-					}
-					else
-					{
-						input_filter.mRepoIndex = repo->mIndex;
-					}
-				}
-
-				reader.TryReadArray("Extensions",			input_filter.mExtensions);
-				reader.TryReadArray("DirectoryPrefixes",	input_filter.mDirectoryPrefixes);
-				reader.TryReadArray("NamePrefixes",		input_filter.mNamePrefixes);
-				reader.TryReadArray("NameSuffixes",		input_filter.mNameSuffixes);
-			}
-		}
-
-		reader.Read        ("CommandLine",		rule.mCommandLine);
-		reader.TryRead     ("Priority",			rule.mPriority);
-		reader.TryRead     ("Vresion",			rule.mVersion);
-		reader.TryRead     ("MatchMoreRules",	rule.mMatchMoreRules);
-		reader.TryRead     ("DepFilePath",		rule.mDepFilePath);
-		reader.TryReadArray("InputPaths",		rule.mInputPaths);
-		reader.TryReadArray("OutputPaths",		rule.mOutputPaths);
-	}
-}
