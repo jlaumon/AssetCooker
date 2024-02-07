@@ -74,14 +74,14 @@ using OptionalStringView = Optional<StringView>;
 using OptionalWStringView = Optional<WStringView>;
 
 
-// Fixed size string meant for temporaries.
+// Fixed size string meant for temporaries. Size does not include null terminator.
 template<size_t taSize>
 struct TempString : NoCopy // No copy for now, should not be needed on temporary strings.
 {
 	TempString()
 	{
 		mBuffer[0] = 0;
-		mSize      = 1;
+		mSize      = 0;
 	}
 
 	// Constructor that also formats the string.
