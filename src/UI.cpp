@@ -429,9 +429,9 @@ void gDrawCookingQueue()
 		return;
 	}
 
-	bool auto_cook = !gCookingSystem.IsCookingPaused();
-	if (ImGui::Checkbox("Auto cook", &auto_cook))
-		gCookingSystem.SetCookingPaused(!auto_cook);
+	bool paused = gCookingSystem.IsCookingPaused();
+	if (ImGui::ButtonGrad(paused ? ICON_FK_PLAY " Start Cooking" : ICON_FK_STOP " Stop Cooking"))
+		gCookingSystem.SetCookingPaused(!paused);
 
 	// Lock the dirty command list while we're browsing it.
 	std::lock_guard lock(gCookingSystem.mCommandsDirty.mMutex);
