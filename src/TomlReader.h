@@ -57,7 +57,9 @@ struct TomlReader
 		if constexpr (std::is_same_v<taType, StringView> 
 			|| std::is_same_v<taType, TempString32>
 			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>)
+			|| std::is_same_v<taType, TempString128>
+			|| std::is_same_v<taType, TempString256>
+			|| std::is_same_v<taType, TempString512>)
 			return "string";
 		else if constexpr (std::is_same_v<taType, bool>)
 			return "boolean";
@@ -104,7 +106,9 @@ struct TomlReader
 		if constexpr (std::is_same_v<taType, StringView> 
 			|| std::is_same_v<taType, TempString32>
 			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>)
+			|| std::is_same_v<taType, TempString128>
+			|| std::is_same_v<taType, TempString256>
+			|| std::is_same_v<taType, TempString512>)
 			is_right_type = node->is_string();
 		else if constexpr (std::is_same_v<taType, bool>)
 			is_right_type = node->is_boolean();
@@ -125,7 +129,9 @@ struct TomlReader
 			outVar = mStringPool.AllocateCopy(*node->value<std::string_view>());
 		else if constexpr (std::is_same_v<taType, TempString32>
 			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>)
+			|| std::is_same_v<taType, TempString128>
+			|| std::is_same_v<taType, TempString256>
+			|| std::is_same_v<taType, TempString512>)
 			// For TempStrings, just copy into it.
 			outVar = StringView(*node->value<std::string_view>());
 		else if constexpr (std::is_same_v<taType, bool>)
