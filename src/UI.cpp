@@ -564,6 +564,11 @@ void gDrawCookingLog()
 			gDrawCookingCommandPopup(gCookingSystem.GetCommand(log_entry.mCommandID));
 		}
 	}
+
+	// Keep up at the bottom of the scroll region if we were already at the bottom at the beginning of the frame.
+	// Using a scrollbar or mouse-wheel will take away from the bottom edge.
+	if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+		ImGui::SetScrollHereY(1.0f);
 }
 
 
