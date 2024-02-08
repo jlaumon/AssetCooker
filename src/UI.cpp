@@ -377,9 +377,20 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 {
 	ImGui::PushID(TempString32("Command {}", inCommand.mID.mIndex).AsCStr());
 	defer { ImGui::PopID(); };
+	
+	int pop_color = 0;
+
+	if (inCommand.GetCookingState() == CookingState::Error)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, cColorTextError);
+		pop_color++;
+	}
 
 	bool clicked = ImGui::Selectable(gFormat(inCommand).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
+
+	if (pop_color)
+		ImGui::PopStyleColor(pop_color);
 
 	if (open)
 		ImGui::OpenPopup("Popup");
@@ -809,11 +820,7 @@ void gDrawStatusBar()
 		}
 		case FileSystem::InitState::Scanning: 
 		{
-			size_t file_count = 0;
-			for (const FileRepo& repo : gFileSystem.mRepos)
-				file_count += repo.mFiles.Size();
-
-			ImGui::Text(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), file_count));
+			ImGui::Text(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
 			break;
 		}
 		case FileSystem::InitState::ReadingUSNJournal: 
@@ -836,12 +843,19 @@ void gDrawStatusBar()
 	double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
 	if (seconds_since_ready < 8.0)
 	{
-		ImGui::Text(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds.", gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
+		ImGui::Text(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds. ",	gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
 	}
 	else
 	{
 		ImGui::TextUnformatted(ICON_FK_CUTLERY" Let's get cooking.");
 	}
+
+	// Display some stats on the right side of the status bar.
+	TempString128 stats_text("{} Files, {} Repos, {} Commands.", gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount());
+	float         stats_text_size = ImGui::CalcTextSize(stats_text).x;
+	float         available_size  = ImGui::GetWindowContentRegionMax().x;
+	ImGui::SameLine(available_size - stats_text_size);
+	ImGui::Text(stats_text);
 }
 
 

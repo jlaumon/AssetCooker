@@ -360,13 +360,16 @@ struct FileSystem : NoCopy
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 
-	FileRepo*       FindRepo(StringView inRepoName);	// Return nullptr if not found.
+	FileRepo*       FindRepo(StringView inRepoName);               // Return nullptr if not found.
 
-	FileID			FindFileID(FileRefNumber inRefNumber) const;		// Return an invalid FileID if not found.
-	FileInfo*		FindFile(FileRefNumber inRefNumber);				// Return nullptr if not found.
+	FileID          FindFileID(FileRefNumber inRefNumber) const;   // Return an invalid FileID if not found.
+	FileInfo*       FindFile(FileRefNumber inRefNumber);           // Return nullptr if not found.
 
-	bool            CreateDirectory(FileID inFileID);
-	bool            DeleteFile(FileID inFileID);
+	bool            CreateDirectory(FileID inFileID);              // Make sure all the parent directories for this file exist.
+	bool            DeleteFile(FileID inFileID);                   // Delete this file on disk.
+
+	size_t          GetRepoCount() const { return mRepos.size(); } // Number of repos, for debug/display.
+	size_t          GetFileCount() const;                          // Total number of files, for debug/display.
 
 	void			KickMonitorDirectoryThread();
 

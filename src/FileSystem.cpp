@@ -1114,6 +1114,16 @@ bool FileSystem::DeleteFile(FileID inFileID)
 }
 
 
+size_t FileSystem::GetFileCount() const
+{
+	size_t file_count = 0;
+	for (const FileRepo& repo : mRepos)
+		file_count += repo.mFiles.Size();
+	return file_count;
+}
+
+
+
 void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN)
 {
 	gApp.Log("Starting initial scan.");

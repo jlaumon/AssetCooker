@@ -225,6 +225,8 @@ struct CookingSystem : NoCopy
 	bool                                  IsCookingPaused() const { return mCookingPaused; }
 	void                                  SetCookingThreadCount(int inThreadCount) { mWantedCookingThreadCount = inThreadCount; }
 
+	size_t                                GetCommandCount() const { return mCommands.Size(); } // Total number of commands, for debug/display.
+
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
 
