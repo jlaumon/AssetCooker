@@ -38,6 +38,7 @@ struct App
 	void*                           mMainWindowHwnd = nullptr;
 	bool                            mExitRequested  = false;
 	bool                            mExitReady      = false;
+	String                          mRuleFilePath   = "rules.toml";
 	LogLevel                        mLogFSActivity  = LogLevel::None;
 	struct Log                      mLog;
 	String                          mInitError;

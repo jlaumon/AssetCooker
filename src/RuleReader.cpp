@@ -6,7 +6,7 @@
 
 void gReadRuleFile(StringView inPath)
 {
-	gApp.Log("Reading Rule file: {}", inPath);
+	gApp.Log(R"(Reading Rule file "{}".)", inPath);
 
 	// Parse the toml file.
 	toml::parse_result rules_toml = toml::parse_file(inPath);
@@ -14,7 +14,8 @@ void gReadRuleFile(StringView inPath)
 	{
 		gApp.LogError("Failed to parse Rule file.");
 		gApp.LogError("{}", rules_toml.error());
-		gApp.SetInitError("Failed to parse Rule file. See log for details.");
+		gApp.SetInitError(TempString512(R"(Failed to parse Rule file "{}". See log for details.)", inPath).AsStringView());
+		return;
 	}
 
 	// Initialize a reader on the root table.
@@ -55,7 +56,7 @@ void gReadRuleFile(StringView inPath)
 
 				InputFilter& input_filter = rule.mInputFilters.emplace_back();
 
-				TempString128 repo_name;
+				TempString512 repo_name;
 				if (reader.Read("Repo", repo_name))
 				{
 					// Try to find the repo from the name.
@@ -86,4 +87,8 @@ void gReadRuleFile(StringView inPath)
 		reader.TryReadArray("InputPaths",		rule.mInputPaths);
 		reader.TryReadArray("OutputPaths",		rule.mOutputPaths);
 	}
+
+	// Validate the rules.
+	if (!gCookingSystem.ValidateRules())
+		gApp.SetInitError("Rules validation failed. See log for details.");
 }

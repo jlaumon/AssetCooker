@@ -1,5 +1,10 @@
 #include "App.h"
+
+#include "ConfigReader.h"
+#include "RuleReader.h"
 #include "Debug.h"
+#include "CookingSystem.h"
+#include "UI.h"
 
 #include "win32/dbghelp.h"
 #include "win32/misc.h"
@@ -15,6 +20,17 @@ void App::Init(void* inHwnd)
 	// This in turn should mean that most ANSI win32 functions actually support UTF8.
 	// TODO: use A version of windows functions wherever possible
 	Log("UTF8 is {}.", GetACP() == CP_UTF8 ? "supported. Noice" : "not supported");
+
+	// Read the config file.
+	gReadConfigFile("config.toml");
+
+	// Read the rule file.
+	if (!HasInitError())
+		gReadRuleFile(mRuleFilePath);
+
+	// If all is good, start scanning files.
+	if (!HasInitError())
+		gFileSystem.StartMonitoring();
 }
 
 

@@ -550,13 +550,24 @@ void gDrawCookingLog()
 				if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
 					icon = gGetAnimatedHourglass();
 
+				int pop_color = 0;
+
 				if (cooking_state == CookingState::Success)
+				{
 					ImGui::PushStyleColor(ImGuiCol_Text, cColorTextSuccess);
+					pop_color++;
+				}
+
+				if (cooking_state == CookingState::Error)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, cColorTextError);
+					pop_color++;
+				}
 
 				ImGui::Text(TempString32(" {} ", icon));
 
-				if (cooking_state == CookingState::Success)
-					ImGui::PopStyleColor();
+				if (pop_color)
+					ImGui::PopStyleColor(pop_color);
 
 				ImGui::SetItemTooltip(gToStringView(cooking_state).AsCStr());
 			}
@@ -854,4 +865,12 @@ void gDrawMain()
 
 	if (gOpenImGuiDemo)
 		ImGui::ShowDemoWindow(&gOpenImGuiDemo);
+
+	// If the App failed to Init, set the focus on the Log because it will contain the errors details.
+	// Doesn't work until the windows have been drawn once (not sure why), so do it at the end.
+	if (gApp.HasInitError())
+	{
+		// Do it just once though, otherwise we can't select other windows.
+		do_once { ImGui::SetWindowFocus(cAppLogWindowName); };
+	}
 }

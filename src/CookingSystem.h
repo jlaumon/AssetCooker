@@ -223,6 +223,7 @@ struct CookingSystem : NoCopy
 	void                                  StopCooking();
 	void                                  SetCookingPaused(bool inPaused);
 	bool                                  IsCookingPaused() const { return mCookingPaused; }
+	void                                  SetCookingThreadCount(int inThreadCount) { mWantedCookingThreadCount = inThreadCount; }
 
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
@@ -265,6 +266,7 @@ private:
 	SegmentedVector<CookingThread, 64>       mCookingThreads;
 	std::counting_semaphore<>                mCookingThreadsSemaphore  = std::counting_semaphore(0);
 	bool                                     mCookingPaused          = false;
+	int                                      mWantedCookingThreadCount = 0;	// Number of threads requested. Actual number of threads created might be lower. 
 
 	friend void                              gDrawCookingLog();
 	friend void                              gDrawSelectedCookingLogEntry();
