@@ -21,6 +21,13 @@ template <class F> struct Deferrer { F f; ~Deferrer() { f(); } };
 template <class F> Deferrer<F> operator*(DeferDummy, F f) { return {f}; }
 #define defer auto TOKEN_PASTE(deferred, __LINE__) = DeferDummy{} *[&]()
 
+// Execute a block of code only once.
+// eg. once { printf("hello\n"); };
+struct OnceDummy {};
+template <class F> struct Initializer { Initializer(F f) { f(); } };
+template <class F> Initializer<F> operator*(OnceDummy, F f) { return {f}; }
+#define do_once static auto TOKEN_PASTE(initializer, __LINE__) = OnceDummy{} *[&]()
+
 // Inherit to disallow copies.
 struct NoCopy
 {
