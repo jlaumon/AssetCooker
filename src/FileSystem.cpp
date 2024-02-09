@@ -639,7 +639,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 				if (gFileSystem.GetInitState() == FileSystem::InitState::Ready)
 				{
 					OwnedHandle file_handle = mDrive.OpenFileByRefNumber(file.mRefNumber);
-					if (!dir_handle.IsValid())
+					if (!file_handle.IsValid())
 					{
 						// TODO: depending on error, we should probably re-queue for scan
 						// This can happen when cooking a command creates the directory: we try to scan it but the command is still writing the output files.
