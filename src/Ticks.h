@@ -3,7 +3,8 @@
 #include "Core.h"
 
 int64  gGetTickCount();
-int64  gTicksToNanoSeconds(int64 inTicks);
+int64  gTicksToNanoseconds(int64 inTicks);
+double gTicksToMilliseconds(int64 inTicks);
 double gTicksToSeconds(int64 inTicks);
 
 const int64 gProcessStartTicks = gGetTickCount();

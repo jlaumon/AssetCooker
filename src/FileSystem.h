@@ -452,7 +452,6 @@ template <> struct std::formatter<FileInfo> : std::formatter<std::string_view>
 	auto format(const FileInfo& inFileInfo, format_context& ioCtx) const
 	{
 		return std::format_to(ioCtx.out(), "{}:{}", 
-			//inFileInfo.IsDirectory() ? "Dir" : "File", 
 			inFileInfo.GetRepo().mName,
 			inFileInfo.mPath);
 	}

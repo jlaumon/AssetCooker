@@ -851,7 +851,10 @@ void gDrawStatusBar()
 	}
 
 	// Display some stats on the right side of the status bar.
-	TempString128 stats_text("{} Files, {} Repos, {} Commands.", gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount());
+	TempString128 stats_text("{} Files, {} Repos, {} Commands | UI {} FPS (CPU:{:4.2f}ms GPU:{:4.2f}ms)", 
+		gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount(),
+		gUILastFrameStats.mFPS, gUILastFrameStats.mCPUMilliseconds, gUILastFrameStats.mGPUMilliseconds);
+
 	float         stats_text_size = ImGui::CalcTextSize(stats_text).x;
 	float         available_size  = ImGui::GetWindowContentRegionMax().x;
 	ImGui::SameLine(available_size - stats_text_size);

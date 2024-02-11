@@ -11,7 +11,7 @@ int64 gGetTickCount()
 }
 
 
-int64 gTicksToNanoSeconds(int64 inTicks)
+int64 gTicksToNanoseconds(int64 inTicks)
 {
 	struct Initializer
 	{
@@ -32,8 +32,15 @@ int64 gTicksToNanoSeconds(int64 inTicks)
 }
 
 
+double gTicksToMilliseconds(int64 inTicks)
+{
+	int64 ns = gTicksToNanoseconds(inTicks);
+	return (double)ns / 1'000'000.0;
+}
+
+
 double gTicksToSeconds(int64 inTicks)
 {
-	int64 ns = gTicksToNanoSeconds(inTicks);
+	int64 ns = gTicksToNanoseconds(inTicks);
 	return (double)ns / 1'000'000'000.0;
 }

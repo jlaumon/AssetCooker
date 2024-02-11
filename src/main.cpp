@@ -18,6 +18,7 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 #include "RuleReader.h"
+#include "Ticks.h"
 
 
 // Data
@@ -34,17 +35,162 @@ void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-uint32 gRepoIndex(StringView inName)
+// Helper struct to measure CPU/GPU times of the UI updates.
+struct FrameTimer
 {
-	FileRepo* repo = gFileSystem.FindRepo(inName);
-	if (!repo)
-		gApp.FatalError("Could not find FileRepo named {}", inName);
+	static constexpr int cGPUHistorySize                    = 32;
+	static constexpr int cCPUHistorySize                    = 32;
+	static constexpr int cFrameHistorySize                  = 256;
 
-	return repo->mIndex;
-}
+    ID3D11Query*         mDisjointQuery[cGPUHistorySize]    = {};
+	ID3D11Query*         mStartQuery   [cGPUHistorySize]    = {};
+	ID3D11Query*         mEndQuery     [cGPUHistorySize]    = {};
+	double               mGPUTimesMS   [cGPUHistorySize]    = {}; // In Milliseconds.
+	double               mCPUTimesMS   [cCPUHistorySize]    = {}; // In Milliseconds.
+	double               mFrameTimesS  [cFrameHistorySize]  = {}; // In Seconds.
+	uint64               mFrameIndex                        = 0;
+	Timer                mCPUTimer;
+
+	void Init()
+	{
+ 		for (auto& query : mDisjointQuery)
+		{
+			D3D11_QUERY_DESC desc = { D3D11_QUERY_TIMESTAMP_DISJOINT };
+			g_pd3dDevice->CreateQuery(&desc, &query);
+		}
+
+		for (auto& query : mStartQuery)
+		{
+			D3D11_QUERY_DESC desc = { D3D11_QUERY_TIMESTAMP };
+			g_pd3dDevice->CreateQuery(&desc, &query);
+		}
+
+		for (auto& query : mEndQuery)
+		{
+			D3D11_QUERY_DESC desc = { D3D11_QUERY_TIMESTAMP };
+			g_pd3dDevice->CreateQuery(&desc, &query);
+		}
+
+		mFrameIndex = 0;
+	}
+
+	void Shutdown()
+	{
+		for (auto& query : mDisjointQuery)
+			query->Release();
+
+		for (auto& query : mStartQuery)
+			query->Release();
+
+		for (auto& query : mEndQuery)
+			query->Release();
+
+		*this = {};
+	}
+
+	void StartFrame()
+	{
+		// Frame time is between two StartFrame.
+		mFrameTimesS[mFrameIndex % cFrameHistorySize] = gTicksToSeconds(mCPUTimer.GetTicks());
+
+		// Reset the timer for this frame.
+		mCPUTimer.Reset();
+
+		// Start the queries for GPU time.
+		auto gpu_frame_index = mFrameIndex % cGPUHistorySize;
+		g_pd3dDeviceContext->Begin(mDisjointQuery[gpu_frame_index]);
+		g_pd3dDeviceContext->End(mStartQuery[gpu_frame_index]);
+	}
+
+	void EndFrame()
+	{
+		// CPU time is between Strt and EndFrame.
+		mCPUTimesMS[mFrameIndex % cCPUHistorySize] = gTicksToMilliseconds(mCPUTimer.GetTicks());
+
+		// End the GPU queries.
+		auto gpu_frame_index = mFrameIndex % cGPUHistorySize;
+		g_pd3dDeviceContext->End(mEndQuery[gpu_frame_index]);
+		g_pd3dDeviceContext->End(mDisjointQuery[gpu_frame_index]);
+
+		// Update the frame index.
+		mFrameIndex++;
+
+		// Get the GPU query data for the oldest frame.
+		// This is a bit sloppy, we don't check the return value, but it's unlikely to fail with >5 frames of history, and if it fails the GPU time will just be zero.
+		gpu_frame_index = mFrameIndex % cGPUHistorySize;
+        UINT64 start_time = 0;
+		g_pd3dDeviceContext->GetData(mStartQuery[gpu_frame_index], &start_time, sizeof(start_time), 0);
+
+        UINT64 end_time = 0;
+		g_pd3dDeviceContext->GetData(mEndQuery[gpu_frame_index], &end_time, sizeof(end_time), 0);
+
+        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data = { .Frequency = 1, .Disjoint = TRUE };
+		g_pd3dDeviceContext->GetData(mDisjointQuery[gpu_frame_index], &disjoint_data, sizeof(disjoint_data), 0);
+
+        if (disjoint_data.Disjoint == FALSE)
+        {
+            UINT64 delta = end_time - start_time;
+            mGPUTimesMS[gpu_frame_index] = (double)delta * 1000.0 / (double)disjoint_data.Frequency;
+        }
+		else
+		{
+			mGPUTimesMS[gpu_frame_index] = 0.0; // Better show 0 than an unreliable number.
+		}
+	}
+
+	double GetGPUAverageMilliseconds() const
+	{
+		int    count = 0;
+		double sum   = 0;
+		for (double time : mGPUTimesMS)
+		{
+			if (time == 0.0) continue; // Skip invalid times.
+
+			count++;
+			sum += time;
+		}
+		return sum / count;
+	}
+
+	double GetCPUAverageMilliseconds() const
+	{
+		int    count = 0;
+		double sum   = 0;
+		for (double time : mCPUTimesMS)
+		{
+			if (time == 0.0) continue; // Skip invalid times.
+
+			count++;
+			sum += time;
+		}
+		return sum / count;
+	}
+
+	int GetAverageFPS() const
+	{
+		int    count = 0;
+		double sum   = 0;
+		for (double time : mFrameTimesS)
+		{
+			if (time == 0.0) continue; // Skip invalid times.
+
+			count++;
+			sum += time;
+		}
+		double av_frame_time = sum / count;
+		return (int)ceil(1.0 / av_frame_time); // Ceil because it's annoying to see it flicker to 59.
+	}
+};
 
 
+struct CPUTimer
+{
+	static constexpr int cHistoryFrameCount = 5;
 
+	Timer  mTimer;
+	double mFrameTimesMS[cHistoryFrameCount]  = {};	// In Milliseconds.
+
+};
 
 
 // Main code
@@ -114,9 +260,14 @@ int WinMain(
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
+	FrameTimer fame_timer;
+	fame_timer.Init();
+
 	// Main loop
 	while (!gApp.IsExitReady())
 	{
+		fame_timer.StartFrame();
+
 		// Poll and handle messages (inputs, window resize, etc.)
 		// See the WndProc() function below for our to dispatch events to the Win32 backend.
 		MSG msg;
@@ -160,6 +311,11 @@ int WinMain(
 			ImGui::RenderPlatformWindowsDefault();
 		}
 #endif
+		fame_timer.EndFrame();
+
+		gUILastFrameStats.mCPUMilliseconds = fame_timer.GetCPUAverageMilliseconds();
+		gUILastFrameStats.mGPUMilliseconds = fame_timer.GetGPUAverageMilliseconds();
+		gUILastFrameStats.mFPS             = fame_timer.GetAverageFPS();
 
 		g_pSwapChain->Present(1, 0); // Present with vsync
 	}
@@ -167,6 +323,7 @@ int WinMain(
 	gFileSystem.StopMonitoring();
 
 	// Cleanup
+	fame_timer.Shutdown();
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
