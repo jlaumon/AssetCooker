@@ -8,7 +8,6 @@ solution "AssetCooker"
 
         kind "WindowedApp"
         symbols "On"
-        editandcontinue "On"
         dpiawareness "HighPerMonitor"
 		cppdialect "C++20"
 		exceptionhandling "Off"
@@ -34,10 +33,12 @@ solution "AssetCooker"
 
         filter { "configurations:Debug" }
             defines "ASSERTS_ENABLED"
+			optimize "Debug"
+			editandcontinue "On"
 			
-		-- filter "files:**.rs"
-			-- buildaction "ResourceCompile"
-
+		filter { "configurations:Release" }
+			optimize "Full"
+			
         filter {}
         
 		files 
