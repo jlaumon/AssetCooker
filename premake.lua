@@ -62,6 +62,8 @@ solution "AssetCooker"
             "thirdparty/subprocess/*.h",
 			"thirdparty/tomlplusplus/include/**.hpp",
 			"thirdparty/tomlplusplus/include/**.inl",
+			"thirdparty/fmt/include/**.h",
+			"thirdparty/fmt/src/format.cc",
 			"data/fonts/**.rc",
 			"data/fonts/**.h",
         }
@@ -77,6 +79,7 @@ solution "AssetCooker"
 			"thirdparty/WindowsHModular/include",
 			"thirdparty/xxHash",
 			"thirdparty/tomlplusplus/include",
+			"thirdparty/fmt/include",
         }
         
         links

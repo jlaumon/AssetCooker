@@ -16,3 +16,6 @@
 [submodule "thirdparty/tomlplusplus"]
 	path = thirdparty/tomlplusplus
 	url = https://github.com/marzer/tomlplusplus.git
+[submodule "thirdparty/fmt"]
+	path = thirdparty/fmt
+	url = https://github.com/fmtlib/fmt.git
