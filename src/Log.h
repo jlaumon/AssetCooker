@@ -12,18 +12,18 @@ struct Log
 {
 	static constexpr StringView  cErrorTag = "[error]";
 
-	template<typename... taArgs> void Add(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
+	template<typename... taArgs> void Add(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs)
 	{
-		Add(LogType::Normal, inFmt, std::make_format_args(inArgs...));
+		Add(LogType::Normal, inFmt, fmt::make_format_args(inArgs...));
 	}
 
-	template<typename... taArgs> void AddError(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
+	template<typename... taArgs> void AddError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs)
 	{
-		Add(LogType::Error, inFmt, std::make_format_args(inArgs...));
+		Add(LogType::Error, inFmt, fmt::make_format_args(inArgs...));
 	}
 
 	// Returns the formatted string out of convenience.
-	StringView                      Add(LogType inType, std::string_view inFmt, std::format_args inArgs);
+	StringView                      Add(LogType inType, StringView inFmt, fmt::format_args inArgs);
 
 	void Clear();
 	void Draw(StringView inName, bool* ioOpen = nullptr);

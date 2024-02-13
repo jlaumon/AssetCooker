@@ -673,7 +673,7 @@ FileDrive::FileDrive(char inDriveLetter)
 
 	// Get a handle to the drive.
 	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
-	mHandle = CreateFileA(std::format(R"(\\.\{}:)", mLetter).c_str(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	mHandle = CreateFileA(TempString32(R"(\\.\{}:)", mLetter).AsCStr(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (!mHandle.IsValid())
 		gApp.FatalError(R"(Failed to get handle to {}:\ - {})", mLetter, GetLastErrorString());
 

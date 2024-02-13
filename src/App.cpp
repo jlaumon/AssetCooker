@@ -53,7 +53,7 @@ bool App::IsExitReady()
 }
 
 
-void App::FatalErrorV(std::string_view inFmt, std::format_args inArgs)
+void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 {
 	// Make sure a single thread triggers the pop-up.
 	static std::mutex blocker;
@@ -65,15 +65,15 @@ void App::FatalErrorV(std::string_view inFmt, std::format_args inArgs)
 	if (gIsDebuggerAttached())
 		breakpoint;
 	else
-		// TODO: use wide chars
-		MessageBoxA(mMainWindowHwnd, std::vformat(inFmt, inArgs).c_str(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
+		// TODO: check if utf8 works here
+		MessageBoxA(mMainWindowHwnd, TempString512(inFmt, inArgs).AsCStr(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
 
 	// TODO: will need to do a proper exit and save the database at some point...
 	exit(1);
 }
 
 
-void App::LogV(std::string_view inFmt, std::format_args inArgs, LogType inType)
+void App::LogV(StringView inFmt, fmt::format_args inArgs, LogType inType)
 {
 	// Add to the in-memory log.
 	StringView formatted_str = mLog.Add(inType, inFmt, inArgs);

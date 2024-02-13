@@ -436,22 +436,22 @@ inline FileRepo& FileID::GetRepo() const
 
 
 // Formatter for FileRefNumber.
-template <> struct std::formatter<FileRefNumber> : std::formatter<std::string_view>
+template <> struct fmt::formatter<FileRefNumber> : fmt::formatter<fmt::string_view>
 {
 	auto format(FileRefNumber inRefNumber, format_context& ioCtx) const
 	{
-		return std::format_to(ioCtx.out(), "0x{:X}{:016X}", inRefNumber.mData[1], inRefNumber.mData[0]);
+		return fmt::format_to(ioCtx.out(), "0x{:X}{:016X}", inRefNumber.mData[1], inRefNumber.mData[0]);
 	}
 };
 
 
 
 // Formatter for FileInfo.
-template <> struct std::formatter<FileInfo> : std::formatter<std::string_view>
+template <> struct fmt::formatter<FileInfo> : fmt::formatter<fmt::string_view>
 {
 	auto format(const FileInfo& inFileInfo, format_context& ioCtx) const
 	{
-		return std::format_to(ioCtx.out(), "{}:{}", 
+		return fmt::format_to(ioCtx.out(), "{}:{}", 
 			inFileInfo.GetRepo().mName,
 			inFileInfo.mPath);
 	}
@@ -459,14 +459,14 @@ template <> struct std::formatter<FileInfo> : std::formatter<std::string_view>
 
 
 // Formatter for FileTime.
-template <> struct std::formatter<FileTime> : std::formatter<std::string_view>
+template <> struct fmt::formatter<FileTime> : fmt::formatter<fmt::string_view>
 {
 	auto format(FileTime inFileTime, format_context& ioCtx) const
 	{
 		if (inFileTime.IsValid())
 		{
 			SystemTime local_time = inFileTime.ToLocalTime();
-			return std::format_to(ioCtx.out(), "{:04}/{:02}/{:02} {:02}:{:02}:{:02}", 
+			return fmt::format_to(ioCtx.out(), "{:04}/{:02}/{:02} {:02}:{:02}:{:02}", 
 				local_time.mYear,
 				local_time.mMonth,
 				local_time.mDay,
@@ -476,7 +476,7 @@ template <> struct std::formatter<FileTime> : std::formatter<std::string_view>
 		}
 		else
 		{
-			return std::format_to(ioCtx.out(), "Unknown Time");
+			return fmt::format_to(ioCtx.out(), "Unknown Time");
 		}
 	}
 };

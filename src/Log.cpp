@@ -38,14 +38,14 @@ void Log::FinishLine(LogType inType, StringPool::ResizableStringView& inLine)
 }
 
 
-StringView Log::Add(LogType inType, std::string_view inFmt, std::format_args inArgs)
+StringView Log::Add(LogType inType, StringView inFmt, fmt::format_args inArgs)
 {
 	std::lock_guard lock(mMutex);
 
 	StringPool::ResizableStringView str = StartLine(inType);
 
 	size_t size_before_format = str.AsStringView().size();
-	std::vformat_to(std::back_inserter(str), inFmt, inArgs);
+	str.AppendFormatV(inFmt, inArgs);
 	size_t size_after_format = str.AsStringView().size();
 
 	FinishLine(inType, str);

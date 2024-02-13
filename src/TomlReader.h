@@ -17,11 +17,11 @@
 
 
 // Formatter for toml errors.
-template <> struct std::formatter<toml::parse_error> : std::formatter<std::string_view>
+template <> struct fmt::formatter<toml::parse_error> : fmt::formatter<fmt::string_view>
 {
 	auto format(const toml::parse_error& inError, format_context& ioCtx) const
 	{
-		return std::format_to(ioCtx.out(), R"({} (line {}, column {}))",
+		return fmt::format_to(ioCtx.out(), R"({} (line {}, column {}))",
 			inError.description(),
 			inError.source().begin.line,
 			inError.source().begin.column
@@ -31,21 +31,21 @@ template <> struct std::formatter<toml::parse_error> : std::formatter<std::strin
 
 
 // Formatter for toml node types.
-template <> struct std::formatter<toml::node_type> : std::formatter<std::string_view>
+template <> struct fmt::formatter<toml::node_type> : fmt::formatter<fmt::string_view>
 {
 	auto format(const toml::node_type& inNodeType, format_context& ioCtx) const
 	{
-		return std::format_to(ioCtx.out(), "{}", toml::impl::node_type_friendly_names[(int)inNodeType]);
+		return fmt::format_to(ioCtx.out(), "{}", toml::impl::node_type_friendly_names[(int)inNodeType]);
 	}
 };
 
 
 // Formatter for toml path.
-template <> struct std::formatter<toml::path> : std::formatter<std::string_view>
+template <> struct fmt::formatter<toml::path> : fmt::formatter<fmt::string_view>
 {
 	auto format(const toml::path& inPath, format_context& ioCtx) const
 	{
-		return std::format_to(ioCtx.out(), "{}", inPath.str());
+		return fmt::format_to(ioCtx.out(), "{}", inPath.str());
 	}
 };
 

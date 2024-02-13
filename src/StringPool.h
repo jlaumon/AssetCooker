@@ -88,10 +88,14 @@ struct StringPool
 			mPool.mBuffer.IncreaseSize(additional_size, mPoolLock);
 		}
 
-		template<typename... taArgs> void AppendFormat(std::format_string<taArgs...> inFmt, const taArgs&... inArgs)
+		template<typename... taArgs> void AppendFormat(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs)
 		{
-			// TODO this adds bytes 1 by 1, probably stupidly inefficient, parse first to get the size?
-			std::vformat_to(std::back_inserter(*this), inFmt.get(), std::make_format_args(inArgs...));
+			AppendFormatV(inFmt.get(), fmt::make_format_args(inArgs...));
+		}
+
+		void AppendFormatV(StringView inFmt, fmt::format_args inArgs)
+		{
+			fmt::vformat_to(std::back_inserter(*this), inFmt, inArgs);
 		}
 
 		void push_back(char inChar)

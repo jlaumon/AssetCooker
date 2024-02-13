@@ -5,8 +5,8 @@
 #include <span>
 #include <string_view>
 #include <string>
-#include <format>
 #include <optional>
+#include "fmt/format.h"
 
 struct StringView;
 constexpr bool gIsNullTerminated(StringView inString);
@@ -37,6 +37,7 @@ struct StringView : public std::string_view
 	constexpr StringView& operator=(StringView&&)		= default;
 
 	// Add implicit constructors from std::string_view, String and MutStringView.
+	constexpr StringView(fmt::string_view inString)		: std::string_view(inString.data(), inString.size()) {}
 	constexpr StringView(std::string_view inString)		: std::string_view(inString) {}
 	constexpr StringView(const String& inString)		: std::string_view(inString) {}
 	constexpr StringView(MutStringView inString)		: std::string_view(inString.data(), inString.size())
@@ -85,7 +86,8 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	}
 
 	// Constructor that also formats the string.
-	template <typename... taArgs> TempString(std::format_string<taArgs...> inFmt, taArgs&&... inArgs);
+	template <typename... taArgs> TempString(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs);
+	TempString(StringView inFmt, fmt::format_args inArgs);
 
 	TempString(StringView inString);
 
@@ -191,11 +193,11 @@ constexpr bool gIsNullTerminated(StringView inString)
 
 // Formatter for StringView.
 // This also makes formatting work for MutStringView and span<char> since StringView is implicity constructible from that.
-template <> struct std::formatter<StringView> : std::formatter<std::string_view>
+template <> struct fmt::formatter<StringView> : fmt::formatter<fmt::string_view>
 {
 	auto format(StringView inStringView, format_context& ioCtx) const
 	{
-		return std::formatter<std::string_view>::format(std::string_view(inStringView.data(), inStringView.size()), ioCtx);
+		return fmt::formatter<fmt::string_view>::format(fmt::string_view(inStringView.data(), inStringView.size()), ioCtx);
 	}
 };
 
@@ -203,18 +205,18 @@ template <> struct std::formatter<StringView> : std::formatter<std::string_view>
 enum class SizeInBytes : size_t;
 
 // Formatter for SizeInBytes.
-template <> struct std::formatter<SizeInBytes> : std::formatter<std::string_view>
+template <> struct fmt::formatter<SizeInBytes> : fmt::formatter<fmt::string_view>
 {
 	auto format(SizeInBytes inBytes, format_context& ioCtx) const
 	{
 		if ((size_t)inBytes < 10_KiB)
-			return std::format_to(ioCtx.out(), "{} B", (size_t)inBytes);
+			return fmt::format_to(ioCtx.out(), "{} B", (size_t)inBytes);
 		else if ((size_t)inBytes < 10_MiB)
-			return std::format_to(ioCtx.out(), "{} KiB", (size_t)inBytes / 1_KiB);
+			return fmt::format_to(ioCtx.out(), "{} KiB", (size_t)inBytes / 1_KiB);
 		else if ((size_t)inBytes < 10_GiB)
-			return std::format_to(ioCtx.out(), "{} MiB", (size_t)inBytes / 1_MiB);
+			return fmt::format_to(ioCtx.out(), "{} MiB", (size_t)inBytes / 1_MiB);
 		else
-			return std::format_to(ioCtx.out(), "{} GiB", (size_t)inBytes / 1_GiB);
+			return fmt::format_to(ioCtx.out(), "{} GiB", (size_t)inBytes / 1_GiB);
 	}
 };
 
@@ -227,20 +229,33 @@ OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 
 
 // Helper to format a string into a fixed size buffer.
-template<typename... taArgs>
-StringView gFormat(MutStringView ioBuffer, std::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+inline StringView gFormatV(MutStringView ioBuffer, StringView inFmt, fmt::format_args inArgs)
 {
-	auto result = std::format_to_n(ioBuffer.data(), ioBuffer.size() - 1, inFmt, std::forward<taArgs>(inArgs)...);
+	auto result = fmt::vformat_to_n(ioBuffer.data(), ioBuffer.size() - 1, inFmt, inArgs);
 	*result.out = 0; // Add the null terminator.
 
 	return { ioBuffer.data(), result.out };
 }
 
+template<typename... taArgs>
+StringView gFormat(MutStringView ioBuffer, fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+{
+	return gFormatV(ioBuffer, inFmt.get(), fmt::make_format_args(inArgs...));
+}
+
 
 template <size_t taSize>
-template <typename... taArgs> TempString<taSize>::TempString(std::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+template <typename... taArgs> TempString<taSize>::TempString(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
 {
 	StringView str_view = gFormat(mBuffer, inFmt, std::forward<taArgs>(inArgs)...);
+	mSize               = str_view.size();
+}
+
+
+template <size_t taSize>
+TempString<taSize>::TempString(StringView inFmt, fmt::format_args inArgs)
+{
+	StringView str_view = gFormatV(mBuffer, inFmt, inArgs);
 	mSize               = str_view.size();
 }
 
