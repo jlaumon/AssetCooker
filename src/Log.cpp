@@ -112,7 +112,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 			// Can't use clipper with the filter. For very long logs, we should store the filter result instead.
 			for (auto line : mLines)
 			{
-				if (mFilter.PassFilter(line.mData, line.mData + line.mSize))
+				if (mFilter.PassFilter({ line.mData, line.mData + line.mSize }))
 					sDrawLine(line);
 			}
 		}

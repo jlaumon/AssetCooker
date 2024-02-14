@@ -1,6 +1,11 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h"
 
+namespace ImGui
+{
+	bool ColoredButtonV1(const char* label, const ImVec2& size_arg, ImU32 text_color, ImU32 bg_color_1, ImU32 bg_color_2);
+}
+
 // Implementation
 bool ImGui::ColoredButtonV1(const char* label, const ImVec2& size_arg, ImU32 text_color, ImU32 bg_color_1, ImU32 bg_color_2)
 {
@@ -85,12 +90,13 @@ bool ImGui::ColoredButtonV1(const char* label, const ImVec2& size_arg, ImU32 tex
 }
 
 
-bool ImGui::ButtonGrad(const char* label, const ImVec2& size)
+bool ImGui::ButtonGrad(ImStrv label, const ImVec2& size)
 {
-	return ColoredButtonV1(label, size, 
-		ColorConvertFloat4ToU32(GetStyle().Colors[ImGuiCol_Text]),
-		IM_COL32(69, 69, 69, 255), 
-		IM_COL32(36, 36, 36, 255));
+	return ImGui::Button(label, size);
+	//return ColoredButtonV1(label, size, 
+	//	ColorConvertFloat4ToU32(GetStyle().Colors[ImGuiCol_Text]),
+	//	IM_COL32(69, 69, 69, 255), 
+	//	IM_COL32(36, 36, 36, 255));
 }
 
 

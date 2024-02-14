@@ -237,7 +237,7 @@ void gDrawFileInfo(const FileInfo& inFile)
 		// TODO auto wrapping is kind of incompatible with window auto resizing, need to provide a wrap position, or maybe make sure it isn't the first item drawn?
 		// https://github.com/ocornut/imgui/issues/778#issuecomment-239696811
 		//ImGui::PushTextWrapPos(0.0f);
-		ImGui::Text(gFormat(inFile));
+		ImGui::TextUnformatted(gFormat(inFile));
 		//ImGui::PopTextWrapPos();
 		ImGui::Spacing();
 
@@ -259,26 +259,26 @@ void gDrawFileInfo(const FileInfo& inFile)
 			ImGui::TableNextRow();
 			
 			ImGui::TableNextColumn(); ImGui::TextUnformatted("Repo");
-			ImGui::TableNextColumn(); ImGui::Text(TempString128("{} ({})", inFile.GetRepo().mName, inFile.GetRepo().mRootPath));
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString128("{} ({})", inFile.GetRepo().mName, inFile.GetRepo().mRootPath));
 
 			if (inFile.IsDeleted())
 			{
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Deletion Time");
-				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mCreationTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mCreationTime));
 			}
 			else
 			{
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("RefNumber");
-				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mRefNumber));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mRefNumber));
 				
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Creation Time");
-				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mCreationTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mCreationTime));
 
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change Time");
-				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mLastChangeTime));
 				
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change USN");
-				ImGui::TableNextColumn(); ImGui::Text(TempString64("{}", inFile.mLastChangeUSN));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mLastChangeUSN));
 			}
 
 			ImGui::EndTable();
@@ -540,7 +540,7 @@ void gDrawCookingLog()
 
 			ImGui::TableNextColumn();
 			{
-				ImGui::Text(TempString512("{}", command.GetMainInput().GetFile()));
+				ImGui::TextUnformatted(TempString512("{}", command.GetMainInput().GetFile()));
 			}
 
 			ImGui::TableNextColumn();
@@ -575,7 +575,7 @@ void gDrawCookingLog()
 					pop_color++;
 				}
 
-				ImGui::Text(TempString32(" {} ", icon));
+				ImGui::TextUnformatted(TempString32(" {} ", icon));
 
 				if (pop_color)
 					ImGui::PopStyleColor(pop_color);
@@ -679,7 +679,7 @@ void gDrawCookingThreads()
 				const CookingLogEntry& entry_log = gCookingSystem.GetLogEntry(entry_id);
 				const CookingCommand&  command   = gCookingSystem.GetCommand(entry_log.mCommandID);
 
-				ImGui::Text(TempString128("{} {}", command.GetRule().mName, command.GetMainInput().GetFile().mPath));
+				ImGui::TextUnformatted(TempString128("{} {}", command.GetRule().mName, command.GetMainInput().GetFile().mPath));
 
 				if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(0))
 					gSelectCookingLogEntry(entry_id, true);
@@ -731,7 +731,7 @@ void gDrawDebugWindow()
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 			{
 				const CookingRule& rule = gCookingSystem.mRules[i];
-				ImGui::Text(rule.mName);
+				ImGui::TextUnformatted(rule.mName);
 				// TODO add a gDrawCookingRule
 			}
 		}
@@ -820,7 +820,7 @@ void gDrawStatusBar()
 		}
 		case FileSystem::InitState::Scanning: 
 		{
-			ImGui::Text(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
+			ImGui::TextUnformatted(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
 			break;
 		}
 		case FileSystem::InitState::ReadingUSNJournal: 
@@ -843,7 +843,7 @@ void gDrawStatusBar()
 	double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
 	if (seconds_since_ready < 8.0)
 	{
-		ImGui::Text(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds. ",	gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
+		ImGui::TextUnformatted(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds. ",	gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
 	}
 	else
 	{
@@ -858,7 +858,7 @@ void gDrawStatusBar()
 	float         stats_text_size = ImGui::CalcTextSize(stats_text).x;
 	float         available_size  = ImGui::GetWindowContentRegionMax().x;
 	ImGui::SameLine(available_size - stats_text_size);
-	ImGui::Text(stats_text);
+	ImGui::TextUnformatted(stats_text);
 }
 
 
