@@ -461,6 +461,7 @@ void CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* 
 	mTotalSize--;
 }
 
+
 void CookingQueue::Clear()
 {
 	std::lock_guard lock(mMutex);
@@ -476,11 +477,19 @@ void CookingQueue::Clear()
 }
 
 
+size_t CookingQueue::GetSize() const
+{
+	std::lock_guard lock(mMutex);
+	return mTotalSize;
+}
+
+
 CookingSystem::CookingSystem()
 {
 	// Set the semaphore on the cooking queue so that worker threads are woken up when there's work to do.
 	mCommandsToCook.SetSemaphore(&mCookingThreadsSemaphore);
 }
+
 
 void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 {
@@ -1131,4 +1140,33 @@ CookingLogEntry& CookingSystem::AllocateCookingLogEntry(CookingCommandID inComma
 	log_entry.mCookingState    = CookingState::Cooking;
 
 	return log_entry;
+}
+
+
+bool CookingSystem::IsIdle() const
+{
+	// If there are things to cook, we're not idle.
+	if (!mCommandsToCook.IsEmpty())
+		return false;
+
+	// If any worker is busy, we're not idle.
+	for (auto& thread : mCookingThreads)
+		if (thread.mCurrentLogEntry.load() != CookingLogEntryID::cInvalid())
+			return false;
+
+	// If any command is still waiting for its final status, we're not idle.
+	{
+		std::lock_guard lock(mTimeOutsMutex);
+
+		for (auto& timeouts : mTimeOutBatches)
+			if (!timeouts.empty())
+				return false;
+	}
+
+	// If we're still initializing, we're not idle.
+	if (gFileSystem.GetInitState() != FileSystem::InitState::Ready)
+		return false;
+
+	// Guess we're idle.
+	return true;
 }

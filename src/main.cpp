@@ -88,10 +88,23 @@ struct FrameTimer
 		*this = {};
 	}
 
-	void StartFrame()
+	void Reset()
+	{
+		for (auto& time : mGPUTimesMS)
+			time = 0;
+		for (auto& time : mCPUTimesMS)
+			time = 0;
+		for (auto& time : mFrameTimesS)
+			time = 0;
+		mFrameIndex  = 0;
+	}
+
+	void StartFrame(double inWaitTime = 0)
 	{
 		// Frame time is between two StartFrame.
-		mFrameTimesS[mFrameIndex % cFrameHistorySize] = gTicksToSeconds(mCPUTimer.GetTicks());
+		// Skip the first frame because there is no previous StartFrame.
+		if (mFrameIndex > 0)
+			mFrameTimesS[mFrameIndex % cFrameHistorySize] = gTicksToSeconds(mCPUTimer.GetTicks()) - inWaitTime;
 
 		// Reset the timer for this frame.
 		mCPUTimer.Reset();
@@ -183,16 +196,6 @@ struct FrameTimer
 };
 
 
-struct CPUTimer
-{
-	static constexpr int cHistoryFrameCount = 5;
-
-	Timer  mTimer;
-	double mFrameTimesMS[cHistoryFrameCount]  = {};	// In Milliseconds.
-
-};
-
-
 // Main code
 int WinMain(
   HINSTANCE hInstance,
@@ -263,21 +266,70 @@ int WinMain(
 	FrameTimer fame_timer;
 	fame_timer.Init();
 
+	constexpr int cIdleFramesDelay = 0;
+	int           idle_frames      = 0;
+
 	// Main loop
 	while (!gApp.IsExitReady())
 	{
-		fame_timer.StartFrame();
+		if (!gCookingSystem.IsIdle())
+			idle_frames = 0;
+		else
+			idle_frames++;
+
+		// We've been idle enough time, don't draw the UI and wait for a window event instead.
+		if (idle_frames > cIdleFramesDelay)
+		{
+			Timer idle_timer;
+			while (true)
+			{
+				// Wait one second for a window event.
+				constexpr int timeout = 1000; // One second.
+				if (MsgWaitForMultipleObjects(0, nullptr, FALSE, timeout, QS_ALLINPUT) == WAIT_OBJECT_0)
+					break; // There's an event in the queue, go call PeekMessage!
+
+				// After one second, check if the cooking system is still idle (may have been files modified).
+				if (!gCookingSystem.IsIdle())
+					break;
+			}
+
+			idle_frames = 0;
+
+			// Start a new frame but include how much time we've spend waiting to not skew the FPS.
+			double wait_time = gTicksToSeconds(idle_timer.GetTicks());
+			fame_timer.StartFrame(wait_time);
+		}
+		else
+		{
+			fame_timer.StartFrame();
+		}
+
+		// If we're going idle next frame, draw one last frame that says we're going idle (by setting the FPS to 0).
+		// That only works if there's at least 1 frame delay.
+		if (cIdleFramesDelay > 0 && idle_frames == cIdleFramesDelay)
+			gUILastFrameStats = {};
 
 		// Poll and handle messages (inputs, window resize, etc.)
 		// See the WndProc() function below for our to dispatch events to the Win32 backend.
 		MSG msg;
 		while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
 		{
+			// If there's any message to process, we're not idle. The mouse might be moving over the UI, etc.
+			idle_frames = 0;
+
 			::TranslateMessage(&msg);
 			::DispatchMessage(&msg);
 		}
 		if (gApp.IsExitReady())
 			break;
+
+		// If the window is minimized, never draw.
+		if (IsIconic(hwnd))
+		{
+			// We're not going to call EndFrame, so reset the timer.
+			fame_timer.Reset();
+			continue;
+		}
 
 		// Handle window resize (we don't resize directly in the WM_SIZE handler)
 		if (g_ResizeWidth != 0 && g_ResizeHeight != 0)

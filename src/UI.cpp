@@ -851,14 +851,23 @@ void gDrawStatusBar()
 	}
 
 	// Display some stats on the right side of the status bar.
-	TempString128 stats_text("{} Files, {} Repos, {} Commands | UI {} FPS (CPU:{:4.2f}ms GPU:{:4.2f}ms)", 
-		gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount(),
-		gUILastFrameStats.mFPS, gUILastFrameStats.mCPUMilliseconds, gUILastFrameStats.mGPUMilliseconds);
+	{
+		TempString128 cooking_stats("{} Files, {} Repos, {} Commands | ", gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount());
+		float stats_text_size = ImGui::CalcTextSize(cooking_stats).x;
 
-	float         stats_text_size = ImGui::CalcTextSize(stats_text).x;
-	float         available_size  = ImGui::GetWindowContentRegionMax().x;
-	ImGui::SameLine(available_size - stats_text_size);
-	ImGui::TextUnformatted(stats_text);
+		TempString64 ui_stats("UI {:2} FPS (CPU:{:4.2f}ms GPU:{:4.2f}ms)", gUILastFrameStats.mFPS, gUILastFrameStats.mCPUMilliseconds, gUILastFrameStats.mGPUMilliseconds);
+		stats_text_size += ImGui::CalcTextSize(ui_stats).x;
+
+		// If the UI is stopping drawing, replace the stats (it's the last frame!)
+		if (gUILastFrameStats.mFPS == 0)
+			ui_stats.Set("UI Idle (Not Drawing)");
+
+		float available_size  = ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().ItemSpacing.x;
+		ImGui::SameLine(available_size - stats_text_size);
+		ImGui::TextUnformatted(cooking_stats);
+		ImGui::SameLine(0, 0);
+		ImGui::TextUnformatted(ui_stats);
+	}
 }
 
 

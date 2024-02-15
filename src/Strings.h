@@ -86,10 +86,15 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	}
 
 	// Constructor that also formats the string.
-	template <typename... taArgs> TempString(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs);
-	TempString(StringView inFmt, fmt::format_args inArgs);
+	template <typename... taArgs> TempString(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs) : TempString() { Format(inFmt, std::forward<taArgs>(inArgs)...); }
+	TempString(StringView inFmt, fmt::format_args inArgs) : TempString() { Format(inFmt, inArgs); }
 
-	TempString(StringView inString);
+	// Constructor that sets a string.
+	TempString(StringView inString) : TempString() { Set(inString); }
+
+	template <typename... taArgs> void Format(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs);
+	void                               Format(StringView inFmt, fmt::format_args inArgs);
+	void                               Set(StringView inString);
 
 	StringView  AsStringView() const { return { mBuffer, mSize }; }
 	const char* AsCStr() const { return mBuffer; }
@@ -245,7 +250,7 @@ StringView gFormat(MutStringView ioBuffer, fmt::format_string<taArgs...> inFmt, 
 
 
 template <size_t taSize>
-template <typename... taArgs> TempString<taSize>::TempString(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+template <typename... taArgs> void TempString<taSize>::Format(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
 {
 	StringView str_view = gFormat(mBuffer, inFmt, std::forward<taArgs>(inArgs)...);
 	mSize               = str_view.size();
@@ -253,14 +258,14 @@ template <typename... taArgs> TempString<taSize>::TempString(fmt::format_string<
 
 
 template <size_t taSize>
-TempString<taSize>::TempString(StringView inFmt, fmt::format_args inArgs)
+void TempString<taSize>::Format(StringView inFmt, fmt::format_args inArgs)
 {
 	StringView str_view = gFormatV(mBuffer, inFmt, inArgs);
 	mSize               = str_view.size();
 }
 
 template <size_t taSize>
-TempString<taSize>::TempString(StringView inString)
+void TempString<taSize>::Set(StringView inString)
 {
 	StringView str_view = gConcat(mBuffer, inString);
 	mSize               = str_view.size();

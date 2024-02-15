@@ -188,6 +188,9 @@ struct CookingQueue : NoCopy
 	void             Remove(CookingCommandID inCommandID, RemoveOption inOption = RemoveOption::None);
 	void             Clear();
 
+	size_t           GetSize() const;
+	bool             IsEmpty() const { return GetSize() == 0; }
+
 	struct PrioBucket
 	{
 		int                           mPriority = 0;
@@ -200,7 +203,7 @@ struct CookingQueue : NoCopy
 
 	std::vector<PrioBucket>    mPrioBuckets;
 	size_t                     mTotalSize = 0;
-	std::mutex                 mMutex;
+	mutable std::mutex         mMutex;
 	std::counting_semaphore<>* mSemaphore = nullptr;
 };
 
@@ -231,6 +234,7 @@ struct CookingSystem : NoCopy
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
 
 	void                                  ForceCook(CookingCommandID inCommandID);
+	bool                                  IsIdle() const; // Return true if nothing is happening. Used by the UI to decide if it needs to draw.
 
 	bool                                  mSlowMode = false; // Slows down cooking, for debugging.
 private:
@@ -276,7 +280,7 @@ private:
 	std::mutex                               mCookingLogMutex;
 
 	std::array<HashSet<CookingLogEntry*>, 2> mTimeOutBatches;
-	std::mutex                               mTimeOutsMutex;
+	mutable std::mutex                       mTimeOutsMutex;
 	int                                      mTimeOutBatchCurrentIndex = 0;
 	std::jthread                             mTimeOutUpdateThread;
 	std::binary_semaphore                    mTimeOutAddedSignal = std::binary_semaphore(0);
