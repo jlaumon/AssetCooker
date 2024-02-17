@@ -202,7 +202,7 @@ TempString256 gFormat(const CookingLogEntry& inLogEntry)
 	const CookingCommand& command = gCookingSystem.GetCommand(inLogEntry.mCommandID);
 	const CookingRule&    rule    = gCookingSystem.GetRule(command.mRuleID);
 	SystemTime            start_time = inLogEntry.mTimeStart.ToLocalTime();
-	return { "[#{} {:02}:{:02}:{:02}] {}{:10} {} - {}",
+	return { "[#{} {:02}:{:02}:{:02}] {}{} {} - {}",
 		rule.mPriority,
 		start_time.mHour, start_time.mMinute, start_time.mSecond,
 		command.GetRule().mName,
@@ -250,6 +250,15 @@ void gDrawFileInfo(const FileInfo& inFile)
 
 			// Always open a new window, but at least selects the file.
 			ShellExecuteA(nullptr, nullptr, "explorer", TempString512("/select, {}{}", inFile.GetRepo().mRootPath, inFile.mPath).AsCStr(), nullptr, SW_SHOWDEFAULT);
+		}
+
+		ImGui::SameLine();
+		if (ImGui::ButtonGrad("Copy Path"))
+		{
+			ImGui::LogToClipboard();
+			ImGui::LogText(inFile.GetRepo().mRootPath.AsCStr());
+			ImGui::LogText(inFile.mPath.AsCStr());
+			ImGui::LogFinish();
 		}
 
 		ImGui::SeparatorText("Details");
@@ -605,6 +614,18 @@ void gDrawSelectedCookingLogEntry()
 	const CookingLogEntry& log_entry = gCookingSystem.GetLogEntry(gSelectedCookingLogEntry);
 
 	ImGui::TextUnformatted(gFormat(log_entry));
+	if (ImGui::Button("Copy Command Line"))
+	{
+		const CookingCommand& command      = gCookingSystem.GetCommand(log_entry.mCommandID);
+		const CookingRule&    rule         = command.GetRule();
+		Optional<String>      command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(command.GetMainInput()));
+		if (command_line)
+		{
+			ImGui::LogToClipboard();
+			ImGui::LogText(command_line->c_str());
+			ImGui::LogFinish();
+		}
+	}
 
 	if (ImGui::BeginChild("ScrollingRegion", {}, ImGuiChildFlags_FrameStyle, ImGuiWindowFlags_HorizontalScrollbar))
 	{
