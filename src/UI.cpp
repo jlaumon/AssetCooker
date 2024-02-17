@@ -119,7 +119,7 @@ void gUIUpdate()
 		// The icons font.
 		{
 			ImFontConfig icons_config          = font_config;
-			icons_config.MergeMode             = true; // Merge inot the default font.
+			icons_config.MergeMode             = true; // Merge into the default font.
 			icons_config.GlyphOffset.y         = 0;
 
 			static const ImWchar icon_ranges[] = { ICON_MIN_FK, ICON_MAX_FK, 0 };
@@ -875,7 +875,28 @@ void gDrawMain()
 {
 	gCurrentTimeInTicks = gGetTickCount() - gProcessStartTicks;
 
-	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode/* | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton*/);
+	ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton);
+	do_once
+	{
+		ImGui::DockBuilderRemoveNode(dockspace_id); // Clear out existing layout
+		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_PassthruCentralNode); // Add empty node
+		ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+
+		ImGuiID dock_main_id   = dockspace_id; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
+		ImGuiID dock_id_up     = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up,    0.2f, nullptr, &dock_main_id);
+		ImGuiID dock_id_left   = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left,  0.5f, nullptr, &dock_main_id);
+		ImGuiID dock_id_right_up, dock_id_right_bottom;
+		ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.5f, &dock_id_right_up, &dock_id_right_bottom);
+
+		ImGui::DockBuilderDockWindow("Worker Threads", dock_id_up);
+		ImGui::DockBuilderDockWindow("Command Search", dock_id_left);
+		ImGui::DockBuilderDockWindow("Cooking Queue",  dock_id_left);
+		ImGui::DockBuilderDockWindow("Cooking Log", dock_id_right_up);
+		ImGui::DockBuilderDockWindow("App Log", dock_id_right_bottom);
+		ImGui::DockBuilderDockWindow("Command Output", dock_id_right_bottom);
+		ImGui::DockBuilderFinish(dockspace_id);
+	};
+
 
 	gApp.mLog.Draw(cAppLogWindowName);
 
