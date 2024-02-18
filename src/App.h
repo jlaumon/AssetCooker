@@ -39,7 +39,7 @@ struct App
 	bool                            mExitRequested  = false;
 	bool                            mExitReady      = false;
 	String                          mRuleFilePath   = "rules.toml";
-	LogLevel                        mLogFSActivity  = LogLevel::None;
+	LogLevel                        mLogFSActivity  = LogLevel::Normal;
 	struct Log                      mLog;
 	String                          mInitError;
 };

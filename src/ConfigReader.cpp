@@ -67,4 +67,17 @@ void gReadConfigFile(StringView inPath)
 	int num_cooking_threads = 0;
 	if (reader.TryRead("NumCookingThreads", num_cooking_threads))
 		gCookingSystem.SetCookingThreadCount(num_cooking_threads);
+
+	// Filesystem log verbosity.
+	TempString64 log_level;
+	if (reader.TryRead("LogFSActivity", log_level))
+	{
+		StringView log_level_sv = log_level.AsStringView();
+		if (gIsEqualNoCase(log_level_sv, "None"))
+			gApp.mLogFSActivity = LogLevel::None;
+		else if (gIsEqualNoCase(log_level_sv, "Normal"))
+			gApp.mLogFSActivity = LogLevel::Normal;
+		else if (gIsEqualNoCase(log_level_sv, "Verbose"))
+			gApp.mLogFSActivity = LogLevel::Verbose;
+	}
 }
