@@ -104,7 +104,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 	mFilter.Draw(R"(Filter ("incl,-excl") ("error"))", 400);
 	ImGui::Separator();
 
-	if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
+	if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_AlwaysHorizontalScrollbar))
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 		if (mFilter.IsActive())
