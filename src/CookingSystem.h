@@ -7,8 +7,6 @@
 
 #include <vector>
 
-#include "Log.h"
-
 enum class CommandVariables : uint8
 {
 	Ext,
