@@ -14,12 +14,55 @@ More information at: https://docs.microsoft.com/en-us/visualstudio/debugger/crea
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
 
 <Type Name="VMemArray&lt;*&gt;">
-  <DisplayString>{{Size={*($T1**)&amp;mEnd - mBegin} Capacity={(mEndCommitted - (uint8*)mBegin) / sizeof($T1)}}}</DisplayString>
+  <DisplayString>{{ Size={*($T1**)&amp;mEnd - mBegin} Capacity={(mEndCommitted - (uint8*)mBegin) / sizeof($T1)} }}</DisplayString>
   <Expand>
     <ArrayItems>
       <Size>*($T1**)&amp;mEnd - mBegin</Size>
       <ValuePointer>mBegin</ValuePointer>
     </ArrayItems>
+  </Expand>
+</Type>
+
+
+<Type Name="ankerl::unordered_dense::v4_1_2::segmented_vector&lt;*,*,*&gt;">
+  <DisplayString>{{ Size={m_size} Segments={m_blocks._Mypair._Myval2._Mylast - m_blocks._Mypair._Myval2._Myfirst} }}</DisplayString>
+  <Expand>
+    <CustomListItems>
+      <Variable Name="index" InitialValue="0" />
+      <Variable Name="element" InitialValue="0" />
+      <Variable Name="block" InitialValue="0" />
+      <Size>m_size</Size>
+      <Loop>
+        <Break Condition="index == m_size" />
+        <Item>m_blocks[block][element]</Item>
+        <Exec>element++</Exec>
+        <If Condition="element == num_elements_in_block">
+          <Exec>block++</Exec>
+          <Exec>element = 0</Exec>
+        </If>
+      </Loop>
+    </CustomListItems>
+  </Expand>
+</Type>
+
+<Type Name="FileRefNumber">
+  <DisplayString>{ mData[0], x } { mData[1], x }</DisplayString>
+</Type>
+
+<Type Name="Hash128">
+  <DisplayString>{ mData[0], x } { mData[1], x }</DisplayString>
+</Type>
+
+<Type Name="OwnedHandle">
+  <DisplayString>{ mHandle, handle }</DisplayString>
+</Type>
+
+<Type Name="FileID">
+  <DisplayString Condition="mRepoIndex == cMaxFileRepos">[-1, -1] Invalid</DisplayString>
+  <DisplayString Condition="mRepoIndex != cMaxFileRepos">[{mRepoIndex}, {mFileIndex}] { gFileSystem.mRepos[mRepoIndex].mName, s8b}:{ gFileSystem.mRepos[mRepoIndex].mFiles[mFileIndex].mPath, s8b }</DisplayString>
+  <Expand>
+    <Item Condition="mRepoIndex != cMaxFileRepos" Name="File">gFileSystem.mRepos[mRepoIndex].mFiles[mFileIndex]</Item>
+    <Item Condition="mRepoIndex != cMaxFileRepos" Name="Repo">gFileSystem.mRepos[mRepoIndex]</Item>
   </Expand>
 </Type>
 
