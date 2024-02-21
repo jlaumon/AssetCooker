@@ -138,6 +138,10 @@ struct VMemArray : NoCopy
 	taType*              End()								{ return mEnd; }
 	taType*              begin()							{ return mBegin; }
 	taType*              end()								{ return mEnd; }
+	const taType*        Begin()	const					{ return mBegin; }
+	const taType*        End()		const					{ return mEnd; }
+	const taType*        begin()	const					{ return mBegin; }
+	const taType*        end()		const					{ return mEnd; }
 
 private:
 	void                 ValidateLock(const VMemArrayLock& inLock) const { gAssert(inLock && inLock.mutex() == &mMutex); }
