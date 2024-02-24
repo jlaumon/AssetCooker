@@ -1,7 +1,7 @@
 solution "AssetCooker"
 	
 	platforms { "x64" }
-	configurations { "Debug", "Release" }
+	configurations { "Debug", "DebugASAN", "DebugOpt", "Release" }
 	startproject "AssetCooker"
 
 	project "AssetCooker"
@@ -34,6 +34,18 @@ solution "AssetCooker"
         filter { "configurations:Debug" }
             defines "ASSERTS_ENABLED"
 			optimize "Debug"
+			editandcontinue "On"
+			
+		filter { "configurations:DebugASAN" }
+            defines "ASSERTS_ENABLED"
+			optimize "Debug"
+			editandcontinue "Off"     -- incompatble with ASAN
+			flags "NoIncrementalLink" -- incompatble with ASAN
+			sanitize "Address"
+			
+		filter { "configurations:DebugOpt" }
+            defines "ASSERTS_ENABLED"
+			optimize "Full"
 			editandcontinue "On"
 			
 		filter { "configurations:Release" }
