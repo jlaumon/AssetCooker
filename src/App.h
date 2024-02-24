@@ -17,7 +17,7 @@ enum class LogLevel : uint8
 // Manages the initialization and life time of the application.
 struct App
 {
-	void Init(void* inHwnd);
+	void Init();
 
 	void RequestExit();
 	bool IsExitRequested();

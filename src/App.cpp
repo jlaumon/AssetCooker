@@ -10,10 +10,8 @@
 #include "win32/misc.h"
 #include "win32/window.h"
 
-void App::Init(void* inHwnd)
+void App::Init()
 {
-	mMainWindowHwnd = inHwnd;
-
 	mLog.mAutoAddTime = true;
 
 	// The application includes a manifest that should make the default code page be UTF8 (if at least Windows 10 1903).

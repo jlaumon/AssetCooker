@@ -20,6 +20,7 @@ ImGuiStyle             gStyle                           = {};
 
 bool                   gOpenImGuiDemo                   = false;
 bool                   gOpenDebugWindow                 = false;
+bool                   gOpenCookingThreadsWindow        = false;
 CookingLogEntryID      gSelectedCookingLogEntry         = {};
 bool                   gScrollToSelectedCookingLogEntry = false;
 
@@ -144,6 +145,13 @@ void gDrawMainMenuBar()
 		{
 			if (ImGui::MenuItem("Exit", "Alt + F4"))
 				gApp.RequestExit();
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("View"))
+		{
+			ImGui::MenuItem("Cooking Threads", nullptr, &gOpenCookingThreadsWindow);
 
 			ImGui::EndMenu();
 		}
@@ -678,7 +686,10 @@ void gDrawCommandSearch()
 
 void gDrawCookingThreads()
 {
-	if (!ImGui::Begin("Worker Threads", nullptr, ImGuiWindowFlags_NoScrollbar))
+	if (!gOpenCookingThreadsWindow)
+		return;
+
+	if (!ImGui::Begin("Worker Threads", &gOpenCookingThreadsWindow, ImGuiWindowFlags_NoScrollbar))
 	{
 		ImGui::End();
 		return;

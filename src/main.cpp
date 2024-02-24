@@ -206,16 +206,26 @@ int WinMain(
 {
 	// TODO link static runtime to avoid having to install vcredist
 
-	// TODO move that inside App
-	// Create application window
 	ImGui_ImplWin32_EnableDpiAwareness();
+
+	gApp.Init();
+
+	// TODO move that inside App?
+	// TODO load window size/pos from config file?
+	// Create application window
 	WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
 	::RegisterClassExW(&wc);
 	wchar_t name_buffer[128];
 	auto name_wchar = gUtf8ToWideChar(cAppName, name_buffer);
-	HWND hwnd = ::CreateWindowW(wc.lpszClassName, name_wchar.value_or(L"").data(), WS_OVERLAPPEDWINDOW, 100, 100, 2400, 1600, nullptr, nullptr, wc.hInstance, nullptr);
+	HWND hwnd = ::CreateWindowW(
+		wc.lpszClassName, 
+		name_wchar.value_or(L"").data(), 
+		WS_OVERLAPPEDWINDOW, 
+		CW_USEDEFAULT, CW_USEDEFAULT, // pos
+		CW_USEDEFAULT, CW_USEDEFAULT, // size
+		nullptr, nullptr, wc.hInstance, nullptr);
 
-	gApp.Init(hwnd);
+	gApp.mMainWindowHwnd = hwnd;
 
 	// Initialize Direct3D
 	// TODO start the threads before doing this because that's slow (~300ms)
