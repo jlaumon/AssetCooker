@@ -266,7 +266,7 @@ int WinMain(
 	FrameTimer fame_timer;
 	fame_timer.Init();
 
-	constexpr int cIdleFramesDelay = 0;
+	constexpr int cIdleFramesDelay = 2; // TODO should ideally be zero, but needs some fixes, check the other todos
 	int           idle_frames      = 0;
 
 	// Main loop

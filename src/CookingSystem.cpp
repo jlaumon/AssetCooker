@@ -1171,6 +1171,8 @@ bool CookingSystem::IsIdle() const
 	if (gFileSystem.GetInitState() != FileSystem::InitState::Ready)
 		return false;
 
+	// TODO check if filesystem monitoring thread is idle, or check if log is changed
+
 	// Guess we're idle.
 	return true;
 }

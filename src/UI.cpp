@@ -36,6 +36,8 @@ constexpr uint32       cColorFrameBgError               = IM_COL32(150,  60,  60
 
 StringView gGetAnimatedHourglass()
 {
+	// TODO probably should redraw as long as this is used, because it's the sign that something still needs to update (but could also perhaps lead to accidentally always redrawing?)
+	// TODO an example is the commands waiting for timeout: once they time out we need 1 redraw to replace this icon with a cross but everything is detected as 'idle' already
 	constexpr StringView hourglass[] = { ICON_FK_HOURGLASS_START, ICON_FK_HOURGLASS_HALF, ICON_FK_HOURGLASS_END };
 	return hourglass[(int)(gTicksToSeconds(gCurrentTimeInTicks) * 4.0) % gElemCount(hourglass)];
 }
