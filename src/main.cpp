@@ -38,16 +38,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 // Helper struct to measure CPU/GPU times of the UI updates.
 struct FrameTimer
 {
-	static constexpr int cGPUHistorySize                    = 32;
-	static constexpr int cCPUHistorySize                    = 32;
-	static constexpr int cFrameHistorySize                  = 256;
+	static constexpr int cGPUHistorySize                    = 8;
+	static constexpr int cCPUHistorySize                    = 8;
 
     ID3D11Query*         mDisjointQuery[cGPUHistorySize]    = {};
 	ID3D11Query*         mStartQuery   [cGPUHistorySize]    = {};
 	ID3D11Query*         mEndQuery     [cGPUHistorySize]    = {};
 	double               mGPUTimesMS   [cGPUHistorySize]    = {}; // In Milliseconds.
 	double               mCPUTimesMS   [cCPUHistorySize]    = {}; // In Milliseconds.
-	double               mFrameTimesS  [cFrameHistorySize]  = {}; // In Seconds.
 	uint64               mFrameIndex                        = 0;
 	Timer                mCPUTimer;
 
@@ -94,18 +92,11 @@ struct FrameTimer
 			time = 0;
 		for (auto& time : mCPUTimesMS)
 			time = 0;
-		for (auto& time : mFrameTimesS)
-			time = 0;
 		mFrameIndex  = 0;
 	}
 
 	void StartFrame(double inWaitTime = 0)
 	{
-		// Frame time is between two StartFrame.
-		// Skip the first frame because there is no previous StartFrame.
-		if (mFrameIndex > 0)
-			mFrameTimesS[mFrameIndex % cFrameHistorySize] = gTicksToSeconds(mCPUTimer.GetTicks()) - inWaitTime;
-
 		// Reset the timer for this frame.
 		mCPUTimer.Reset();
 
@@ -162,6 +153,9 @@ struct FrameTimer
 			count++;
 			sum += time;
 		}
+		if (count == 0)
+			return 0; // Don't divide by zero.
+
 		return sum / count;
 	}
 
@@ -176,22 +170,10 @@ struct FrameTimer
 			count++;
 			sum += time;
 		}
+		if (count == 0)
+			return 0; // Don't divide by zero.
+
 		return sum / count;
-	}
-
-	int GetAverageFPS() const
-	{
-		int    count = 0;
-		double sum   = 0;
-		for (double time : mFrameTimesS)
-		{
-			if (time == 0.0) continue; // Skip invalid times.
-
-			count++;
-			sum += time;
-		}
-		double av_frame_time = sum / count;
-		return (int)ceil(1.0 / av_frame_time); // Ceil because it's annoying to see it flicker to 59.
 	}
 };
 
@@ -276,7 +258,7 @@ int WinMain(
 	FrameTimer fame_timer;
 	fame_timer.Init();
 
-	constexpr int cIdleFramesDelay = 2; // TODO should ideally be zero, but needs some fixes, check the other todos
+	constexpr int cIdleFramesDelay = 1; // TODO should ideally be zero, but needs some fixes, check the other todos
 	int           idle_frames      = 0;
 
 	// Main loop
@@ -304,20 +286,9 @@ int WinMain(
 			}
 
 			idle_frames = 0;
-
-			// Start a new frame but include how much time we've spend waiting to not skew the FPS.
-			double wait_time = gTicksToSeconds(idle_timer.GetTicks());
-			fame_timer.StartFrame(wait_time);
-		}
-		else
-		{
-			fame_timer.StartFrame();
 		}
 
-		// If we're going idle next frame, draw one last frame that says we're going idle (by setting the FPS to 0).
-		// That only works if there's at least 1 frame delay.
-		if (cIdleFramesDelay > 0 && idle_frames == cIdleFramesDelay)
-			gUILastFrameStats = {};
+		fame_timer.StartFrame();
 
 		// Poll and handle messages (inputs, window resize, etc.)
 		// See the WndProc() function below for our to dispatch events to the Win32 backend.
@@ -377,7 +348,6 @@ int WinMain(
 
 		gUILastFrameStats.mCPUMilliseconds = fame_timer.GetCPUAverageMilliseconds();
 		gUILastFrameStats.mGPUMilliseconds = fame_timer.GetGPUAverageMilliseconds();
-		gUILastFrameStats.mFPS             = fame_timer.GetAverageFPS();
 
 		g_pSwapChain->Present(1, 0); // Present with vsync
 	}

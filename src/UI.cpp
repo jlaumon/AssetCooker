@@ -881,7 +881,14 @@ void gDrawStatusBar()
 	}
 	else
 	{
-		ImGui::TextUnformatted(ICON_FK_CUTLERY" Let's get cooking.");
+		constexpr StringView messages[] = {
+			ICON_FK_CUTLERY" Let's get cookin'.",
+			ICON_FK_CUTLERY" It's a great day to cook.",
+			ICON_FK_CUTLERY" Not impossible, just takes longer to cook.",
+			ICON_FK_CUTLERY" What's a shader anyway.",
+		};
+		static int message_choice = gRand32() % gElemCount(messages);
+		ImGui::TextUnformatted(messages[message_choice]);
 	}
 
 	// Display some stats on the right side of the status bar.
@@ -889,18 +896,16 @@ void gDrawStatusBar()
 		TempString128 cooking_stats("{} Files, {} Repos, {} Commands | ", gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount());
 		float stats_text_size = ImGui::CalcTextSize(cooking_stats).x;
 
-		TempString64 ui_stats("UI {:2} FPS (CPU:{:4.2f}ms GPU:{:4.2f}ms)", gUILastFrameStats.mFPS, gUILastFrameStats.mCPUMilliseconds, gUILastFrameStats.mGPUMilliseconds);
+		StringView ui_stats(ICON_FK_TACHOMETER " UI");
 		stats_text_size += ImGui::CalcTextSize(ui_stats).x;
-
-		// If the UI is stopping drawing, replace the stats (it's the last frame!)
-		if (gUILastFrameStats.mFPS == 0)
-			ui_stats.Set("UI Idle (Not Drawing)");
 
 		float available_size  = ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().ItemSpacing.x;
 		ImGui::SameLine(available_size - stats_text_size);
 		ImGui::TextUnformatted(cooking_stats);
 		ImGui::SameLine(0, 0);
 		ImGui::TextUnformatted(ui_stats);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip(TempString64("UI CPU:{:4.2f}ms\nUI GPU:{:4.2f}ms", gUILastFrameStats.mCPUMilliseconds, gUILastFrameStats.mGPUMilliseconds).AsCStr());
 	}
 }
 
