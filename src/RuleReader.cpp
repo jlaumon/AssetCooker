@@ -12,7 +12,7 @@ void gReadRuleFile(StringView inPath)
 	toml::parse_result rules_toml = toml::parse_file(inPath);
 	if (!rules_toml)
 	{
-		gApp.LogError("Failed to parse Rule file.");
+		gApp.LogError(R"(Failed to parse Rule file "{}".)", inPath);
 		gApp.LogError("{}", rules_toml.error());
 		gApp.SetInitError(TempString512(R"(Failed to parse Rule file "{}". See log for details.)", inPath).AsStringView());
 		return;

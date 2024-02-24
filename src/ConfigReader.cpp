@@ -7,13 +7,13 @@
 
 void gReadConfigFile(StringView inPath)
 {
-	gApp.Log(R"(Reading Config file "{}.")", inPath);
+	gApp.Log(R"(Reading Config file "{}".)", inPath);
 
 	// Parse the toml file.
 	toml::parse_result config_toml = toml::parse_file(inPath);
 	if (!config_toml)
 	{
-		gApp.LogError("Failed to parse Config file.");
+		gApp.LogError(R"(Failed to parse Config file "{}".)", inPath);
 		gApp.LogError("{}", config_toml.error());
 		gApp.SetInitError(TempString512(R"(Failed to parse Config file "{}". See log for details.)", inPath).AsStringView());
 		return;
