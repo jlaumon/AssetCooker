@@ -2,6 +2,7 @@
 #include "Core.h"
 #include "StringPool.h"
 #include "CookingSystemIDs.h"
+#include "Queue.h"
 
 #include <thread>
 #include <semaphore>
@@ -47,6 +48,30 @@ struct OwnedHandle : NoCopy
 	bool IsValid() const							{ return mHandle != cInvalid; }
 
 	void* mHandle = cInvalid;
+};
+
+
+enum class OpenFileError : uint8
+{
+	NoError,
+	FileNotFound,
+	SharingViolation,	// File already opened by another process.
+};
+
+
+struct HandleOrError
+{
+	HandleOrError(OwnedHandle&& ioHandle)
+	{
+		gAssert(ioHandle.IsValid());
+		mHandle = std::move(ioHandle);
+	}
+	HandleOrError(OpenFileError inError)  { mError = inError; }
+	bool          IsValid() const { return mHandle.IsValid(); }
+	OwnedHandle&  operator*() { return mHandle; }
+
+	OwnedHandle   mHandle;
+	OpenFileError mError = OpenFileError::NoError;
 };
 
 
@@ -314,6 +339,13 @@ struct FileRepo : NoCopy
 
 	void                ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<uint8> ioBuffer);
 
+	enum class RequestedAttributes
+	{
+		USNOnly,
+		All
+	};
+	void                ScanFile(FileInfo& ioFile, RequestedAttributes inRequestedAttributes);
+
 	uint32              mIndex = 0;  // The index of this repo.
 	StringView          mName;       // A named used to identify the repo.
 	StringView          mRootPath;   // Absolute path to the repo. Starts with the drive letter, ends with a slash.
@@ -332,18 +364,27 @@ struct FileDrive : NoCopy
 
 	template <typename taFunctionType>
 	USN                    ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionType inRecordCallback) const; // TODO replace template by a typed std::function_ref equivalent
-	bool                   ProcessMonitorDirectory(Span<uint8> ioBufferUSN, Span<uint8> ioBufferScan); // Check if files changed. Return false if there were no changes.
+	bool                   ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioScanQueue, Span<uint8> ioBufferScan); // Check if files changed. Return false if there were no changes.
 	FileRepo*              FindRepoForPath(StringView inFullPath);                                        // Return nullptr if not in any repo.
 
-	OwnedHandle            OpenFileByRefNumber(FileRefNumber inRefNumber) const;
+	HandleOrError          OpenFileByRefNumber(FileRefNumber inRefNumber, FileID inFileID) const;
 	OptionalStringView     GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const;    // Get the full path of this file, including the drive letter part.
 	USN                    GetUSN(const OwnedHandle& inFileHandle) const;
+
+	FileID                 FindFileID(FileRefNumber inRefNumber) const;                                   // Return an invalid FileID if not found.
 
 	char                   mLetter = 'C';
 	OwnedHandle            mHandle;           // Handle to the drive, needed to open files with ref numbers.
 	uint64                 mUSNJournalID = 0; // Journal ID, needed to query the USN journal.
 	USN                    mNextUSN      = 0;
 	std::vector<FileRepo*> mRepos;
+	
+	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
+	using FilesByPathHash = SegmentedHashMap<Hash128, FileID>;
+
+	FilesByRefNumberMap        mFilesByRefNumber; // Map to find files by ref number.
+	FilesByPathHash            mFilesByPathHash;  // Map to find files by path hash.
+	mutable std::mutex         mFilesMutex;       // Mutex to protect access to the maps.
 };
 
 
@@ -362,13 +403,10 @@ struct FileSystem : NoCopy
 
 	FileRepo*       FindRepo(StringView inRepoName);               // Return nullptr if not found.
 
-	FileID          FindFileID(FileRefNumber inRefNumber) const;   // Return an invalid FileID if not found.
-	FileInfo*       FindFile(FileRefNumber inRefNumber);           // Return nullptr if not found.
-
 	bool            CreateDirectory(FileID inFileID);              // Make sure all the parent directories for this file exist.
 	bool            DeleteFile(FileID inFileID);                   // Delete this file on disk.
 
-	size_t          GetRepoCount() const { return mRepos.size(); } // Number of repos, for debug/display.
+	size_t          GetRepoCount() const { return mRepos.Size(); } // Number of repos, for debug/display.
 	size_t          GetFileCount() const;                          // Total number of files, for debug/display.
 
 	void			KickMonitorDirectoryThread();
@@ -387,21 +425,17 @@ private:
 	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN);
 	void			MonitorDirectoryThread(std::stop_token inStopToken);
 
+	void            RescanLater(FileID inFileID);
+
 	FileDrive&		GetOrAddDrive(char inDriveLetter);
 
 	friend void     gDrawDebugWindow();
 	friend void     gDrawStatusBar();
 	friend struct FileRepo;
 
-	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
-	using FilesByPathHash = SegmentedHashMap<Hash128, FileID>;
 
-	SegmentedVector<FileRepo>  mRepos;
-	SegmentedVector<FileDrive> mDrives;           // All the drives that have at least one repo on them.
-
-	FilesByRefNumberMap        mFilesByRefNumber; // Map to find files by ref number.
-	FilesByPathHash            mFilesByPathHash;  // Map to find files by path hash.
-	mutable std::mutex         mFilesMutex;       // Mutex to protect access to the maps.
+	VMemArray<FileRepo>        mRepos  = { 10'000'000, gVMemCommitGranularity() };
+	VMemArray<FileDrive>       mDrives = { 10'000'000, gVMemCommitGranularity() };        // All the drives that have at least one repo on them.
 
 	std::atomic<InitState>     mInitState = InitState::NotInitialized;
 	struct InitStats
@@ -417,6 +451,15 @@ private:
 
 	std::jthread               mMonitorDirThread;
 	std::binary_semaphore      mMonitorDirThreadSignal = std::binary_semaphore(0);
+
+	struct FileToRescan
+	{
+		FileID mFileID;
+		int64  mTime;
+	};
+
+	Queue<FileToRescan> mFilesToRescan;
+	std::mutex          mFilesToRescanMutex;
 };
 
 
