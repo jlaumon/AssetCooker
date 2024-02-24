@@ -50,7 +50,7 @@ constexpr bool gIsNormalized(StringView inPath)
 
 constexpr bool gIsAbsolute(StringView inPath)
 {
-	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath.substr(1, 2) == ":\\"; 
+	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath[1] == ':' && (inPath[2] == '\\' || inPath[2] == '/'); 
 }
 
 
@@ -950,7 +950,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 			HandleOrError file_handle = OpenFileByRefNumber(inRecord.FileReferenceNumber, FileID::cInvalid());
 			if (!file_handle.IsValid())
 			{
-				// TODO can we open the file with different access rights to just get the path? try on C:/ where lots of things happen
+				// TODO can we open the file with different access rights to just get the path? try on .git, there are locked files in there
 				gApp.FatalError("TODO");
 				//// If the file exists but it failed, retry later.
 				//if (file_handle.mError != OpenFileError::FileNotFound)
@@ -1095,21 +1095,23 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 			gApp.FatalError("Failed to init FileRepo {} ({}) - There is already a repo with that name.", inName, inRootPath);
 	}
 
-	// Normalize the root path.
-	String root_path(inRootPath);
-	gNormalizePath(root_path);
+	TempString512 root_path;
 
-	// Validate it.
-	if (root_path.size() < 3 
-		|| !gIsAlpha(root_path[0]) 
-		|| !gStartsWith(root_path.substr(1), R"(:\)"))
+	// If it's not an absolute path, prepend with the current dir.
+	if (!gIsAbsolute(inRootPath))
 	{
-		gApp.FatalError("Failed to init FileRepo {} ({}) - Root Path should start with a drive letter (eg. D:/).", inName, inRootPath);
+		root_path.mSize = GetCurrentDirectoryA(root_path.cCapacity, root_path.mBuffer);
+		root_path.Append("\\");
 	}
+
+	root_path.Append(inRootPath);
+
+	// Normalize it.
+	gNormalizePath({ root_path.mBuffer, root_path.mSize });
 
 	// Add a trailing slash if there isn't one.
 	if (!gEndsWith(root_path, "\\"))
-		root_path.append("\\");
+		root_path.Append("\\");
 
 	// Check if it overlaps with other repos.
 	// TODO: test this

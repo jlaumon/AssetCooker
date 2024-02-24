@@ -391,7 +391,7 @@ struct FileDrive : NoCopy
 
 struct FileSystem : NoCopy
 {
-	void            AddRepo(StringView inName, StringView inRootPath);
+	void            AddRepo(StringView inName, StringView inRootPath);	// Path can be absolute or relative to current directory.
 
 	void            StartMonitoring(); // Only call after adding all repos.
 	void            StopMonitoring();

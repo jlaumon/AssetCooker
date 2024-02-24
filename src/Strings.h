@@ -56,8 +56,8 @@ struct StringView : public std::string_view
 			remove_suffix(1);
 	}
 
-	// Implicit consturctors from TempString. This is the dangerous one, let see if we can do without.
-	//template<size_t taSize> constexpr StringView(const TempString<taSize>& inString);
+	// Implicit consturctors from TempString.
+	template<size_t taSize> constexpr StringView(const TempString<taSize>& inString);
 
 	// All our strings are null terminated so it's "safe", but assert in case it's a sub-string view.
 	const char* AsCStr() const
@@ -79,6 +79,8 @@ using OptionalWStringView = Optional<WStringView>;
 template<size_t taSize>
 struct TempString : NoCopy // No copy for now, should not be needed on temporary strings.
 {
+	static constexpr size_t cCapacity = taSize;
+
 	TempString()
 	{
 		mBuffer[0] = 0;
@@ -95,9 +97,12 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	template <typename... taArgs> void Format(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs);
 	void                               Format(StringView inFmt, fmt::format_args inArgs);
 	void                               Set(StringView inString);
+	void                               Append(StringView inString);
 
-	StringView  AsStringView() const { return { mBuffer, mSize }; }
-	const char* AsCStr() const { return mBuffer; }
+	StringView                         AsStringView() const { return { mBuffer, mSize }; }
+	const char*                        AsCStr() const { return mBuffer; }
+	size_t                             Size() const { return mSize; }
+	char                               operator[](size_t inIndex) const { gAssert(inIndex <= mSize); return mBuffer[inIndex]; }
 
 	size_t      mSize = 0;
 	char        mBuffer[taSize];
@@ -110,7 +115,7 @@ using TempString256 = TempString<256>;
 using TempString512 = TempString<512>;
 
 
-//template<size_t taSize> constexpr StringView::StringView(const TempString<taSize>& inString) : std::string_view(inString.AsStringView()) {}
+template<size_t taSize> constexpr StringView::StringView(const TempString<taSize>& inString) : std::string_view(inString.AsStringView()) {}
 
 
 // Return true if inString1 and inString2 are identical.
@@ -179,7 +184,7 @@ constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr)
 	return { ioDest.data(), remaining_buffer.data() };
 }
 
-// Copy multiple string into a potentially larger one, and return a MutStringView for what remains.
+// Copy multiple string into a potentially larger one, and return a MutStringView of what was written.
 // eg. gConcat(buffer, "hello", "world") will write "helloworld" into buffer.
 template <class ...taArgs>
 constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr, taArgs... inArgs)
@@ -203,6 +208,16 @@ template <> struct fmt::formatter<StringView> : fmt::formatter<fmt::string_view>
 	auto format(StringView inStringView, format_context& ioCtx) const
 	{
 		return fmt::formatter<fmt::string_view>::format(fmt::string_view(inStringView.data(), inStringView.size()), ioCtx);
+	}
+};
+
+// Formatter for TempString.
+template<size_t taSize>
+struct fmt::formatter<TempString<taSize>> : fmt::formatter<fmt::string_view>
+{
+	auto format(const TempString<taSize>& inTempString, format_context& ioCtx) const
+	{
+		return fmt::formatter<fmt::string_view>::format(fmt::string_view(inTempString.mBuffer, inTempString.mSize), ioCtx);
 	}
 };
 
@@ -270,6 +285,16 @@ void TempString<taSize>::Set(StringView inString)
 	StringView str_view = gConcat(mBuffer, inString);
 	mSize               = str_view.size();
 }
+
+template <size_t taSize>
+void TempString<taSize>::Append(StringView inString)
+{
+	gAssert(mSize + inString.size() < cCapacity); // String will be cropped!
+
+	StringView appended_str = gConcat(MutStringView(mBuffer).subspan(mSize), inString);
+	mSize += appended_str.size();
+}
+
 
 
 // Hash for StringView.
