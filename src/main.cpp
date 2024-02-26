@@ -186,8 +186,6 @@ int WinMain(
   int       nShowCmd
 )
 {
-	// TODO link static runtime to avoid having to install vcredist
-
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	gApp.Init();

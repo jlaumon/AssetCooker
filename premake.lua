@@ -11,6 +11,7 @@ solution "AssetCooker"
         dpiawareness "HighPerMonitor"
 		cppdialect "C++20"
 		exceptionhandling "Off"
+		staticruntime "On" -- Makes the exe a bit bigger but don't need to install the vcredist to work
 		flags 
 		{
 			"MultiProcessorCompile",
