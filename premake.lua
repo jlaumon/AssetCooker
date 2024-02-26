@@ -33,11 +33,13 @@ solution "AssetCooker"
             }
 
         filter { "configurations:Debug" }
+			targetsuffix "Debug"
             defines "ASSERTS_ENABLED"
 			optimize "Debug"
 			editandcontinue "On"
 			
 		filter { "configurations:DebugASAN" }
+			targetsuffix "DebugASAN"
             defines "ASSERTS_ENABLED"
 			optimize "Debug"
 			editandcontinue "Off"     -- incompatble with ASAN
@@ -45,6 +47,7 @@ solution "AssetCooker"
 			sanitize "Address"
 			
 		filter { "configurations:DebugOpt" }
+			targetsuffix "DebugOpt"
             defines "ASSERTS_ENABLED"
 			optimize "Full"
 			editandcontinue "On"
