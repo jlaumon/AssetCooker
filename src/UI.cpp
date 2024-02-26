@@ -24,8 +24,13 @@ bool                   gOpenCookingThreadsWindow        = false;
 CookingLogEntryID      gSelectedCookingLogEntry         = {};
 bool                   gScrollToSelectedCookingLogEntry = false;
 
-constexpr const char*  cAppLogWindowName                = "App Log";
-constexpr const char*  cCommandOutputWindowName         = "Command Output";
+constexpr const char*  cWindowNameAppLog                = "App Log";
+constexpr const char*  cWindowNameCommandOutput         = "Command Output";
+constexpr const char*  cWindowNameCommandSearch         = "Command Search";
+constexpr const char*  cWindowNameFileSearch            = "File Search";
+constexpr const char*  cWindowNameWorkerThreads         = "Worker Threads";
+constexpr const char*  cWindowNameCookingQueue          = "Cooking Queue";
+constexpr const char*  cWindowNameCookingLog            = "Cooking Log";
 
 int64                  gCurrentTimeInTicks              = 0;
 
@@ -320,7 +325,7 @@ void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID, bool inScrollLog)
 {
 	gSelectedCookingLogEntry         = inLogEntryID;
 	gScrollToSelectedCookingLogEntry = inScrollLog;
-	ImGui::SetWindowFocus(cCommandOutputWindowName);
+	ImGui::SetWindowFocus(cWindowNameCommandOutput);
 }
 
 
@@ -341,6 +346,8 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	if (!inCommand.IsCleanedUp() && ImGui::ButtonGrad("Cook"))
 		gCookingSystem.ForceCook(inCommand.mID);
+
+	// TODO add a Cleanup button
 
 	if (inCommand.mLastCookingLog)
 	{
@@ -453,7 +460,7 @@ void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID>
 
 void gDrawCookingQueue()
 {
-	if (!ImGui::Begin("Cooking Queue"))
+	if (!ImGui::Begin(cWindowNameCookingQueue))
 	{
 		ImGui::End();
 		return;
@@ -500,7 +507,7 @@ void gDrawCookingQueue()
 
 void gDrawCookingLog()
 {
-	bool visible = ImGui::Begin("Cooking Log");
+	bool visible = ImGui::Begin(cWindowNameCookingLog);
 	defer { ImGui::End(); };
 
 	if (!visible)
@@ -615,7 +622,7 @@ void gDrawCookingLog()
 
 void gDrawSelectedCookingLogEntry()
 {
-	bool opened = ImGui::Begin(cCommandOutputWindowName);
+	bool opened = ImGui::Begin(cWindowNameCommandOutput);
 	defer { ImGui::End(); };
 
 	if (!opened || !gSelectedCookingLogEntry.IsValid())
@@ -653,28 +660,122 @@ void gDrawSelectedCookingLogEntry()
 
 void gDrawCommandSearch()
 {
-	if (!ImGui::Begin("Command Search"))
+	if (!ImGui::Begin(cWindowNameCommandSearch))
 	{
 		ImGui::End();
 		return;
 	}
 
+	static ImGuiTextFilter                   filter;
+	static SegmentedVector<CookingCommandID> filtered_list;
+
+	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
+	{
+		// Rebuild the filtered list.
+		filtered_list.clear();
+		for (const auto& command : gCookingSystem.mCommands)
+		{
+			auto command_str = gFormat(command);
+			if (filter.PassFilter(command_str))
+				filtered_list.emplace_back(command.mID);
+		}
+	}
+
+	ImGui::TextUnformatted(TempString128("{} items", filter.IsActive() ? filtered_list.size() : gCookingSystem.mCommands.Size()));
+
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
-
 		ImGuiListClipper clipper;
-		clipper.Begin((int)gCookingSystem.mCommands.Size());
-		while (clipper.Step())
+
+		if (filter.IsActive())
 		{
-			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+			// Draw the filtered list.
+			clipper.Begin((int)filtered_list.size());
+			while (clipper.Step())
 			{
-				const CookingCommand& command = gCookingSystem.GetCommand(CookingCommandID{ (uint32)i });
-				gDrawCookingCommand(command);
+				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+					gDrawCookingCommand(gCookingSystem.GetCommand(filtered_list[i]));
 			}
+			clipper.End();
+		}
+		else
+		{
+			// Draw the full list.
+			clipper.Begin((int)gCookingSystem.mCommands.Size());
+			while (clipper.Step())
+			{
+				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+					gDrawCookingCommand(gCookingSystem.GetCommand(CookingCommandID{ (uint32)i }));
+			}
+			clipper.End();
 		}
 
-		clipper.End();
+		ImGui::PopStyleVar();
+	}
+	ImGui::EndChild();
+
+	ImGui::End();
+}
+
+
+void gDrawFileSearch()
+{
+	if (!ImGui::Begin(cWindowNameFileSearch))
+	{
+		ImGui::End();
+		return;
+	}
+
+	static ImGuiTextFilter         filter;
+	static SegmentedVector<FileID> filtered_list;
+
+	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
+	{
+		// Rebuild the filtered list.
+		filtered_list.clear();
+		for (const FileRepo& repo : gFileSystem.mRepos)
+			for (const FileInfo& file : repo.mFiles)
+			{
+				auto file_str = gFormat(file);
+				if (filter.PassFilter(file_str))
+					filtered_list.emplace_back(file.mID);
+			}
+	}
+
+	ImGui::TextUnformatted(TempString128("{} items", filter.IsActive() ? filtered_list.size() : gFileSystem.GetFileCount()));
+
+	if (ImGui::BeginChild("ScrollingRegion"))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
+		ImGuiListClipper clipper;
+
+		if (filter.IsActive())
+		{
+			// Draw the filtered list.
+			clipper.Begin((int)filtered_list.size());
+			while (clipper.Step())
+			{
+				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+					gDrawFileInfo(filtered_list[i].GetFile());
+			}
+			clipper.End();
+		}
+		else
+		{
+			// Draw the full list.
+			for (const FileRepo& repo : gFileSystem.mRepos)
+			{
+				clipper.Begin((int)repo.mFiles.Size());
+				while (clipper.Step())
+				{
+					for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+						gDrawFileInfo(repo.mFiles[i]);
+				}
+				clipper.End();
+			}
+				
+		}
 
 		ImGui::PopStyleVar();
 	}
@@ -689,7 +790,7 @@ void gDrawCookingThreads()
 	if (!gOpenCookingThreadsWindow)
 		return;
 
-	if (!ImGui::Begin("Worker Threads", &gOpenCookingThreadsWindow, ImGuiWindowFlags_NoScrollbar))
+	if (!ImGui::Begin(cWindowNameWorkerThreads, &gOpenCookingThreadsWindow, ImGuiWindowFlags_NoScrollbar))
 	{
 		ImGui::End();
 		return;
@@ -884,7 +985,7 @@ void gDrawStatusBar()
 		constexpr StringView messages[] = {
 			ICON_FK_CUTLERY" Let's get cookin'.",
 			ICON_FK_CUTLERY" It's a great day to cook.",
-			ICON_FK_CUTLERY" Not impossible, just takes longer to cook.",
+			ICON_FK_CUTLERY" Not impossible, just needs to cook a bit longer.",
 			ICON_FK_CUTLERY" What's a shader anyway.",
 		};
 		static int message_choice = gRand32() % gElemCount(messages);
@@ -927,22 +1028,24 @@ void gDrawMain()
 		ImGuiID dock_id_right_up, dock_id_right_bottom;
 		ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.5f, &dock_id_right_up, &dock_id_right_bottom);
 
-		ImGui::DockBuilderDockWindow("Worker Threads", dock_id_up);
-		ImGui::DockBuilderDockWindow("Command Search", dock_id_left);
-		ImGui::DockBuilderDockWindow("Cooking Queue",  dock_id_left);
-		ImGui::DockBuilderDockWindow("Cooking Log", dock_id_right_up);
-		ImGui::DockBuilderDockWindow("App Log", dock_id_right_bottom);
-		ImGui::DockBuilderDockWindow("Command Output", dock_id_right_bottom);
+		ImGui::DockBuilderDockWindow(cWindowNameWorkerThreads, dock_id_up);
+		ImGui::DockBuilderDockWindow(cWindowNameCommandSearch, dock_id_left);
+		ImGui::DockBuilderDockWindow(cWindowNameFileSearch,    dock_id_left);
+		ImGui::DockBuilderDockWindow(cWindowNameCookingQueue,  dock_id_left);
+		ImGui::DockBuilderDockWindow(cWindowNameCookingLog,    dock_id_right_up);
+		ImGui::DockBuilderDockWindow(cWindowNameAppLog,        dock_id_right_bottom);
+		ImGui::DockBuilderDockWindow(cWindowNameCommandOutput, dock_id_right_bottom);
 		ImGui::DockBuilderFinish(dockspace_id);
 	};
 
 
-	gApp.mLog.Draw(cAppLogWindowName);
+	gApp.mLog.Draw(cWindowNameAppLog);
 
 	gDrawCookingQueue();
 	gDrawCookingThreads();
 	gDrawCookingLog();
 	gDrawCommandSearch();
+	gDrawFileSearch();
 	gDrawSelectedCookingLogEntry();
 	gDrawStatusBar();
 
@@ -957,6 +1060,6 @@ void gDrawMain()
 	if (gApp.HasInitError())
 	{
 		// Do it just once though, otherwise we can't select other windows.
-		do_once { ImGui::SetWindowFocus(cAppLogWindowName); };
+		do_once { ImGui::SetWindowFocus(cWindowNameAppLog); };
 	}
 }
