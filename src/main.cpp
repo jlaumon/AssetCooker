@@ -17,7 +17,6 @@
 #include "Debug.h"
 #include "FileSystem.h"
 #include "CookingSystem.h"
-#include "RuleReader.h"
 #include "Ticks.h"
 
 
@@ -189,17 +188,31 @@ int WinMain(
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	gApp.Init();
+	
+	wchar_t     app_name_buffer[128];
+	auto        app_name_wchar = gUtf8ToWideChar(cAppName, app_name_buffer).value_or(L"");
 
 	// TODO move that inside App?
 	// TODO load window size/pos from config file?
 	// Create application window
-	WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
+	HINSTANCE   hinstance = GetModuleHandle(nullptr);
+	WNDCLASSEXW wc = { .cbSize        = sizeof(wc),
+					   .style         = CS_CLASSDC,
+					   .lpfnWndProc   = WndProc,
+					   .cbClsExtra    = 0L,
+					   .cbWndExtra    = 0L,
+					   .hInstance     = hinstance,
+					   .hIcon         = LoadIconA(hinstance, "chef_hat_heart"),
+					   .hCursor       = nullptr,
+					   .hbrBackground = nullptr,
+					   .lpszMenuName  = nullptr,
+					   .lpszClassName = app_name_wchar.data(),
+					   .hIconSm       = nullptr };
+
 	::RegisterClassExW(&wc);
-	wchar_t name_buffer[128];
-	auto name_wchar = gUtf8ToWideChar(cAppName, name_buffer);
 	HWND hwnd = ::CreateWindowW(
 		wc.lpszClassName, 
-		name_wchar.value_or(L"").data(), 
+		app_name_wchar.data(), 
 		WS_OVERLAPPEDWINDOW, 
 		CW_USEDEFAULT, CW_USEDEFAULT, // pos
 		CW_USEDEFAULT, CW_USEDEFAULT, // size

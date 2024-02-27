@@ -80,8 +80,8 @@ solution "AssetCooker"
 			"thirdparty/tomlplusplus/include/**.inl",
 			"thirdparty/fmt/include/**.h",
 			"thirdparty/fmt/src/format.cc",
-			"data/fonts/**.rc",
-			"data/fonts/**.h",
+			"data/**.rc",
+			"data/**.h",
         }
 		
 		includedirs 
