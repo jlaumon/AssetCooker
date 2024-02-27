@@ -985,13 +985,19 @@ void gDrawStatusBar()
 	else
 	{
 		constexpr StringView messages[] = {
-			ICON_FK_CUTLERY" Let's get cookin'.",
 			ICON_FK_CUTLERY" It's a great day to cook.",
-			ICON_FK_CUTLERY" Not impossible, just needs to cook a bit longer.",
+			ICON_FK_CUTLERY" It's not impossible, it just needs to cook a bit longer.",
 			ICON_FK_CUTLERY" What's a shader anyway.",
+			ICON_FK_CUTLERY" Let's cook! LET'S COOK!",
+			ICON_FK_CUTLERY" A fort wasn't cooked in a day. It took 0.4 seconds.",
+			ICON_FK_CUTLERY" Are you going to change a file today?",
 		};
 		static int message_choice = gRand32() % gElemCount(messages);
 		ImGui::TextUnformatted(messages[message_choice]);
+
+		// Show a different message on click (the clamp is there to make sure we don't get the same message again).
+		if (ImGui::IsItemClicked())
+			message_choice = (message_choice + gClamp<int>(gRand32(), 1, gElemCount(messages) - 1)) % gElemCount(messages);
 	}
 
 	// Display some stats on the right side of the status bar.
