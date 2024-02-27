@@ -248,6 +248,11 @@ void gDrawFileInfo(const FileInfo& inFile)
 			inFile.IsDirectory() ? ICON_FK_FOLDER_OPEN_O : ICON_FK_FILE_O,
 			inFile.GetRepo().mName, inFile.GetName()).AsCStr()))
 	{
+		defer { ImGui::EndPopup(); };
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
+		defer { ImGui::PopStyleVar(1); };
+
 		ImGui::Spacing();
 		// TODO auto wrapping is kind of incompatible with window auto resizing, need to provide a wrap position, or maybe make sure it isn't the first item drawn?
 		// https://github.com/ocornut/imgui/issues/778#issuecomment-239696811
@@ -314,9 +319,6 @@ void gDrawFileInfo(const FileInfo& inFile)
 			gDrawCookingCommandSpan("Is Input Of", inFile.mInputOf);
 		if (!inFile.mOutputOf.empty())
 			gDrawCookingCommandSpan("Is Output Of", inFile.mOutputOf);
-
-
-		ImGui::EndPopup();
 	}
 }
 
