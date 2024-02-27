@@ -376,8 +376,6 @@ void CookingQueue::Push(CookingCommandID inCommandID, PushPosition inPosition/* 
 	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
 	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
 
-	// TODO: check if the command is already in the queue/already cooking?
-
 	{
 		std::lock_guard lock(mMutex);
 
