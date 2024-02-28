@@ -884,7 +884,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 			if (!file_handle.IsValid())
 			{
 				// TODO can we open the file with different access rights to just get the path? try on .git, there are locked files in there
-				gApp.FatalError("TODO");
+				gApp.LogError("File {} was created or renamed, but we failed to open it. If the file is in a Repo, it's bad! FIXME!", FileRefNumber(inRecord.FileReferenceNumber));
 				//// If the file exists but it failed, retry later.
 				//if (file_handle.mError != OpenFileError::FileNotFound)
 				//	gFileSystem.RescanLater(ioFile.mID);
