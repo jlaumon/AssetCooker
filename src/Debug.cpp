@@ -10,27 +10,49 @@ bool gIsDebuggerAttached()
 }
 
 // Get last error as a string.
-String GetLastErrorString()
+TempString512 GetLastErrorString()
 {
 	DWORD error = GetLastError();
+	TempString512 str;
 
-	if (error == ERROR_SUCCESS)
-		return {};
-
-	char  buffer[512];
-	DWORD buffer_len = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error,
-									  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buffer, sizeof(buffer) - 1, nullptr);
-	// Make sure there is a null terminator (FormatMessage does not always add one).
-	buffer[buffer_len] = 0;
-
-	// There's usually an EOL at the end, remove it.
-	while (gEndsWith({ buffer, buffer_len }, "\n") || gEndsWith({ buffer, buffer_len }, "\r"))
+	if (error != ERROR_SUCCESS)
 	{
-		buffer_len--;
-		buffer[buffer_len] = 0;
+		// Note: We use capacity - 1 here to make sure there's always room for an extra null terminator.
+		DWORD written_chars = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error,
+										  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str.mBuffer, str.cCapacity - 1, nullptr);
+
+		// Make sure there is a null terminator (FormatMessage does not always add one).
+		if (written_chars > 0)
+		{
+			if (str.mBuffer[written_chars - 1] != 0)
+			{
+				// Add one.
+				str.mBuffer[written_chars] = 0;
+				str.mSize                  = written_chars;
+			}
+			else
+			{
+				// There's already one.
+				str.mSize = written_chars - 1;
+			}
+		}
+
+		// There's usually an EOL at the end, remove it.
+		while (gEndsWith(str, "\n") || gEndsWith(str, "\r"))
+		{
+			str.mSize--;
+			str.mBuffer[str.mSize] = 0;
+		}
+	}
+	else
+	{
+		str.Append("Success.");
 	}
 
-	return buffer;
+	// Add the error code as an int.
+	str.Append(TempString32(" (0x{:08x})", error));
+
+	return str;
 }
 
 

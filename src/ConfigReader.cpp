@@ -3,6 +3,7 @@
 #include "CookingSystem.h"
 #include "App.h"
 #include "TomlReader.h"
+#include "Paths.h"
 
 
 void gReadConfigFile(StringView inPath)
@@ -59,11 +60,13 @@ void gReadConfigFile(StringView inPath)
 		gApp.mRuleFilePath = rule_file_path.AsStringView();
 
 	// Start paused, or cook immediately?
+	// TODO: move this to a user preferences config file
 	bool start_paused = gCookingSystem.IsCookingPaused();
 	if (reader.TryRead("StartPaused", start_paused))
 		gCookingSystem.SetCookingPaused(start_paused);
 
 	// Number of Cooking Threads.
+	// TODO: move this to a user preferences config file
 	int num_cooking_threads = 0;
 	if (reader.TryRead("NumCookingThreads", num_cooking_threads))
 		gCookingSystem.SetCookingThreadCount(num_cooking_threads);
@@ -80,4 +83,24 @@ void gReadConfigFile(StringView inPath)
 		else if (gIsEqualNoCase(log_level_sv, "Verbose"))
 			gApp.mLogFSActivity = LogLevel::Verbose;
 	}
+
+	// Log directory path
+	TempString512 log_dir;
+	if (reader.TryRead("LogDirectory", log_dir))
+	{
+		// Normalize the path.
+		gNormalizePath({ log_dir.mBuffer, log_dir.mSize });
+
+		// If there's a trailing slash, remove it.
+		if (gEndsWith(log_dir, "\\"))
+		{
+			log_dir.mSize--;
+			log_dir.mBuffer[log_dir.mSize] = 0;
+		}
+
+		gApp.mLogDirectory = log_dir.AsStringView();
+	}
+
+	// Read the window title.
+	reader.TryRead("WindowTitle", gApp.mMainWindowTitle);
 }

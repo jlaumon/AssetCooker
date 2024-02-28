@@ -29,10 +29,12 @@ StringPool::ResizableStringView Log::StartLine(LogType inType)
 
 void Log::FinishLine(LogType inType, StringPool::ResizableStringView& inLine)
 {
+	inLine.Append("\n");
+
 	StringView line = inLine.AsStringView();
 
-	// TODO: check inString for end of lines and split it, otherwise can't use imgui clipper
-	gAssert(gIsNullTerminated(line));
+	// TODO: check inLine for extra end of lines and split it (?), otherwise can't use imgui clipper
+	gAssert(gIsNullTerminated(inLine.AsStringView()));
 
 	mLines.emplace_back(line.data(), (int)line.size(), inType);
 }
@@ -44,13 +46,11 @@ StringView Log::Add(LogType inType, StringView inFmt, fmt::format_args inArgs)
 
 	StringPool::ResizableStringView str = StartLine(inType);
 
-	size_t size_before_format = str.AsStringView().size();
 	str.AppendFormatV(inFmt, inArgs);
-	size_t size_after_format = str.AsStringView().size();
 
 	FinishLine(inType, str);
 
-	return { str.mData + size_before_format, str.mData + size_after_format };
+	return str.AsStringView();
 }
 
 
@@ -109,7 +109,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 		if (mFilter.IsActive())
 		{
-			// Can't use clipper with the filter. For very long logs, we should store the filter result instead.
+			// TODO: Can't use clipper with the filter. For very long logs, we should store the filter result instead.
 			for (auto line : mLines)
 			{
 				if (mFilter.PassFilter({ line.mData, line.mData + line.mSize }))

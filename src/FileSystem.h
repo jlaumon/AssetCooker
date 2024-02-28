@@ -454,8 +454,8 @@ private:
 
 	struct FileToRescan
 	{
-		FileID mFileID;
-		int64  mTime;
+		FileID mFileID;         // The file to re-scan (can be a directory).
+		int64  mWaitUntilTicks; // The time to wait before re-scanning the file.
 	};
 
 	Queue<FileToRescan> mFilesToRescan;

@@ -3,10 +3,6 @@
 #include "Core.h"
 #include "Log.h"
 
-#include <string>
-
-constexpr const char* cAppName = "Asset Cooker";
-
 enum class LogLevel : uint8
 {
 	None,
@@ -18,6 +14,7 @@ enum class LogLevel : uint8
 struct App
 {
 	void Init();
+	void Exit();
 
 	void RequestExit();
 	bool IsExitRequested();
@@ -35,12 +32,18 @@ struct App
 	template <class... taArgs> void LogError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogErrorV(inFmt.get(), fmt::make_format_args(inArgs...)); }
 	void                            LogErrorV(StringView inFmt, fmt::format_args inArgs = {}) { LogV(inFmt, inArgs, LogType::Error); }
 
-	void*                           mMainWindowHwnd = nullptr;
-	bool                            mExitRequested  = false;
-	bool                            mExitReady      = false;
-	String                          mRuleFilePath   = "rules.toml";
-	LogLevel                        mLogFSActivity  = LogLevel::Normal;
+	void                            OpenLogFile();
+	void                            CloseLogFile();
+
+	String                          mMainWindowTitle = "Asset Cooker";
+	void*                           mMainWindowHwnd  = nullptr;
+	bool                            mExitRequested   = false;
+	bool                            mExitReady       = false;
+	String                          mRuleFilePath    = "rules.toml";
+	LogLevel                        mLogFSActivity   = LogLevel::Normal;
 	struct Log                      mLog;
+	String                          mLogDirectory = "Logs";
+	FILE*                           mLogFile      = nullptr;
 	String                          mInitError;
 };
 

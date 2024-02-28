@@ -3,11 +3,11 @@
 #include "Debug.h"
 #include "Ticks.h"
 #include "CookingSystem.h"
+#include "Paths.h"
 
 #include "win32/misc.h"
 #include "win32/file.h"
 #include "win32/io.h"
-#include "win32/threads.h"
 
 #include "xxHash/xxh3.h"
 
@@ -23,35 +23,6 @@ constexpr size_t cMaxPathSizeUTF8  = 32768 * 3ull;	// UTF8 can use up to 6 bytes
 
 using PathBufferUTF16 = std::array<wchar_t, cMaxPathSizeUTF16>;
 using PathBufferUTF8  = std::array<char, cMaxPathSizeUTF8>;
-
-
-// Replaces / by \.
-constexpr MutStringView gNormalizePath(MutStringView ioPath)
-{
-	for (char& c : ioPath)
-	{
-		if (c == '/')
-			c = '\\';
-	}
-
-	return ioPath;
-}
-
-constexpr bool gIsNormalized(StringView inPath)
-{
-	for (char c : inPath)
-	{
-		if (c == '/')
-			return false;
-	}
-
-	return true;
-}
-
-constexpr bool gIsAbsolute(StringView inPath)
-{
-	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath[1] == ':' && (inPath[2] == '\\' || inPath[2] == '/'); 
-}
 
 
 // Hash the absolute path of a file in a case insensitive manner.
@@ -91,44 +62,6 @@ Hash128 gHashPath(StringView inRootPath, StringView inPath)
 	memcpy(path_hash.mData, &hash_xx, sizeof(path_hash.mData));
 
 	return path_hash;
-}
-
-
-String gUSNReasonToString(uint32 inReason)
-{
-	String str;
-
-	if (inReason & USN_REASON_DATA_OVERWRITE				) str += "DATA_OVERWRITE | ";
-	if (inReason & USN_REASON_DATA_EXTEND					) str += "DATA_EXTEND | ";
-	if (inReason & USN_REASON_DATA_TRUNCATION				) str += "DATA_TRUNCATION | ";
-	if (inReason & USN_REASON_NAMED_DATA_OVERWRITE			) str += "NAMED_DATA_OVERWRITE | ";
-	if (inReason & USN_REASON_NAMED_DATA_EXTEND				) str += "NAMED_DATA_EXTEND | ";
-	if (inReason & USN_REASON_NAMED_DATA_TRUNCATION			) str += "NAMED_DATA_TRUNCATION | ";
-	if (inReason & USN_REASON_FILE_CREATE					) str += "FILE_CREATE | ";
-	if (inReason & USN_REASON_FILE_DELETE					) str += "FILE_DELETE | ";
-	if (inReason & USN_REASON_EA_CHANGE						) str += "EA_CHANGE | ";
-	if (inReason & USN_REASON_SECURITY_CHANGE				) str += "SECURITY_CHANGE | ";
-	if (inReason & USN_REASON_RENAME_OLD_NAME				) str += "RENAME_OLD_NAME | ";
-	if (inReason & USN_REASON_RENAME_NEW_NAME				) str += "RENAME_NEW_NAME | ";
-	if (inReason & USN_REASON_INDEXABLE_CHANGE				) str += "INDEXABLE_CHANGE | ";
-	if (inReason & USN_REASON_BASIC_INFO_CHANGE				) str += "BASIC_INFO_CHANGE | ";
-	if (inReason & USN_REASON_HARD_LINK_CHANGE				) str += "HARD_LINK_CHANGE | ";
-	if (inReason & USN_REASON_COMPRESSION_CHANGE			) str += "COMPRESSION_CHANGE | ";
-	if (inReason & USN_REASON_ENCRYPTION_CHANGE				) str += "ENCRYPTION_CHANGE | ";
-	if (inReason & USN_REASON_OBJECT_ID_CHANGE				) str += "OBJECT_ID_CHANGE | ";
-	if (inReason & USN_REASON_REPARSE_POINT_CHANGE			) str += "REPARSE_POINT_CHANGE | ";
-	if (inReason & USN_REASON_STREAM_CHANGE					) str += "STREAM_CHANGE | ";
-	if (inReason & USN_REASON_TRANSACTED_CHANGE				) str += "TRANSACTED_CHANGE | ";
-	if (inReason & USN_REASON_INTEGRITY_CHANGE				) str += "INTEGRITY_CHANGE | ";
-	if (inReason & USN_REASON_DESIRED_STORAGE_CLASS_CHANGE	) str += "DESIRED_STORAGE_CLASS_CHANGE | ";
-	if (inReason & USN_REASON_CLOSE							) str += "CLOSE | ";
-
-	if (str.empty())
-		str = "None";
-	else
-		str.resize(str.size() - 3); // Remove " | "
-
-	return str;
 }
 
 
@@ -1382,13 +1315,15 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	{
 		bool any_work_done = false;
 
+		// Check the queue of files to re-scan (we try again if it eg. fails because the file was in use).
 		while (true)
 		{
 			int64  current_time = gGetTickCount();
 			FileID file_to_rescan;
 			{
+				// Check if there's an item in the queue, and if it's time to scan it again.
 				std::lock_guard lock(mFilesToRescanMutex);
-				if (!mFilesToRescan.IsEmpty() && mFilesToRescan.Front().mTime <= current_time)
+				if (!mFilesToRescan.IsEmpty() && mFilesToRescan.Front().mWaitUntilTicks <= current_time)
 				{
 					file_to_rescan = mFilesToRescan.Front().mFileID;
 					mFilesToRescan.PopFront();
@@ -1400,6 +1335,7 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 				}
 			}
 
+			// Scan it.
 			FileRepo& repo = file_to_rescan.GetRepo();
 			if (file_to_rescan.GetFile().IsDirectory())
 			{
@@ -1413,6 +1349,8 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			{
 				repo.ScanFile(file_to_rescan.GetFile(), FileRepo::RequestedAttributes::All);
 			}
+
+			any_work_done = true;
 		}
 
 		// Check every drive.

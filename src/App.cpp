@@ -8,7 +8,11 @@
 
 #include "win32/dbghelp.h"
 #include "win32/misc.h"
+#include "win32/file.h"
 #include "win32/window.h"
+#include "win32/io.h"
+
+#include <algorithm> // for std::sort
 
 void App::Init()
 {
@@ -22,6 +26,9 @@ void App::Init()
 	// Read the config file.
 	gReadConfigFile("config.toml");
 
+	// Open the log file after reading the config since it can change the log directory.
+	OpenLogFile();
+
 	// Read the rule file.
 	if (!HasInitError())
 		gReadRuleFile(mRuleFilePath);
@@ -29,6 +36,12 @@ void App::Init()
 	// If all is good, start scanning files.
 	if (!HasInitError())
 		gFileSystem.StartMonitoring();
+}
+
+
+void App::Exit()
+{
+	CloseLogFile();
 }
 
 
@@ -80,17 +93,111 @@ void App::LogV(StringView inFmt, fmt::format_args inArgs, LogType inType)
 	auto wchar_message = gUtf8ToWideChar(formatted_str, message_buffer);
 	gAssert(wchar_message); // Buffer too small? Why would you log something that long?
 
-	if (wchar_message && wchar_message->size() < gElemCount(message_buffer) - 2)
+	if (wchar_message)
 	{
-		// Add an end of line and null terminator.
-		message_buffer[wchar_message->size() + 0] = L'\n';
-		message_buffer[wchar_message->size() + 1] = L'\0';
-
 		// Write the message to the output.
 		OutputDebugStringW(message_buffer);
 	}
 
-	// TODO: also log to a file
+	// Also log to a file.
+	if (mLogFile)
+	{
+		fwrite(formatted_str.data(), 1, formatted_str.size(), mLogFile);
+
+		// Flush immediately for now (it's probably not worse than OutputDebugString).
+		fflush(mLogFile);
+	}
 }
 
 
+void App::OpenLogFile()
+{
+	constexpr StringView log_file_prefix = "AssetCooker_";
+	constexpr StringView log_file_ext    = ".log";
+
+	// Make sure the log dir exists.
+	CreateDirectoryA(mLogDirectory.c_str(), nullptr);
+
+	// Build the log file name.
+	LocalTime     current_time = gGetLocalTime();
+	TempString256 new_log_file("{}\\{}{:04}-{:02}-{:02}_{:02}-{:02}-{:02}{}",
+		mLogDirectory, log_file_prefix,
+		current_time.mYear, current_time.mMonth, current_time.mDay,
+		current_time.mHour, current_time.mMinute, current_time.mSecond,
+		log_file_ext);
+
+	// Open the log file.
+	{
+		// Do it inside the log lock because we want to dump the current log into the file before more is added.
+		std::lock_guard lock(mLog.mMutex);
+
+		mLogFile = fopen(new_log_file.AsCStr(), "wt");
+		
+		if (mLogFile)
+		{
+			// If there were logs already, write them to the file now.
+			for (auto& line : mLog.mLines)
+				fwrite(line.mData, 1, line.mSize, mLogFile);
+
+			fflush(mLogFile);
+		}
+	}
+
+	if (mLogFile == nullptr)
+		LogError(R"(Failed to open log file "{}" - {})", new_log_file, GetLastErrorString());
+
+	// Clean up old log files.
+	{
+		// Max number of log files to keep, delete the oldest ones if we have more.
+		constexpr int        max_log_files   = 5;
+
+		// List all the log files.
+		std::vector<String> log_files;
+		{
+			WIN32_FIND_DATAA find_file_data;
+			HANDLE find_handle = FindFirstFileA(TempString256("{}\\*", mLogDirectory).AsCStr(), &find_file_data);
+			if (find_handle != INVALID_HANDLE_VALUE)
+			{
+				do
+				{
+					// Ignore directories.
+					if (find_file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+						continue;
+
+					// If it looks like a log file, add it to the list.
+					if (gStartsWith(find_file_data.cFileName, log_file_prefix) &&
+						gEndsWith(find_file_data.cFileName, log_file_ext))
+					{
+						log_files.push_back(find_file_data.cFileName);
+					}
+					
+				} while (FindNextFileA(find_handle, &find_file_data) != 0);
+			}
+			FindClose(find_handle);
+		}
+		
+		if (log_files.size() > max_log_files)
+		{
+			// Sort to make sure the oldest ones are first (because the date is in the name).
+			std::sort(log_files.begin(), log_files.end());
+
+			// Delete the files.
+			int num_to_delete = (int)log_files.size() - max_log_files;
+			for (int i = 0; i < num_to_delete; ++i)
+			{
+				TempString256 path("{}\\{}", mLogDirectory, log_files[i]);
+				DeleteFileA(path.AsCStr());
+			}
+		}
+	}
+}
+
+
+void App::CloseLogFile()
+{
+	if (mLogFile == nullptr)
+		return;
+
+	fclose(mLogFile);
+	mLogFile = nullptr;
+}

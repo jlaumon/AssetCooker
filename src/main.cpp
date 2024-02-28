@@ -189,8 +189,8 @@ int WinMain(
 
 	gApp.Init();
 	
-	wchar_t     app_name_buffer[128];
-	auto        app_name_wchar = gUtf8ToWideChar(cAppName, app_name_buffer).value_or(L"");
+	wchar_t     window_title_buffer[128];
+	auto        window_title_wchar = gUtf8ToWideChar(gApp.mMainWindowTitle, window_title_buffer).value_or(L"Asset Cooker");
 
 	// TODO move that inside App?
 	// TODO load window size/pos from config file?
@@ -206,13 +206,13 @@ int WinMain(
 					   .hCursor       = nullptr,
 					   .hbrBackground = nullptr,
 					   .lpszMenuName  = nullptr,
-					   .lpszClassName = app_name_wchar.data(),
+					   .lpszClassName = window_title_wchar.data(),
 					   .hIconSm       = nullptr };
 
 	::RegisterClassExW(&wc);
 	HWND hwnd = ::CreateWindowW(
 		wc.lpszClassName, 
-		app_name_wchar.data(), 
+		window_title_wchar.data(), 
 		WS_OVERLAPPEDWINDOW, 
 		CW_USEDEFAULT, CW_USEDEFAULT, // pos
 		CW_USEDEFAULT, CW_USEDEFAULT, // size
@@ -374,6 +374,8 @@ int WinMain(
 	CleanupDeviceD3D();
 	::DestroyWindow(hwnd);
 	::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+
+	gApp.Exit();
 
 	return 0;
 }
