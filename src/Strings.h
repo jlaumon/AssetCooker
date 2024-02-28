@@ -60,11 +60,13 @@ struct StringView : public std::string_view
 	template<size_t taSize> constexpr StringView(const TempString<taSize>& inString);
 
 	// All our strings are null terminated so it's "safe", but assert in case it's a sub-string view.
-	const char* AsCStr() const
+	constexpr const char* AsCStr() const
 	{
 		gAssert(gIsNullTerminated(*this));
 		return data();
 	}
+
+	constexpr bool Contains(StringView inOther) const { return find(inOther) != npos; }
 };
 
 // WStringView.

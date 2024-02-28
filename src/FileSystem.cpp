@@ -1028,6 +1028,9 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 			gApp.FatalError("Failed to init FileRepo {} ({}) - There is already a repo with that name.", inName, inRootPath);
 	}
 
+	if (gIsRelative(inRootPath))
+		gApp.FatalError("Failed to init FileRepo {} ({}) - Relative paths are not supported (yet).", inName, inRootPath);
+
 	TempString512 root_path;
 
 	// If it's not an absolute path, prepend with the current dir.
