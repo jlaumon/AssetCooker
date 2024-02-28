@@ -242,7 +242,7 @@ struct FileInfo : NoCopy
 {
 	const FileID                  mID;                  // Our ID for this file.
 	const uint16                  mNamePos;             // Position in the path of the start of the file name (after the last '/').
-	const uint16                  mExtensionPos;        // Position in the path of the first '.' in the file name.
+	const uint16                  mExtensionPos;        // Position in the path of the last '.' in the file name.
 	const StringView              mPath;                // Path relative to the root directory.
 	const Hash128                 mPathHash;            // Case-insensitive hash of the path.
 

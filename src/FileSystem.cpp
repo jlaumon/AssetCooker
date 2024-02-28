@@ -196,12 +196,12 @@ static uint16 sFindNamePos(StringView inPath)
 }
 
 
-// Find the offset of the first '.' in the path.
+// Find the offset of the last '.' in the path.
 static uint16 sFindExtensionPos(uint16 inNamePos, StringView inPath)
 {
 	StringView file_name = inPath.substr(inNamePos);
 
-	size_t offset = file_name.find_first_of('.');
+	size_t offset = file_name.find_last_of('.');
 	if (offset != StringView::npos)
 		return (uint16)offset + inNamePos;
 	else
