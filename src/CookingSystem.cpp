@@ -72,7 +72,7 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 			
 				StringView repo_name = arg.substr(1);
 
-				if (!inFormatter(CommandVariables::Repo, repo_name, str))
+				if (!inFormatter(CommandVariables::Repo, repo_name, { p, p_end }, str))
 					return {}; // Formatter says error.
 			}
 			else
@@ -88,7 +88,7 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 					if (arg == gToStringView(var))
 					{
 						matched = true;
-						if (!inFormatter(var, "", str))
+						if (!inFormatter(var, "", { p, p_end }, str))
 							return {}; // Formatter says error.
 
 						break;
@@ -116,7 +116,7 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 	if (inFormatStr.empty())
 		return {}; // Consider empty format string is an error.
 
-	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, String& outStr) 
+	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, String& outStr) 
 	{
 		switch (inVar)
 		{
@@ -128,6 +128,12 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 			break;
 		case CommandVariables::Dir:
 			outStr.append(inFile.GetDirectory());
+
+			// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
+			// Add a second backslash to avoid that.
+			if (!inRemainingFormatStr.empty() && inRemainingFormatStr[0] == '"')
+				outStr.append("\\");
+
 			break;
 		case CommandVariables::Dir_NoTrailingSlash:
 			if (!inFile.GetDirectory().empty())
@@ -159,7 +165,7 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile)
 {
 	FileRepo*        repo = nullptr;
-	Optional<String> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, String& outStr) 
+	Optional<String> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, String& outStr) 
 	{
 		switch (inVar)
 		{
