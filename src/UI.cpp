@@ -16,6 +16,9 @@
 extern "C" __declspec(dllimport) HINSTANCE WINAPI ShellExecuteA(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShowCmd);
 
 
+// TODO add open path button even if file doesn't exist (just open the folder, and maybe even create it?)
+// TODO add copy command line button to command popup
+
 ImGuiStyle             gStyle                           = {};
 
 bool                   gOpenImGuiDemo                   = false;
