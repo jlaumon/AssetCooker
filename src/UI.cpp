@@ -529,6 +529,8 @@ void gDrawCookingLog()
 
 	ImGui::TableNextRow();
 
+	bool scroll_target_changed = false;
+
 	ImGuiListClipper clipper;
 	clipper.Begin((int)gCookingSystem.mCookingLog.Size());
 	defer { clipper.End(); };
@@ -538,6 +540,7 @@ void gDrawCookingLog()
 		{
 			gScrollToSelectedCookingLogEntry = false;
             ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + (float)gSelectedCookingLogEntry.mIndex * clipper.ItemsHeight);
+			scroll_target_changed = true;
 		}
 
 		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -620,7 +623,7 @@ void gDrawCookingLog()
 
 	// Keep up at the bottom of the scroll region if we were already at the bottom at the beginning of the frame.
 	// Using a scrollbar or mouse-wheel will take away from the bottom edge.
-	if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+	if (!scroll_target_changed && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
 		ImGui::SetScrollHereY(1.0f);
 }
 
