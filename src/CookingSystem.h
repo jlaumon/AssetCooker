@@ -248,7 +248,6 @@ private:
 	void                                  CookCommand(CookingCommand& ioCommand, CookingThread& ioThread);
 	void                                  CleanupCommand(CookingCommand& ioCommand, CookingThread& ioThread); // Delete all outputs.
 	void                                  AddTimeOut(CookingLogEntry* inLogEntry);
-	void                                  ProcessTimeOuts();
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
 
 	SegmentedVector<CookingRule, 256>     mRules;

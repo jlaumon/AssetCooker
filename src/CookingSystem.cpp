@@ -366,6 +366,7 @@ void CookingCommand::UpdateDirtyState()
 	{
 		mIsQueued = false;
 
+		// TODO these removes are slow! fix it!
 		// Keep the order because it makes the UI much nicer.
 		gCookingSystem.mCommandsDirty.Remove(mID, RemoveOption::KeepOrder | RemoveOption::ExpectFound);
 
@@ -1030,24 +1031,6 @@ void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 }
 
 
-void CookingSystem::ProcessTimeOuts()
-{
-	std::lock_guard lock(mTimeOutsMutex);
-
-	HashSet<CookingLogEntry*>& time_outs = mTimeOutBatches[mTimeOutBatchCurrentIndex];
-
-	for (CookingLogEntry* log_entry : time_outs)
-	{
-		// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
-		if (log_entry->mCookingState == CookingState::Waiting)
-			log_entry->mCookingState = CookingState::Error;
-	}
-
-	time_outs.clear();
-}
-
-
-
 void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 {
 	using namespace std::chrono_literals;
@@ -1059,18 +1042,38 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 		// Wait until there are time outs to update.
 		mTimeOutAddedSignal.acquire();
 
-		// Swap the buffers and start a time out.
+		// Swap the buffers.
 		{
 			std::lock_guard lock(mTimeOutsMutex);
 			mTimeOutBatchCurrentIndex = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
 		}
 
-		(void)mTimeOutTimerSignal.try_acquire_for(3s);
+		do
+		{
+			// Wait for the time out.
+			(void)mTimeOutTimerSignal.try_acquire_for(0.3s);
 
-		if (inStopToken.stop_requested())
-			return;
+			if (inStopToken.stop_requested())
+				return;
 
-		ProcessTimeOuts();
+			// If the file system is still busy, wait more. Otherwise we might incorrectly declare some commands are errors.
+			// It can take a long time to process the events, especially if we need to open a lot of new files to get their path.
+		} while (!gFileSystem.IsMonitoringIdle());
+		
+		// Declare all the unfinished commands in the current buffer as errored.
+		{
+			std::lock_guard lock(mTimeOutsMutex);
+
+			HashSet<CookingLogEntry*>& time_outs = mTimeOutBatches[mTimeOutBatchCurrentIndex];
+			for (CookingLogEntry* log_entry : time_outs)
+			{
+				// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
+				if (log_entry->mCookingState == CookingState::Waiting)
+					log_entry->mCookingState = CookingState::Error;
+			}
+
+			time_outs.clear();
+		}
 	}
 }
 
@@ -1189,7 +1192,7 @@ bool CookingSystem::IsIdle() const
 	if (gFileSystem.GetInitState() != FileSystem::InitState::Ready)
 		return false;
 
-	// TODO check if filesystem monitoring thread is idle, or check if log is changed
+	// TODO check if log is changed (don't need to redraw if filesystem isn't idle, unless it prints)
 
 	// Guess we're idle.
 	return true;

@@ -397,6 +397,7 @@ struct FileSystem : NoCopy
 	void            StopMonitoring();
 
 	bool            IsMonitoringStarted() const			{ return mMonitorDirThread.joinable(); }
+	bool            IsMonitoringIdle() const			{ return mIsMonitorDirThreadIdle; }
 
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
@@ -451,6 +452,7 @@ private:
 
 	std::jthread               mMonitorDirThread;
 	std::binary_semaphore      mMonitorDirThreadSignal = std::binary_semaphore(0);
+	std::atomic<bool>          mIsMonitorDirThreadIdle = true;
 
 	struct FileToRescan
 	{

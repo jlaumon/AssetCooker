@@ -858,7 +858,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 					PathBufferUTF8 dir_path_buffer;
 					StringView     dir_path;
 
-					// Root dir has an empty path, in this case don't att the slash.
+					// Root dir has an empty path, in this case don't add the slash.
 					if (!deleted_file.mPath.empty())
 						dir_path = gConcat(dir_path_buffer, deleted_file.mPath, "\\");
 
@@ -1296,6 +1296,9 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	gSetCurrentThreadName(L"Monitor Directory Thread");
 	using namespace std::chrono_literals;
 
+	// Start not idle.
+	mIsMonitorDirThreadIdle = false;
+
 	// Allocate a working buffer for querying the USN journal and scanning directories.
 	static constexpr size_t cBufferSize = 64 * 1024ull;
 	uint8* buffer_ptr  = (uint8*)malloc(cBufferSize);
@@ -1378,8 +1381,14 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 
 		if (!any_work_done)
 		{
+			// Going idle here.
+			mIsMonitorDirThreadIdle = true;
+
 			// Wait for some time before checking the USN journals again (unless we're being signaled).
 			std::ignore = mMonitorDirThreadSignal.try_acquire_for(1s);
+
+			// Not idle anymore.
+			mIsMonitorDirThreadIdle = false;
 		}
 	}
 }
