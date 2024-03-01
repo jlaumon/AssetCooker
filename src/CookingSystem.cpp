@@ -127,13 +127,15 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 			outStr.append(inFile.GetNameNoExt());
 			break;
 		case CommandVariables::Dir:
-			outStr.append(inFile.GetDirectory());
+			if (!inFile.GetDirectory().empty())
+			{
+				outStr.append(inFile.GetDirectory());
 
-			// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
-			// Add a second backslash to avoid that.
-			if (!inRemainingFormatStr.empty() && inRemainingFormatStr[0] == '"')
-				outStr.append("\\");
-
+				// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
+				// Add a second backslash to avoid that.
+				if (!inRemainingFormatStr.empty() && inRemainingFormatStr[0] == '"')
+					outStr.append("\\");
+			}
 			break;
 		case CommandVariables::Dir_NoTrailingSlash:
 			if (!inFile.GetDirectory().empty())
