@@ -5,7 +5,7 @@
 #include "win32/misc.h"
 
 // Debug toggle to fake cooking failures, to test error handling.
-bool gDebugFailCookingRandomly = true;
+bool gDebugFailCookingRandomly = false;
 
 
 static bool sIsSpace(char inChar)
