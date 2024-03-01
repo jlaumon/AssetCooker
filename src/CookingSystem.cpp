@@ -4,6 +4,9 @@
 #include "subprocess/subprocess.h"
 #include "win32/misc.h"
 
+// Debug toggle to fake cooking failures, to test error handling.
+bool gDebugFailCookingRandomly = true;
+
 
 static bool sIsSpace(char inChar)
 {
@@ -871,6 +874,15 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 			log_entry.mCookingState = CookingState::Error;
 			return;
 		}
+	}
+
+	// Fake random failures for debugging.
+	if (gDebugFailCookingRandomly && (gRand32() % 5) == 0)
+	{
+		output_str.Append("Uh oh! This is a fake failure for debug purpose!");
+		log_entry.mOutput       = output_str.AsStringView();
+		log_entry.mCookingState = CookingState::Error;
+		return;
 	}
 
 	// Get the max USN of all inputs (to later know if this command needs to cook again).
