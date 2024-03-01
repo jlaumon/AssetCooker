@@ -420,6 +420,9 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 	bool clicked = ImGui::Selectable(gFormat(inCommand).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
+	if (clicked && inCommand.mLastCookingLog)
+		gSelectCookingLogEntry(inCommand.mLastCookingLog->mID, true);
+
 	if (pop_color)
 		ImGui::PopStyleColor(pop_color);
 
