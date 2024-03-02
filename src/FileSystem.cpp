@@ -301,6 +301,14 @@ bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 	return sCreateDirectoryRecursiveW({ wpath_buffer.data(), wpath.size() + 1 }); // +1 to include the null terminator.
 }
 
+
+static bool sShouldRetryLater(OpenFileError inError)
+{
+	// At this point, this is the only error where it makes sense to try again later.
+	// Might change as we add more errors to the enum.
+	return inError == OpenFileError::SharingViolation;
+}
+
 	 
 FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, FileDrive& inDrive)
 	: mDrive(inDrive)
@@ -496,11 +504,11 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 	const FileInfo& dir = GetFile(inDirectoryID); 
 	gAssert(dir.IsDirectory());
 
-	HandleOrError dir_handle = mDrive.OpenFileByRefNumber(dir.mRefNumber, inDirectoryID);
+	HandleOrError dir_handle = mDrive.OpenFileByRefNumber(dir.mRefNumber, OpenFileAccess::GenericRead, inDirectoryID);
 	if (!dir_handle.IsValid())
 	{
 		// If the directory exists but it failed, retry later.
-		if (dir_handle.mError != OpenFileError::FileNotFound)
+		if (sShouldRetryLater(dir_handle.mError))
 			gFileSystem.RescanLater(inDirectoryID);
 
 		return;
@@ -599,11 +607,11 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 
 void FileRepo::ScanFile(FileInfo& ioFile, RequestedAttributes inRequestedAttributes)
 {
-	HandleOrError file_handle = mDrive.OpenFileByRefNumber(ioFile.mRefNumber, ioFile.mID);
+	HandleOrError file_handle = mDrive.OpenFileByRefNumber(ioFile.mRefNumber, OpenFileAccess::GenericRead, ioFile.mID);
 	if (!file_handle.IsValid())
 	{
 		// If the file exists but it failed, retry later.
-		if (file_handle.mError != OpenFileError::FileNotFound)
+		if (sShouldRetryLater(file_handle.mError))
 			gFileSystem.RescanLater(ioFile.mID);
 
 		return;
@@ -651,14 +659,14 @@ FileDrive::FileDrive(char inDriveLetter)
 	mUSNJournalID = journal_data.UsnJournalID;
 
 	// Store the current USN.
-	// TODO: we should read that from saved stated instead.
+	// TODO: we should read that from saved state instead.
 	mNextUSN = journal_data.NextUsn;
 
 	gApp.Log(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize));
 }
 
 
-HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, FileID inFileID) const
+HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFileAccess inDesiredAccess, FileID inFileID) const
 {
 	FILE_ID_DESCRIPTOR file_id_descriptor;
 	file_id_descriptor.dwSize			= sizeof(FILE_ID_DESCRIPTOR);
@@ -670,7 +678,18 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, FileID i
 		//| FILE_FLAG_SEQUENTIAL_SCAN	 // Helps prefetching if we only read sequentially. Useful if we want to hash the files?
 	;
 
-	OwnedHandle handle = OpenFileById(mHandle, &file_id_descriptor, FILE_GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, flags_and_attributes);
+	DWORD desired_access = 0;
+	switch (inDesiredAccess)
+	{
+	case OpenFileAccess::GenericRead:
+		desired_access = FILE_GENERIC_READ;
+		break;
+	case OpenFileAccess::AttributesOnly:
+		desired_access = FILE_READ_ATTRIBUTES;
+		break;
+	}
+
+	OwnedHandle handle = OpenFileById(mHandle, &file_id_descriptor, desired_access, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, flags_and_attributes);
 
 	// Fake random failures for debugging.
 	if (gDebugFailOpenFileRandomly && (gRand32() % 5) == 0)
@@ -697,16 +716,20 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, FileID i
 				return TempString<cMaxPathSizeUTF8>("Unknown");
 		};
 
-		if (gApp.mLogFSActivity >= LogLevel::Normal)
+		uint32 error = GetLastError();
+
+		// In non-verbose mode, don't log errors unless we know they're about a file we care about.
+		if (gApp.mLogFSActivity >= LogLevel::Verbose || inFileID.IsValid())
 			gApp.LogError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID).AsStringView(), inRefNumber, GetLastErrorString());
 		
-		// Some errors are okay, and we can just try to open the file again later.
+		// Some errors are okay, and we can just ignore the file or try to open it again later.
 		// Some are not okay, and we throw a fatal error.
 		// The list of okay error is probably incomplete, needs to be amended as we discover them.
-		uint32 error = GetLastError();
 		if (error == ERROR_SHARING_VIOLATION)
 			return OpenFileError::SharingViolation;
-		else/* if (error == ERROR_INVALID_PARAMETER)*/	// Yes, invalid parameter means file does not exist.
+		else if (error == ERROR_ACCESS_DENIED)
+			return OpenFileError::AccessDenied;
+		else if (error == ERROR_INVALID_PARAMETER)	// Yes, invalid parameter means file does not exist (anymore).
 			return OpenFileError::FileNotFound;
 
 		gApp.FatalError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID).AsStringView(), inRefNumber, GetLastErrorString());
@@ -822,6 +845,12 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 			if ((record->Reason & cInterestingReasons) == 0)
 				continue;
 
+			// If the file is created and deleted in the same record, ignore it. We can't get any info about the file because it's already gone.
+			// I think that can happen because of ReturnOnlyOnClose but unsure (ie. a file is created then deleted before its last handle was closed).
+			// Happens a lot when monitoring C:/
+			if ((record->Reason & (USN_REASON_FILE_DELETE | USN_REASON_FILE_CREATE)) == (USN_REASON_FILE_DELETE | USN_REASON_FILE_CREATE))
+				continue;
+
 			inRecordCallback(*record);
 		}
 	}
@@ -880,15 +909,12 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 		if (inRecord.Reason & (USN_REASON_FILE_CREATE | USN_REASON_RENAME_NEW_NAME))
 		{
 			// Get a handle to the file.
-			HandleOrError file_handle = OpenFileByRefNumber(inRecord.FileReferenceNumber, FileID::cInvalid());
+			HandleOrError file_handle = OpenFileByRefNumber(inRecord.FileReferenceNumber, OpenFileAccess::AttributesOnly, FileID::cInvalid());
 			if (!file_handle.IsValid())
 			{
-				// TODO can we open the file with different access rights to just get the path? try on .git, there are locked files in there
-				gApp.LogError("File {} was created or renamed, but we failed to open it. If the file is in a Repo, it's bad! FIXME!", FileRefNumber(inRecord.FileReferenceNumber));
-				//// If the file exists but it failed, retry later.
-				//if (file_handle.mError != OpenFileError::FileNotFound)
-				//	gFileSystem.RescanLater(ioFile.mID);
-
+				// This can fail for many reasons when monitoring a drive that also contains eg. Windows.
+				// Files are created then deleted constantly, some files need admin privileges, etc.
+				// We can't get their path, so we can't know if we should care. Probably we don't. C'est la vie.
 				return;
 			}
 
@@ -925,7 +951,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 				{
 					// If it's a file, treat it as if it was modified.
 					if (gApp.mLogFSActivity >= LogLevel::Verbose)
-						gApp.Log("Added {})", file);
+						gApp.Log("Added {}", file);
 
 					file.mLastChangeUSN  = inRecord.Usn;
 					file.mLastChangeTime = inRecord.TimeStamp.QuadPart;
@@ -1050,19 +1076,18 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 		root_path.Append("\\");
 
 	// Check if it overlaps with other repos.
-	// TODO: test this
 	for (auto& repo : mRepos)
 	{
 		if (gStartsWith(repo.mRootPath, root_path))
 		{
-			gApp.FatalError("Failed to init FileRepo {} ({}) - Root Path is inside another FileRepo ({} {}).", 
+			gApp.FatalError("Failed to init FileRepo {} ({}) - Another FileRepo is inside its root path ({} {}).", 
 				inName, inRootPath, 
 				repo.mName, repo.mRootPath);
 		}
 
 		if (gStartsWith(root_path, repo.mRootPath))
 		{
-			gApp.FatalError("Failed to init FileRepo {} ({}) - Another FileRepo is inside its root path ({} {}).", 
+			gApp.FatalError("Failed to init FileRepo {} ({}) - Root Path is inside another FileRepo ({} {}).", 
 				inName, inRootPath, 
 				repo.mName, repo.mRootPath);
 		}
@@ -1256,13 +1281,8 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 					FileRepo&   repo        = file_id.GetRepo();
 					FileInfo&   file        = file_id.GetFile();
 
-					HandleOrError file_handle = repo.mDrive.OpenFileByRefNumber(file.mRefNumber, file_id);
-					if (!file_handle.IsValid())
-					{
-						// If the file exists but it failed, retry later.
-						if (file_handle.mError != OpenFileError::FileNotFound)
-							gFileSystem.RescanLater(file_id);
-					}
+					// Get the USN.
+					repo.ScanFile(file, FileRepo::RequestedAttributes::USNOnly);
 
 					mInitStats.mIndividualUSNFetched++;
 

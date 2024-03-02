@@ -55,7 +55,15 @@ enum class OpenFileError : uint8
 {
 	NoError,
 	FileNotFound,
+	AccessDenied,
 	SharingViolation,	// File already opened by another process.
+};
+
+
+enum class OpenFileAccess : uint8
+{
+	GenericRead,
+	AttributesOnly,		// Should not fail with SharingViolation.
 };
 
 
@@ -367,7 +375,7 @@ struct FileDrive : NoCopy
 	bool                   ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioScanQueue, Span<uint8> ioBufferScan); // Check if files changed. Return false if there were no changes.
 	FileRepo*              FindRepoForPath(StringView inFullPath);                                        // Return nullptr if not in any repo.
 
-	HandleOrError          OpenFileByRefNumber(FileRefNumber inRefNumber, FileID inFileID) const;
+	HandleOrError          OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFileAccess inDesiredAccess, FileID inFileID) const;
 	OptionalStringView     GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const;    // Get the full path of this file, including the drive letter part.
 	USN                    GetUSN(const OwnedHandle& inFileHandle) const;
 
