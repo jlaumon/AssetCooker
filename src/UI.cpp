@@ -266,13 +266,14 @@ void gDrawFileInfo(const FileInfo& inFile)
 
 		// TODO make it clearer when we're looking at a deleted file
 
-		if (!inFile.IsDeleted() && ImGui::ButtonGrad("Show in Explorer"))
+		if (ImGui::ButtonGrad("Show in Explorer"))
 		{
-			// The more common version, doesn't open a new window if there's already one, but doesn't allow selecting a file. 
-			//ShellExecuteA(nullptr, "explore", TempString512("{}{}", inFile.GetRepo().mRootPath, inFile.GetDirectory()).AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
-
-			// Always open a new window, but at least selects the file.
-			ShellExecuteA(nullptr, nullptr, "explorer", TempString512("/select, {}{}", inFile.GetRepo().mRootPath, inFile.mPath).AsCStr(), nullptr, SW_SHOWDEFAULT);
+			if (inFile.IsDeleted())
+				// Open the parent dir.
+				ShellExecuteA(nullptr, "explore", TempString512("{}{}", inFile.GetRepo().mRootPath, inFile.GetDirectory()).AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
+			else
+				// Open the parent dir with the file selected.
+				ShellExecuteA(nullptr, nullptr, "explorer", TempString512("/select, {}{}", inFile.GetRepo().mRootPath, inFile.mPath).AsCStr(), nullptr, SW_SHOWDEFAULT);
 		}
 
 		ImGui::SameLine();
