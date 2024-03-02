@@ -1046,6 +1046,7 @@ FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
 void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 {
 	gAssert(!IsMonitoringStarted()); // Can't add repos once the threads have started, it's not thread safe!
+	gAssert(gIsNullTerminated(inRootPath));
 
 	// Check that the name is unique.
 	for (auto& repo : mRepos)
@@ -1054,22 +1055,11 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 			gApp.FatalError("Failed to init FileRepo {} ({}) - There is already a repo with that name.", inName, inRootPath);
 	}
 
-	if (gIsRelative(inRootPath))
-		gApp.FatalError("Failed to init FileRepo {} ({}) - Relative paths are not supported (yet).", inName, inRootPath);
-
+	// Get the absolute path (in case it's relative).
 	TempString512 root_path;
+	root_path.mSize = GetFullPathNameA(inRootPath.AsCStr(), root_path.cCapacity, root_path.mBuffer, nullptr);
 
-	// If it's not an absolute path, prepend with the current dir.
-	if (!gIsAbsolute(inRootPath))
-	{
-		root_path.mSize = GetCurrentDirectoryA(root_path.cCapacity, root_path.mBuffer);
-		root_path.Append("\\");
-	}
-
-	root_path.Append(inRootPath);
-
-	// Normalize it.
-	gNormalizePath({ root_path.mBuffer, root_path.mSize });
+	gAssert(gIsNormalized(root_path));
 
 	// Add a trailing slash if there isn't one.
 	if (!gEndsWith(root_path, "\\"))
