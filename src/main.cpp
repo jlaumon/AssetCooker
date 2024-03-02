@@ -185,6 +185,8 @@ int WinMain(
   int       nShowCmd
 )
 {
+	gSetCurrentThreadName(L"Main Thread");
+
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	gApp.Init();

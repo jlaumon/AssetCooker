@@ -1135,6 +1135,8 @@ void CookingSystem::ForceCook(CookingCommandID inCommandID)
 
 void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken)
 {
+	gSetCurrentThreadName(L"CookingThread");
+
 	while (true)
 	{
 		CookingCommandID command_id = mCommandsToCook.Pop();
