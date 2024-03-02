@@ -190,9 +190,11 @@ int WinMain(
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	gApp.Init();
-	
-	wchar_t     window_title_buffer[128];
-	auto        window_title_wchar = gUtf8ToWideChar(gApp.mMainWindowTitle, window_title_buffer).value_or(L"Asset Cooker");
+
+	TempString256 window_title("{} - Build: {} {}", gApp.mMainWindowTitle, __DATE__, __TIME__);
+
+	wchar_t     window_title_wchar_buffer[256];
+	auto        window_title_wchar = gUtf8ToWideChar(window_title, window_title_wchar_buffer).value_or(L"Asset Cooker");
 
 	// TODO move that inside App?
 	// TODO load window size/pos from config file?
