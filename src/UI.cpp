@@ -522,6 +522,8 @@ void gDrawCookingLog()
 	if (!visible)
 		return;
 
+	ImGui::TextUnformatted(TempString128("{} items", gCookingSystem.mCookingLog.Size()));
+
 	if (!ImGui::BeginTable("CookingLog", 4, ImGuiTableFlags_ScrollY))
 		return;
 	defer { ImGui::EndTable(); };
