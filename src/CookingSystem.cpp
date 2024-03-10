@@ -388,31 +388,30 @@ void CookingQueue::Push(CookingCommandID inCommandID, PushPosition inPosition/* 
 	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
 	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
 
-	{
-		std::lock_guard lock(mMutex);
+	std::unique_lock lock(mMutex);
+	PushInternal(lock, priority, inCommandID, inPosition);
+}
 
-		// Find or add the bucket for that cooking priority.
-		PrioBucket& bucket = *gEmplaceSorted(mPrioBuckets, priority);
 
-		// Add the command.
-		if (inPosition == PushPosition::Back)
-			bucket.mCommands.push_back(inCommandID);
-		else
-			bucket.mCommands.insert(bucket.mCommands.begin(), inCommandID);
+void CookingQueue::PushInternal(std::unique_lock<std::mutex>& ioLock, int inPriority, CookingCommandID inCommandID, PushPosition inPosition)
+{
+	gAssert(ioLock.mutex() == &mMutex);
 
-		mTotalSize++;
-	}
+	// Find or add the bucket for that cooking priority.
+	PrioBucket& bucket = *gEmplaceSorted(mPrioBuckets, inPriority);
 
-	if (mSemaphore)
-		mSemaphore->release();
+	// Add the command.
+	if (inPosition == PushPosition::Back)
+		bucket.mCommands.push_back(inCommandID);
+	else
+		bucket.mCommands.insert(bucket.mCommands.begin(), inCommandID);
+
+	mTotalSize++;
 }
 
 
 CookingCommandID CookingQueue::Pop()
 {
-	if (mSemaphore)
-		mSemaphore->acquire();
-
 	std::lock_guard lock(mMutex);
 
 	// Find the first non-empty bucket.
@@ -425,9 +424,6 @@ CookingCommandID CookingQueue::Pop()
 			bucket.mCommands.pop_back();
 			mTotalSize--;
 
-			if (mSemaphore)
-				mSemaphore->release();
-
 			return id;
 		}
 	}
@@ -436,28 +432,30 @@ CookingCommandID CookingQueue::Pop()
 }
 
 
-void CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* = RemoveOption::None*/)
+bool CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* = RemoveOption::None*/)
 {
 	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
 	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
 
 	std::lock_guard lock(mMutex);
 
-	// We expect to find the command (and the bucket, incidently).
+	// Find the bucket.
 	auto bucket_it = gFindSorted(mPrioBuckets, priority);
 	if (bucket_it == mPrioBuckets.end())
 	{
 		gAssert((inOption & RemoveOption::ExpectFound) == false);
-		return;
+		return false;
 	}
 
-	auto        it = gFind(bucket_it->mCommands, inCommandID);
+	// Find the command in the bucket.
+	auto it = gFind(bucket_it->mCommands, inCommandID);
 	if (it == bucket_it->mCommands.end())
 	{
 		gAssert((inOption & RemoveOption::ExpectFound) == false);
-		return;
+		return false;
 	}
 
+	// Remove it.
 	if (inOption & RemoveOption::KeepOrder)
 	{
 		bucket_it->mCommands.erase(it);
@@ -469,6 +467,7 @@ void CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* 
 	}
 
 	mTotalSize--;
+	return true;
 }
 
 
@@ -480,10 +479,115 @@ void CookingQueue::Clear()
 		bucket.mCommands.clear();
 
 	mTotalSize = 0;
+}
 
-	// Reset the semaphore to zero.
-	if (mSemaphore)
-		while (mSemaphore->try_acquire()) {}
+
+void CookingThreadsQueue::Push(CookingCommandID inCommandID, PushPosition inPosition/* = PushPosition::Back*/)
+{
+	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
+	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
+
+	{
+		std::unique_lock lock(mMutex);
+		PushInternal(lock, priority, inCommandID, inPosition);
+
+		// Make sure the data array stays in sync (makes pop simpler).
+		gEmplaceSorted(mPrioData, priority);
+	}
+
+	// Wake up one thread to work on this.
+	mBarrier.notify_one();
+}
+
+
+CookingCommandID CookingThreadsQueue::Pop()
+{
+	std::unique_lock lock(mMutex);
+	gAssert(mPrioData.size() == mPrioBuckets.size());
+
+	int  non_empty_bucket_index = -1;
+
+	while (true)
+	{
+		// Wait for work.
+		mBarrier.wait(lock);
+
+		// Find the first bucket containing command that can run.
+		for (int prio_index = 0; prio_index < (int)mPrioBuckets.size(); ++prio_index)
+		{
+			PrioBucket& bucket = mPrioBuckets[prio_index];
+			PrioData&   data   = mPrioData[prio_index];
+
+			// If this bucket is empty but some commands are still being cooked, wait until they're finished before checking the next buckets.
+			if (bucket.mCommands.empty() && data.mCommandsBeingCooked > 0)
+			{
+				// Go back to waiting and start over if more work is added or these commands are finished.
+				break;
+			}
+
+			if (!bucket.mCommands.empty())
+			{
+				// Found one!
+				non_empty_bucket_index = (int)(&bucket - &mPrioBuckets.front());
+				break;
+			}
+		}
+
+		// If we've found a bucket with commands that can run, exit the outer loop.
+		if (non_empty_bucket_index != -1)
+			break;
+	}
+	
+	if (non_empty_bucket_index != -1)
+	{
+		PrioBucket&      bucket = mPrioBuckets[non_empty_bucket_index];
+		PrioData&        data   = mPrioData[non_empty_bucket_index];
+
+		// Pop a command.
+		CookingCommandID id     = bucket.mCommands.back();
+		bucket.mCommands.pop_back();
+		mTotalSize--;
+
+		// Remember there's now one command ongoing.
+		data.mCommandsBeingCooked++;
+
+		return id;
+	}
+
+	return CookingCommandID::cInvalid();
+}
+
+
+void CookingThreadsQueue::FinishedCooking(CookingCommandID inCommandID)
+{
+	const CookingCommand& command  = gCookingSystem.GetCommand(inCommandID);
+	int                   priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
+	bool                  notify   = false;
+
+	{
+		std::unique_lock lock(mMutex);
+
+		// Find the bucket.
+		auto bucket_it = gFindSorted(mPrioBuckets, priority);
+		if (bucket_it == mPrioBuckets.end())
+		{
+			gAssert(false);
+			return;
+		}
+
+		// Update the number of commands still cooking.
+		int index = (int)(&*bucket_it - &mPrioBuckets.front());
+		PrioData& data  = mPrioData[index];
+		data.mCommandsBeingCooked--;
+
+		// If this was the last command being cooked for this prio, notify any waiting thread.
+		if (data.mCommandsBeingCooked == 0)
+			notify = true;
+	}
+
+	// Notify outside of the lock, no reason to wake threads to immediately make them wait for the lock.
+	if (notify)
+		mBarrier.notify_all();
 }
 
 
@@ -491,13 +595,6 @@ size_t CookingQueue::GetSize() const
 {
 	std::lock_guard lock(mMutex);
 	return mTotalSize;
-}
-
-
-CookingSystem::CookingSystem()
-{
-	// Set the semaphore on the cooking queue so that worker threads are woken up when there's work to do.
-	mCommandsToCook.SetSemaphore(&mCookingThreadsSemaphore);
 }
 
 
@@ -751,7 +848,7 @@ void CookingSystem::StopCooking()
 	for (auto& thread : mCookingThreads)
 		thread.mThread.request_stop();
 
-	mCookingThreadsSemaphore.release(mCookingThreads.size());
+	mCommandsToCook.mBarrier.notify_all();
 
 	for (auto& thread : mCookingThreads)
 		thread.mThread.join();
@@ -1152,6 +1249,8 @@ void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_tok
 				CleanupCommand(command, *ioThread);
 			else
 				CookCommand(command, *ioThread);
+
+			mCommandsToCook.FinishedCooking(command_id);
 		}
 	}
 }

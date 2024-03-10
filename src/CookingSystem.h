@@ -170,24 +170,25 @@ enum class RemoveOption : uint8
 {
 	None        = 0b00,
 	KeepOrder   = 0b01,
-	ExpectFound = 0b10
+	ExpectFound = 0b10	// For validation only, will assert if not found.
 };
 
 constexpr RemoveOption operator|(RemoveOption inA, RemoveOption inB) { return (RemoveOption)((uint8)inA | (uint8)inB); }
 constexpr bool         operator&(RemoveOption inA, RemoveOption inB) { return ((uint8)inA & (uint8)inB) != 0; }
 
+
 struct CookingQueue : NoCopy
 {
-	void             SetSemaphore(std::counting_semaphore<>* ioSemaphore) { mSemaphore = ioSemaphore; } // Set a semaphore that will be acquired/released when commands are popped/pushed.
-
 	void             Push(CookingCommandID inCommandID, PushPosition inPosition = PushPosition::Back);
 	CookingCommandID Pop();
 
-	void             Remove(CookingCommandID inCommandID, RemoveOption inOption = RemoveOption::None);
+	bool             Remove(CookingCommandID inCommandID, RemoveOption inOption = RemoveOption::None);	// Return true if removed.
 	void             Clear();
 
 	size_t           GetSize() const;
 	bool             IsEmpty() const { return GetSize() == 0; }
+
+	void             PushInternal(std::unique_lock<std::mutex>& ioLock, int inPriority, CookingCommandID inCommandID, PushPosition inPosition);
 
 	struct PrioBucket
 	{
@@ -199,16 +200,35 @@ struct CookingQueue : NoCopy
 		auto                          operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
 	};
 
-	std::vector<PrioBucket>    mPrioBuckets;
-	size_t                     mTotalSize = 0;
-	mutable std::mutex         mMutex;
-	std::counting_semaphore<>* mSemaphore = nullptr;
+	std::vector<PrioBucket> mPrioBuckets;
+	size_t                  mTotalSize = 0;
+	mutable std::mutex      mMutex;
+};
+
+
+struct CookingThreadsQueue : CookingQueue
+{
+	void                    Push(CookingCommandID inCommandID, PushPosition inPosition = PushPosition::Back);
+	CookingCommandID        Pop();
+	void                    FinishedCooking(CookingCommandID inCommandID);
+
+	struct PrioData
+	{
+		int mPriority            = 0;
+		int mCommandsBeingCooked = 0; // Number of commands not in the list anymore but still cooking.
+
+		auto operator<=>(int inOrder) const { return mPriority <=> inOrder; }
+		auto operator==(int inOrder) const { return mPriority == inOrder; }
+		auto operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
+	};
+	std::vector<PrioData>   mPrioData;
+	std::condition_variable mBarrier;
 };
 
 
 struct CookingSystem : NoCopy
 {
-	CookingSystem();
+	CookingSystem()  = default;
 	~CookingSystem() = default;
 
 	const CookingRule&                    GetRule(CookingRuleID inID) const { return mRules[inID.mIndex]; }
@@ -258,7 +278,7 @@ private:
 	std::mutex                            mCommandsQueuedForUpdateDirtyStateMutex;
 
 	CookingQueue                          mCommandsDirty;	// All dirty commands.
-	CookingQueue                          mCommandsToCook;	// Commands that will get cooked by the cooking threads.
+	CookingThreadsQueue                   mCommandsToCook;	// Commands that will get cooked by the cooking threads.
 
 	struct CookingThread
 	{
@@ -267,7 +287,6 @@ private:
 		std::atomic<CookingLogEntryID> mCurrentLogEntry;
 	};
 	SegmentedVector<CookingThread, 64>       mCookingThreads;
-	std::counting_semaphore<>                mCookingThreadsSemaphore  = std::counting_semaphore(0);
 	bool                                     mCookingPaused          = false;
 	int                                      mWantedCookingThreadCount = 0;	// Number of threads requested. Actual number of threads created might be lower. 
 
