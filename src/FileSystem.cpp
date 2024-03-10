@@ -437,7 +437,9 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 	}
 
 	// Create all the commands that take this file as input (this may add more (non-existing) files).
-	gCookingSystem.CreateCommandsForFile(*file);
+	// Note: Don't do it during initial scan, it's not necesarry as we'll do it afterwards anyway.
+	if (gFileSystem.GetInitState() == FileSystem::InitState::Ready)
+		gCookingSystem.CreateCommandsForFile(*file);
 
 	return *file;
 }
@@ -1320,7 +1322,13 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 
 	// Scan the repos.
 	InitialScan(inStopToken, buffer_USN);
+	
+	// Create the commands for all the files.
+	for (auto& repo : mRepos)
+		for (auto& file : repo.mFiles)
+			gCookingSystem.CreateCommandsForFile(file);
 
+	// Check which commmands need to cook.
 	gCookingSystem.ProcessUpdateDirtyStates();
 
 	// Once the scan is finished, start cooking.
