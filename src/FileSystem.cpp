@@ -1034,7 +1034,6 @@ FileRepo* FileSystem::FindRepo(StringView inRepoName)
 
 FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
 {
-	// TODO ref numbers are drive specific! this hash map should be per drive!
 	std::lock_guard lock(mFilesMutex);
 
 	auto it = mFilesByRefNumber.find(inRefNumber);
