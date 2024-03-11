@@ -334,6 +334,10 @@ void CookingCommand::UpdateDirtyState()
 
 	bool last_cook_is_waiting = mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting;
 	bool last_cook_is_cleanup = mLastCookingLog && mLastCookingLog->mIsCleanup;
+	bool last_cook_is_error   = mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Error;
+
+	if (last_cook_is_error)
+		dirty_state |= Error;
 
 	// If the command is waiting for results and all outputs were written (or deleted in case of cleanup), change its state to success.
 	if (last_cook_is_waiting)
@@ -352,6 +356,7 @@ void CookingCommand::UpdateDirtyState()
 	if (last_cook_is_waiting)
 		return;
 
+	// The command wasn't dirty but is now.
 	if (IsDirty() && !mIsQueued)
 	{
 		// TODO move all that to functions in CookingSystem and remove friend
@@ -362,6 +367,7 @@ void CookingCommand::UpdateDirtyState()
 		if (!gCookingSystem.IsCookingPaused())
 			gCookingSystem.mCommandsToCook.Push(mID);
 	}
+	// The command was dirty but isn't anymore.
 	else if (!IsDirty() && mIsQueued)
 	{
 		mIsQueued = false;
@@ -372,6 +378,14 @@ void CookingCommand::UpdateDirtyState()
 
 		// Don't care about the order in the cooking queue as much since it's not displayed (and might not be found if a worker already grabbed it).
 		gCookingSystem.mCommandsToCook.Remove(mID);
+	}
+	// Special last case: the command is already dirty, had an error, and its inputs changed again since.
+	else if ((mDirtyState & Error) && (mDirtyState & InputChanged))
+	{
+		// Try cooking again.
+		gAssert(mIsQueued);
+		if (!gCookingSystem.IsCookingPaused())
+			gCookingSystem.mCommandsToCook.Push(mID);
 	}
 }
 
@@ -877,7 +891,7 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 	{
 		mCookingPaused = false;
 
-		// Queue all the dirty commands (unless they're in error, or already cooking).
+		// Queue all the dirty commands that need to cook.
 		// TODO make a function for that
 		{
 			std::lock_guard lock(mCommandsDirty.mMutex);
@@ -889,10 +903,13 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 					const CookingCommand& command = GetCommand(command_id);
 					CookingState          cooking_state = command.GetCookingState();
 
-					if (cooking_state == CookingState::Unknown || cooking_state == CookingState::Success)
-					{
-						mCommandsToCook.Push(command_id);
-					}
+					if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
+						continue; // Skip commands already cooking.
+
+					if (cooking_state == CookingState::Error && (command.mDirtyState & CookingCommand::InputChanged) == 0)
+						continue; // Skip commands that errored if their input hasn't changed since last time.
+
+					mCommandsToCook.Push(command_id);
 				}
 			}
 		}
@@ -912,6 +929,22 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Set the log entry on the command.
 	ioCommand.mLastCookingLog = &log_entry;
+
+	// Get the max USN of all inputs (to later know if this command needs to cook again).
+	USN max_input_usn = 0;
+	for (FileID input_id : ioCommand.mInputs)
+		max_input_usn = gMax(max_input_usn, gFileSystem.GetFile(input_id).mLastChangeUSN);
+	
+	// Set the inputs USN on the command.
+	ioCommand.mLastCook = max_input_usn;
+
+	defer
+	{
+		// If the command ends in error, make sure its state is updated (that normally happens when outputs are written, but that might not happen depending on the error).
+		// This is important to then properly detect when the inputs change again and the command can re-cook.
+		if (log_entry.mCookingState == CookingState::Error)
+			QueueUpdateDirtyState(ioCommand.mID);
+	};
 
 	// Sleep to make things slow (for debugging).
 	// Note: use the command main input path as seed to make it consistent accross runs (useful if we want to add loading bars).
@@ -983,11 +1016,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		return;
 	}
 
-	// Get the max USN of all inputs (to later know if this command needs to cook again).
-	USN max_input_usn = 0;
-	for (FileID input_id : ioCommand.mInputs)
-		max_input_usn = gMax(max_input_usn, gFileSystem.GetFile(input_id).mLastChangeUSN);
-
 	// Create the process for the command line.
 	subprocess_s process;
 	int options = subprocess_option_no_window | subprocess_option_combined_stdout_stderr | subprocess_option_single_string_command_line;
@@ -1007,7 +1035,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Wait for the process to finish.
 	int exit_code = 0;
-	bool got_exit_code = subprocess_join(&process, &exit_code);
+	bool got_exit_code = subprocess_join(&process, &exit_code) == 0;
 	
 
 	// Get the output.
@@ -1028,23 +1056,24 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	}
 
 	// Log the exit code if we have it.
-	if (got_exit_code)
+	if (!got_exit_code)
 	{
 		output_str.AppendFormat("[error] Failed to get exit code - {}\n", GetLastErrorString());
 
-		log_entry.mOutput       = output_str.AsStringView();
 		log_entry.mCookingState = CookingState::Error;
 	}
 	else
 	{
-		output_str.AppendFormat("\nExit code: {}\n", exit_code);
+		output_str.AppendFormat("\nExit code: {} (0x{:X})\n", exit_code, (uint32)exit_code);
 	}
+
+	// Non-zero exit code is considered an error.
+	// TODO make that optional in the Rule
+	if (exit_code != 0)
+		log_entry.mCookingState = CookingState::Error;
 	
 	// Destruct the process handles (this can't actually fail).
 	subprocess_destroy(&process);
-
-	// Set the inputs USN on the command.
-	ioCommand.mLastCook = max_input_usn;
 
 	// Set the end time and add the duration at the end of the log.
 	log_entry.mTimeEnd = gGetSystemTimeAsFileTime();
@@ -1053,13 +1082,16 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	// Store the log output.
 	log_entry.mOutput = output_str.AsStringView();
 
-	// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
-	log_entry.mCookingState = CookingState::Waiting;
+	if (log_entry.mCookingState != CookingState::Error)
+	{
+		// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
+		log_entry.mCookingState = CookingState::Waiting;
 
-	// Any time an output is detected changed, we will try updating the cooking state.
-	// If all outputs were written, cooking is a success.
-	// If timeout happens first, we declare it's an error because of outputs not written.
-	AddTimeOut(&log_entry);
+		// Any time an output is detected changed, we will try updating the cooking state.
+		// If all outputs were written, cooking is a success.
+		// If timeout happens first, we declare it's an error because of outputs not written.
+		AddTimeOut(&log_entry);
+	}
 
 	// Make sure the file changes are processed as soon as possible.
 	gFileSystem.KickMonitorDirectoryThread();
@@ -1180,6 +1212,7 @@ void CookingSystem::QueueUpdateDirtyStates(FileID inFileID)
 	// We want to queue/defer the update for several reasons:
 	// - we don't want to update during the init scan (there's no point, we don't have all the files/all the info yet)
 	// - we don't want to update commands while they are still running (again there's no point)
+	// - we want a single thread doing it (because it's simpler)
 
 	const FileInfo& file = inFileID.GetFile();
 
@@ -1189,6 +1222,13 @@ void CookingSystem::QueueUpdateDirtyStates(FileID inFileID)
 		mCommandsQueuedForUpdateDirtyState.insert(command_id);
 	for (auto command_id : file.mOutputOf)
 		mCommandsQueuedForUpdateDirtyState.insert(command_id);
+}
+
+
+void CookingSystem::QueueUpdateDirtyState(CookingCommandID inCommandID)
+{
+	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+	mCommandsQueuedForUpdateDirtyState.insert(inCommandID);
 }
 
 

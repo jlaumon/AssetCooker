@@ -132,11 +132,12 @@ struct CookingCommand : NoCopy
 	enum DirtyState : uint8
 	{
 		NotDirty          = 0,
-		InputMissing      = 0b00001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
-		InputChanged      = 0b00010,
-		OutputMissing     = 0b00100,
-		AllInputsMissing  = 0b01000, // Command needs to be cleaned up.
-		AllOutputsMissing = 0b10000,
+		InputMissing      = 0b000001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
+		InputChanged      = 0b000010,
+		OutputMissing     = 0b000100,
+		AllInputsMissing  = 0b001000, // Command needs to be cleaned up.
+		AllOutputsMissing = 0b010000,
+		Error             = 0b100000, // Last cook errored.
 	};
 
 	DirtyState                mDirtyState     = NotDirty;
@@ -249,6 +250,7 @@ struct CookingSystem : NoCopy
 	size_t                                GetCommandCount() const { return mCommands.Size(); } // Total number of commands, for debug/display.
 
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
+	void                                  QueueUpdateDirtyState(CookingCommandID inCommandID);
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
 
 	void                                  ForceCook(CookingCommandID inCommandID);
