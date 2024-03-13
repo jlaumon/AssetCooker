@@ -213,6 +213,8 @@ struct CookingThreadsQueue : CookingQueue
 	CookingCommandID        Pop();
 	void                    FinishedCooking(CookingCommandID inCommandID);
 
+	void                    RequestStop();
+
 	struct PrioData
 	{
 		int mPriority            = 0;
@@ -224,6 +226,7 @@ struct CookingThreadsQueue : CookingQueue
 	};
 	std::vector<PrioData>   mPrioData;
 	std::condition_variable mBarrier;
+	bool                    mStopRequested = false;
 };
 
 

@@ -496,6 +496,13 @@ void CookingQueue::Clear()
 }
 
 
+size_t CookingQueue::GetSize() const
+{
+	std::lock_guard lock(mMutex);
+	return mTotalSize;
+}
+
+
 void CookingThreadsQueue::Push(CookingCommandID inCommandID, PushPosition inPosition/* = PushPosition::Back*/)
 {
 	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
@@ -523,6 +530,11 @@ CookingCommandID CookingThreadsQueue::Pop()
 
 	while (true)
 	{
+		// Break out of the loop if stopping was requested.
+		// Note: this needs to be checked before waiting, as this thread will not be awaken again if it tries to wait after stop was requested.
+		if (mStopRequested)
+			break;
+
 		// Wait for work.
 		mBarrier.wait(lock);
 
@@ -605,10 +617,13 @@ void CookingThreadsQueue::FinishedCooking(CookingCommandID inCommandID)
 }
 
 
-size_t CookingQueue::GetSize() const
+void CookingThreadsQueue::RequestStop()
 {
-	std::lock_guard lock(mMutex);
-	return mTotalSize;
+	{
+		std::unique_lock lock(mMutex);
+		mStopRequested = true;
+	}
+	mBarrier.notify_all();
 }
 
 
@@ -862,7 +877,7 @@ void CookingSystem::StopCooking()
 	for (auto& thread : mCookingThreads)
 		thread.mThread.request_stop();
 
-	mCommandsToCook.mBarrier.notify_all();
+	mCommandsToCook.RequestStop();
 
 	for (auto& thread : mCookingThreads)
 		thread.mThread.join();
