@@ -384,7 +384,9 @@ struct FileDrive : NoCopy
 	char                   mLetter = 'C';
 	OwnedHandle            mHandle;           // Handle to the drive, needed to open files with ref numbers.
 	uint64                 mUSNJournalID = 0; // Journal ID, needed to query the USN journal.
+	USN                    mFirstUSN     = 0;
 	USN                    mNextUSN      = 0;
+	bool                   mLoadedFromCache = false;
 	std::vector<FileRepo*> mRepos;
 	
 	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
@@ -411,6 +413,7 @@ struct FileSystem : NoCopy
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 
 	FileRepo*       FindRepo(StringView inRepoName);               // Return nullptr if not found.
+	FileDrive*      FindDrive(char inLetter);                      // Return nullptr if not found.
 
 	bool            CreateDirectory(FileID inFileID);              // Make sure all the parent directories for this file exist.
 	bool            DeleteFile(FileID inFileID);                   // Delete this file on disk.
@@ -423,12 +426,17 @@ struct FileSystem : NoCopy
 	enum class InitState
 	{
 		NotInitialized,
+		LoadingCache,
 		Scanning,
 		ReadingUSNJournal,
 		ReadingIndividualUSNs,
+		PreparingCommands,
 		Ready
 	};
 	InitState       GetInitState() const { return mInitState; }
+
+	void            SaveCache();
+	void            LoadCache();
 
 private:
 	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN);

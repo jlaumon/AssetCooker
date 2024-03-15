@@ -9,3 +9,4 @@ AssetCooker.vcxproj
 AssetCooker.vcxproj.filters
 AssetCooker.vcxproj.user
 Logs/
+Cache/

@@ -967,6 +967,11 @@ void gDrawStatusBar()
 			ImGui::TextUnformatted("Bonjour.");
 			break;
 		}
+		case FileSystem::InitState::LoadingCache: 
+		{
+			ImGui::TextUnformatted(TempString128("{} Loading cache... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
+			break;
+		}
 		case FileSystem::InitState::Scanning: 
 		{
 			ImGui::TextUnformatted(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
@@ -982,6 +987,11 @@ void gDrawStatusBar()
 			ImGui::TextUnformatted(TempString128("{} Reading individual USNs... {:5}/{}", gGetAnimatedHourglass(),
 				gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch
 			));
+			break;
+		}
+		case FileSystem::InitState::PreparingCommands: 
+		{
+			ImGui::TextUnformatted(TempString128("{} Preparing commands...", gGetAnimatedHourglass()));
 			break;
 		}
 		}

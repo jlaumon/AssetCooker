@@ -660,9 +660,10 @@ FileDrive::FileDrive(char inDriveLetter)
 	// Store the jorunal ID.
 	mUSNJournalID = journal_data.UsnJournalID;
 
-	// Store the current USN.
-	// TODO: we should read that from saved state instead.
-	mNextUSN = journal_data.NextUsn;
+	// Store the first USN. This will be used to know if the cached state is usable.
+	mFirstUSN = journal_data.FirstUsn;
+	// Store the next USN. This will be overwritten if the cached state is usable.
+	mNextUSN  = journal_data.NextUsn;
 
 	gApp.Log(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize));
 }
@@ -731,7 +732,8 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 			return OpenFileError::SharingViolation;
 		else if (error == ERROR_ACCESS_DENIED)
 			return OpenFileError::AccessDenied;
-		else if (error == ERROR_INVALID_PARAMETER)	// Yes, invalid parameter means file does not exist (anymore).
+		else if (error == ERROR_INVALID_PARAMETER	// Yes, invalid parameter means file does not exist (anymore).
+			|| error == ERROR_CANT_ACCESS_FILE)		// Unsure what this means but I've seen it happen for an unknown file on C:/ once.
 			return OpenFileError::FileNotFound;
 
 		gApp.FatalError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID).AsStringView(), inRefNumber, GetLastErrorString());
@@ -1032,6 +1034,16 @@ FileRepo* FileSystem::FindRepo(StringView inRepoName)
 }
 
 
+FileDrive* FileSystem::FindDrive(char inLetter)
+{
+	for (FileDrive& drive : mDrives)
+		if (drive.mLetter == inLetter)
+			return &drive;
+
+	return nullptr;
+}
+
+
 FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
 {
 	std::lock_guard lock(mFilesMutex);
@@ -1144,6 +1156,18 @@ size_t FileSystem::GetFileCount() const
 
 void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN)
 {
+	// Early out if we have everything from the cache already.
+	{
+		bool all_cached = true;
+
+		for (const FileDrive& drive : mDrives)
+			if (!drive.mLoadedFromCache)
+				all_cached = false;
+
+		if (all_cached)
+			return;
+	}
+
 	gApp.Log("Starting initial scan.");
 	Timer timer;
 	mInitState = InitState::Scanning;
@@ -1158,8 +1182,14 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 	scan_queue.mThreadsBusy = scan_thread_count; // All threads start busy.
 
 	// Put the root dir of each repo in the queue.
-	for (auto& repo : mRepos)
+	for (FileRepo& repo : mRepos)
+	{
+		// Skip repos that were already loaded from the cache.
+		if (repo.mDrive.mLoadedFromCache)
+			continue;
+
 		scan_queue.Push(repo.mRootDirID);
+	}
 
 	// Create temporary worker threads to scan directories.
 	{
@@ -1190,6 +1220,9 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		// Wait for the threads to finish their work.
 		for (auto& thread : scan_threads)
 			thread.join();
+
+		if (inStopToken.stop_requested())
+			return;
 	}
 
 	gAssert(scan_queue.mDirectories.empty());
@@ -1197,7 +1230,8 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 
 	size_t total_files = 0;
 	for (auto& repo : mRepos)
-		total_files += repo.mFiles.SizeRelaxed();
+		if (!repo.mDrive.mLoadedFromCache)
+			total_files += repo.mFiles.SizeRelaxed();
 
 	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
 		total_files, gTicksToSeconds(timer.GetTicks()));
@@ -1206,6 +1240,10 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 
 	for (FileDrive& drive : mDrives)
 	{
+		// Skip drives that were already loaded from the cache.
+		if (drive.mLoadedFromCache)
+			continue;
+
 		timer.Reset();
 		gApp.Log("Reading USN journal for {}:\\.", drive.mLetter);
 
@@ -1232,6 +1270,11 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 	// For these, we'll need to fetch the last USN manually.
 	SegmentedVector<FileID> files_without_usn;
 	for (auto& repo : mRepos)
+	{
+		// Skip repos that were loaded from the cache.
+		if (repo.mDrive.mLoadedFromCache)
+			continue;
+
 		for (auto& file : repo.mFiles)
 		{
 			if (file.IsDeleted() || file.IsDirectory())
@@ -1241,15 +1284,19 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 			if (file.mLastChangeUSN == 0)
 				files_without_usn.emplace_back(file.mID);
 		}
+	}
+
+	if (inStopToken.stop_requested())
+		return;
 
 	mInitStats.mIndividualUSNToFetch = (int)files_without_usn.size();
 	mInitStats.mIndividualUSNFetched = 0;
 	mInitState = InitState::ReadingIndividualUSNs;
 
-	gApp.Log("{} files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.size());
-
 	if (!files_without_usn.empty())
 	{
+		gApp.Log("{} files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.size());
+
 		// Don't create too many threads because they'll get stuck in locks in OpenFileByRefNumber if the cache is warm,
 		// or they'll be bottlenecked by IO otherwise.
 		const int usn_thread_count = gMin((int)std::thread::hardware_concurrency(), 4);
@@ -1286,13 +1333,13 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		// Wait for the threads to finish their work.
 		for (auto& thread : usn_threads)
 			thread.join();
-	}
-	
-	mInitStats.mReadyTicks = gGetTickCount();
-	mInitState = InitState::Ready;
 
-	gApp.Log("Done. Fetched {} individual USNs in {:.2f} seconds.", 
-		files_without_usn.size(), gTicksToSeconds(timer.GetTicks()));
+		if (inStopToken.stop_requested())
+			return;
+
+		gApp.Log("Done. Fetched {} individual USNs in {:.2f} seconds.", 
+			files_without_usn.size(), gTicksToSeconds(timer.GetTicks()));
+	}
 }
 
 
@@ -1316,12 +1363,37 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	defer { free(buffer_ptr); };
 
 	// Split it in two, one for USN reads, one for directory reads.
-	Span buffer_USN  = { buffer_ptr,					cBufferSize / 2 };
+	Span buffer_usn  = { buffer_ptr,					cBufferSize / 2 };
 	Span buffer_scan = { buffer_ptr + cBufferSize / 2,	cBufferSize / 2 };
 
-	// Scan the repos.
-	InitialScan(inStopToken, buffer_USN);
+	ScanQueue scan_queue;
+
+	// Load the cached state.
+	LoadCache();
+
+	// For drives initialized from the cache, read all the changes since the cache was saved.
+	// This needs to be done before processing dirty states/starting cooking, as we don't know the final state of the files yet.
+	for (auto& drive : mDrives)
+	{
+		if (drive.mLoadedFromCache == false)
+			continue;
+
+		// Process the queue.
+		while (drive.ProcessMonitorDirectory(buffer_usn, scan_queue, buffer_scan))
+		{
+			if (inStopToken.stop_requested())
+				break;
+		}
+
+		if (inStopToken.stop_requested())
+			break;
+	}
 	
+	// Scan the drives that were not intialized from the cache.
+	InitialScan(inStopToken, buffer_usn);
+	
+	mInitState = InitState::PreparingCommands;
+
 	// Create the commands for all the files.
 	for (auto& repo : mRepos)
 		for (auto& file : repo.mFiles)
@@ -1330,10 +1402,12 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	// Check which commmands need to cook.
 	gCookingSystem.ProcessUpdateDirtyStates();
 
+	mInitStats.mReadyTicks = gGetTickCount();
+	mInitState = InitState::Ready;
+
 	// Once the scan is finished, start cooking.
 	gCookingSystem.StartCooking();
 
-	ScanQueue scan_queue;
 	while (!inStopToken.stop_requested())
 	{
 		bool any_work_done = false;
@@ -1376,11 +1450,11 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			any_work_done = true;
 		}
 
-		// Check every drive.
+		// Check the USN journal of every drive to see if files changed.
 		for (auto& drive : mDrives)
 		{
 			// Process the queue.
-			while (drive.ProcessMonitorDirectory(buffer_USN, scan_queue, buffer_scan))
+			while (drive.ProcessMonitorDirectory(buffer_usn, scan_queue, buffer_scan))
 			{
 				any_work_done = true;
 
@@ -1408,6 +1482,10 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			mIsMonitorDirThreadIdle = false;
 		}
 	}
+
+	// Only save the state if we've finished scanning when we exit (don't save an incomplete state).
+	if (GetInitState() == InitState::Ready)
+		SaveCache();
 }
 
 
@@ -1415,6 +1493,510 @@ void FileSystem::RescanLater(FileID inFileID)
 {
 	constexpr double cFileRescanDelayMS = 300.0; // In milliseconds.
 
-	std::lock_guard lock(gFileSystem.mFilesToRescanMutex);
-	gFileSystem.mFilesToRescan.PushBack({ inFileID, gGetTickCount() + gMillisecondsToTicks(cFileRescanDelayMS) });
+	std::lock_guard lock(mFilesToRescanMutex);
+	mFilesToRescan.PushBack({ inFileID, gGetTickCount() + gMillisecondsToTicks(cFileRescanDelayMS) });
+}
+
+
+// Helper class to write a binary file.
+struct BinaryWriter : NoCopy
+{
+	BinaryWriter()
+	{
+		// Lock once to avoid the overhead of locking many times.
+		// TODO make the mutex a template param to have a dummy one when not needed?
+		mBufferLock = mBuffer.Lock();
+	}
+
+	// Write the internal buffer to this file.
+	bool WriteFile(FILE* ioFile)
+	{
+		size_t written_size = fwrite(mBuffer.Begin(), 1, mBuffer.Size(), ioFile);
+		return written_size == mBuffer.Size();
+	}
+
+	template <typename taType>
+	void Write(Span<const taType> inSpan)
+	{
+		static_assert(std::has_unique_object_representations_v<taType>); // Don't write padding into the file.
+
+		size_t size_bytes = inSpan.size_bytes();
+
+		Span dest = mBuffer.EnsureCapacity(size_bytes, mBufferLock);
+		memcpy(dest.data(), inSpan.data(), size_bytes);
+		mBuffer.IncreaseSize(size_bytes, mBufferLock);
+	}
+
+	template <typename taType>
+	void Write(const taType& inValue)
+	{
+		Write(Span(&inValue, 1));
+	}
+
+	void Write(StringView inStr)
+	{
+		Write((uint16)inStr.size());
+		Write(Span(inStr));
+	}
+
+	void WriteLabel(Span<const char> inLabel)
+	{
+		// Don't write the null terminator, we don't need it/don't read it back.
+		Write(inLabel.subspan(0, inLabel.size() - 1));
+	}
+
+	VMemArray<uint8> mBuffer = { 1'000'000'000, 256ull * 1024 };
+	VMemArrayLock    mBufferLock;
+};
+
+
+// Helper class to read a binary file.
+struct BinaryReader : NoCopy
+{
+	BinaryReader()
+	{
+		// Lock once to avoid the overhead of locking many times.
+		// TODO make the mutex a template param to have a dummy one when not needed?
+		mBufferLock = mBuffer.Lock();
+	}
+
+	// Read the entire file into the internal buffer.
+	void ReadFile(FILE* inFile)
+	{
+		if (fseek(inFile, 0, SEEK_END) != 0)
+		{
+			mError = true;
+			return;
+		}
+
+		int file_size = ftell(inFile);
+		if (file_size == -1)
+		{
+			mError = true;
+			return;
+		}
+
+		if (fseek(inFile, 0, SEEK_SET) != 0)
+		{
+			mError = true;
+			return;
+		}
+
+		mBuffer.EnsureCapacity(file_size, mBufferLock);
+
+		size_t read_count = fread(mBuffer.Begin(), 1, file_size, inFile);
+		if (read_count != (size_t)file_size)
+		{
+			mError = true;
+			return;
+		}
+
+		mBuffer.IncreaseSize(file_size, mBufferLock);
+	}
+
+	template <typename taType>
+	void Read(Span<taType> outSpan)
+	{
+		if (mCurrentOffset + outSpan.size_bytes() > mBuffer.SizeRelaxed())
+		{
+			mError = true;
+			return;
+		}
+
+		memcpy(outSpan.data(), mBuffer.Begin() + mCurrentOffset, outSpan.size_bytes());
+		mCurrentOffset += outSpan.size_bytes();
+	}
+
+	template <typename taType>
+	void Read(taType& outValue)
+	{
+		Read(Span(&outValue, 1));
+	}
+
+	template <size_t taSize>
+	void Read(TempString<taSize>& outStr)
+	{
+		uint16 size = 0;
+		Read(size);
+
+		if (size > outStr.cCapacity - 1)
+		{
+			gAssert(false);
+			gApp.LogError("FileReader tried to read a string of size {} in a TempString{}, it does not fit!", size, outStr.cCapacity);
+			mError = true;
+
+			// Skip the string instead of reading it.
+			Skip(size);
+		}
+		else
+		{
+			outStr.mSize = size;
+			outStr.mBuffer[size] = 0;
+			Read(Span(outStr.mBuffer, size));
+		}
+	}
+
+	void Skip(size_t inSizeInBytes)
+	{
+		if (mCurrentOffset + inSizeInBytes > mBuffer.SizeRelaxed())
+		{
+			mError = true;
+			return;
+		}
+
+		mCurrentOffset += inSizeInBytes;
+	}
+
+	template <size_t taSize>
+	bool ExpectLabel(const char (& inLabel)[taSize])
+	{
+		gAssert(inLabel[taSize - 1] == 0);
+		constexpr int cLabelSize = taSize - 1; // Ignore null terminator
+
+		char read_label[16];
+		static_assert(cLabelSize <= gElemCount(read_label));
+		Read(Span(read_label, cLabelSize));
+
+		if (memcmp(inLabel, read_label, cLabelSize) != 0)
+		{
+			// TODO log an error here
+			mError = true;
+		}
+
+		return !mError; // This will return false if there was an error before, even if the label is correct. That's on purpose, we use this to early out.
+	}
+
+	VMemArray<uint8> mBuffer = { 1'000'000'000, 256ull * 1024 };
+	VMemArrayLock    mBufferLock;
+	size_t           mCurrentOffset = 0;
+	bool             mError = false;
+};
+
+
+
+struct SerializedFileInfo
+{
+	uint32        mPathOffset       = 0;
+	uint32        mPathSize    : 31 = 0;
+	uint32        mIsDirectory : 1  = 0;
+	FileRefNumber mRefNumber        = {};
+	FileTime      mCreationTime     = {};
+	USN           mLastChangeUSN    = 0;
+	FileTime      mLastChangeTime   = {};
+
+	FileType GetType() const { return mIsDirectory ? FileType::Directory : FileType::File; }
+};
+static_assert(sizeof(SerializedFileInfo) == 48);
+
+
+constexpr int        cStateFormatVersion = 1;
+constexpr StringView cCacheFileName      = "cache.bin";
+
+void FileSystem::LoadCache()
+{
+	gApp.Log("Loading cached state.");
+	Timer timer;
+	mInitState = InitState::LoadingCache;
+
+	TempString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
+	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "rb");
+
+	if (cache_file == nullptr)
+	{
+		gApp.Log(R"(No cached state found ("{}"))", cache_file_path);
+		return;
+	}
+
+	BinaryReader bin;
+	bin.ReadFile(cache_file);
+
+	fclose(cache_file);
+
+	if (!bin.ExpectLabel("VERSION"))
+	{
+		gApp.LogError(R"(Corrupted cached state, ignoring cache. ("{}"))", cache_file_path);
+		return;
+	}
+
+	int format_version = -1;
+	bin.Read(format_version);
+	if (format_version != cStateFormatVersion)
+	{
+		gApp.Log("Unsupported cached state version, ignoring cache. (Expected: {} Found: {}).", cStateFormatVersion, format_version);
+		return;
+	}
+
+	std::vector<StringView> all_valid_repos;
+	int total_repo_count = 0;
+
+	// Read all drives and repos.
+	uint16 drive_count = 0;
+	bin.Read(drive_count);
+	for (int drive_index = 0; drive_index < (int)drive_count; ++drive_index)
+	{
+		if (!bin.ExpectLabel("DRIVE"))
+			break; // Early out if reading is failing.
+
+		char drive_letter = 0;
+		bin.Read(drive_letter);
+
+		uint64 journal_id = 0;
+		bin.Read(journal_id);
+
+		USN next_usn = 0;
+		bin.Read(next_usn);
+
+		FileDrive* drive       = FindDrive(drive_letter);
+		bool       drive_valid = true;
+		if (drive == nullptr)
+		{
+			gApp.LogError(R"(Drive {}:\ is listed in the cache but isn't used anymore, ignoring cache.)", drive_letter);
+			drive_valid = false;
+		}
+		else
+		{
+			if (drive->mUSNJournalID != journal_id)
+			{
+				gApp.LogError(R"(Drive {}:\ USN journal ID has changed, ignoring cache.)", drive_letter);
+				drive_valid = false;
+			}
+
+			if (drive->mFirstUSN > next_usn)
+			{
+				gApp.LogError(R"(Drive {}:\ cached state is too old, ignoring cache.)", drive_letter);
+				drive_valid = false;
+			}
+		}
+
+		uint16 repo_count = 0;
+		bin.Read(repo_count);
+		total_repo_count += repo_count;
+
+		std::vector<StringView> valid_repos;
+
+		for (int repo_index = 0; repo_index < (int)repo_count; ++repo_index)
+		{
+			if (!bin.ExpectLabel("REPO"))
+				break; // Early out if reading is failing.
+
+			TempString128 repo_name;
+			bin.Read(repo_name);
+
+			TempString512 repo_path;
+			bin.Read(repo_path);
+
+			FileRepo* repo       = FindRepo(repo_name);
+			bool      repo_valid = true;
+			if (repo == nullptr)
+			{
+				gApp.LogError(R"(Repo "{}" is listed in the cache but doesn't exist anymore, ignoring cache.)", repo_name);
+				repo_valid = false;
+			}
+			else
+			{
+				if (!gIsEqual(repo->mRootPath, repo_path))
+				{
+					gApp.LogError(R"(Repo "{}" root path changed, ignoring cache.)", repo_name);
+					repo_valid = false;
+				}
+			}
+
+			if (drive_valid && repo_valid)
+				valid_repos.push_back(repo->mName);
+		}
+
+		// If all repos for this drive are valid, we can use the cached state.
+		if (valid_repos.size() == drive->mRepos.size())
+		{
+			// Set the next USN we should read.
+			drive->mNextUSN = next_usn;
+
+			// Remember we're loading this drive from the cache to skip the initial scan.
+			drive->mLoadedFromCache = true;
+
+			// Add the repos names to the list of valid repos so that we read their content later.
+			all_valid_repos.insert(all_valid_repos.end(), valid_repos.begin(), valid_repos.end());
+		}
+	}
+
+	for (int repo_index = 0; repo_index < total_repo_count; ++repo_index)
+	{
+		if (!bin.ExpectLabel("REPO_CONTENT"))
+			break;
+
+		TempString128 repo_name;
+		bin.Read(repo_name);
+
+		uint32 file_count = 0;
+		bin.Read(file_count);
+
+		uint32 string_pool_bytes = 0;
+		bin.Read(string_pool_bytes);
+
+		bool repo_valid = gContains(all_valid_repos, repo_name.AsStringView());
+		
+		// We found it earlier, so this shouldn't fail.
+		FileRepo* repo = FindRepo(repo_name);
+
+		if (!bin.ExpectLabel("STRINGS"))
+			break;
+
+		MutStringView all_strings;
+		if (repo_valid)
+		{
+			// Read the strings.
+			// Note: -1 because StringPool always allocate one more byte for a null terminator, but it's already counted in the size here.
+			all_strings = repo->mStringPool.Allocate(string_pool_bytes - 1);
+			bin.Read(all_strings);
+		}
+		else
+		{
+			// Or skip them.
+			bin.Skip(string_pool_bytes);
+		}
+
+		if (!bin.ExpectLabel("FILES"))
+			break;
+
+		if (repo_valid)
+		{
+			// Read the files.
+			for (int file_index = 0; file_index < (int)file_count; ++file_index)
+			{
+				SerializedFileInfo serialized_file_info;
+				bin.Read(serialized_file_info);
+
+				FileInfo& file_info = repo->GetOrAddFile(
+					all_strings.subspan(serialized_file_info.mPathOffset, serialized_file_info.mPathSize), 
+					serialized_file_info.GetType(), 
+					serialized_file_info.mRefNumber);
+
+				file_info.mCreationTime   = serialized_file_info.mCreationTime;
+				file_info.mLastChangeUSN  = serialized_file_info.mLastChangeUSN;
+				file_info.mLastChangeTime = serialized_file_info.mLastChangeTime;
+			}
+		}
+		else
+		{
+			// Or skip them.
+			bin.Skip(file_count * sizeof(SerializedFileInfo));
+		}
+	}
+
+	bin.ExpectLabel("FIN");
+
+	if (bin.mError)
+		gApp.FatalError(R"(Corrupted cached state. Delete the file and try again ("{}")).)", cache_file_path);
+
+	size_t total_files = 0;
+	for (auto& repo : mRepos)
+		if (repo.mDrive.mLoadedFromCache)
+			total_files += repo.mFiles.SizeRelaxed();
+
+	gApp.Log("Done. Found {} Files in {:.2f} seconds.", 
+		total_files, gTicksToSeconds(timer.GetTicks()));
+}
+
+
+void FileSystem::SaveCache()
+{
+	// Make sure the cache dir exists.
+	CreateDirectoryA(gApp.mCacheDirectory.c_str(), nullptr);
+
+	TempString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
+	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "wb");
+
+	if (cache_file == nullptr)
+		gApp.FatalError(R"(Failed to save cached state ("{}") - {} (0x{:X}))", cache_file_path, strerror(errno), errno);
+
+	BinaryWriter bin;
+
+	bin.WriteLabel("VERSION");
+	bin.Write(cStateFormatVersion);
+
+	std::vector<StringView> valid_repos;
+	int total_repo_count = 0;
+
+	// Read all drives and repos.
+	bin.Write((uint16)mDrives.Size());
+	for (const FileDrive& drive : mDrives)
+	{
+		bin.WriteLabel("DRIVE");
+
+		bin.Write(drive.mLetter);
+		bin.Write(drive.mUSNJournalID);
+		bin.Write(drive.mNextUSN);
+
+		bin.Write((uint16)drive.mRepos.size());
+		for (const FileRepo* repo : drive.mRepos)
+		{
+			bin.WriteLabel("REPO");
+			bin.Write(repo->mName);
+			bin.Write(repo->mRootPath);
+		}
+	}
+
+	for (const FileRepo& repo : mRepos)
+	{
+		bin.WriteLabel("REPO_CONTENT");
+
+		bin.Write(repo.mName);
+		bin.Write((uint32)repo.mFiles.Size());
+
+		// Get the total size of the file paths.
+		uint32 string_pool_bytes = 0;
+		for (const FileInfo& file : repo.mFiles)
+		{
+			// Skip deleted files.
+			if (file.IsDeleted())
+				continue;
+
+			string_pool_bytes += file.mPath.size() + 1; // + 1 for null terminator.
+		}
+		bin.Write(string_pool_bytes);
+
+		bin.WriteLabel("STRINGS");
+
+		// Write the paths.
+		// TODO try lz4 on this
+		for (const FileInfo& file : repo.mFiles)
+		{
+			// Skip deleted files.
+			if (file.IsDeleted())
+				continue;
+
+			bin.Write(Span(file.mPath.data(), file.mPath.size() + 1)); // + 1 to include null terminator.
+		}
+
+		bin.WriteLabel("FILES");
+
+		// Write the files.
+		uint32 current_offset = 0;
+		for (const FileInfo& file : repo.mFiles)
+		{
+			// Skip deleted files.
+			if (file.IsDeleted())
+				continue;
+
+			SerializedFileInfo serialized_file_info;
+			serialized_file_info.mPathOffset     = current_offset;
+			serialized_file_info.mPathSize       = file.mPath.size();
+			serialized_file_info.mIsDirectory    = file.IsDirectory();
+			serialized_file_info.mRefNumber      = file.mRefNumber;
+			serialized_file_info.mCreationTime   = file.mCreationTime;
+			serialized_file_info.mLastChangeUSN  = file.mLastChangeUSN;
+			serialized_file_info.mLastChangeTime = file.mLastChangeTime;
+
+			bin.Write(serialized_file_info);
+
+			current_offset += file.mPath.size() + 1;
+		}
+	}
+
+	bin.WriteLabel("FIN");
+
+	if (!bin.WriteFile(cache_file))
+		gApp.FatalError(R"(Failed to save cached state ("{}") - {} (0x{:X}))", cache_file_path, strerror(errno), errno);
+
+	fclose(cache_file);
 }
