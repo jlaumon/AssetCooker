@@ -225,7 +225,6 @@ int WinMain(
 	gApp.mMainWindowHwnd = hwnd;
 
 	// Initialize Direct3D
-	// TODO start the threads before doing this because that's slow (~300ms)
 	if (!CreateDeviceD3D(hwnd))
 		gApp.FatalError("Failed to create D3D device - {}", GetLastErrorString());
 
