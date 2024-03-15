@@ -42,8 +42,9 @@ struct App
 	String                          mRuleFilePath    = "rules.toml";
 	LogLevel                        mLogFSActivity   = LogLevel::Normal;
 	struct Log                      mLog;
-	String                          mLogDirectory = "Logs";
-	FILE*                           mLogFile      = nullptr;
+	FILE*                           mLogFile        = nullptr;
+	String                          mLogDirectory   = "Logs";
+	String                          mCacheDirectory = "Cache";
 	String                          mInitError;
 };
 
