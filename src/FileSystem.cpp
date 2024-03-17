@@ -438,7 +438,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 	}
 
 	// Create all the commands that take this file as input (this may add more (non-existing) files).
-	// Note: Don't do it during initial scan, it's not necesarry as we'll do it afterwards anyway.
+	// Note: Don't do it during initial scan, it's not necessary as we'll do it afterwards anyway.
 	if (gFileSystem.GetInitState() == FileSystem::InitState::Ready)
 		gCookingSystem.CreateCommandsForFile(*file);
 
