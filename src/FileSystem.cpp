@@ -1963,9 +1963,9 @@ void FileSystem::SaveCache()
 		bin.WriteLabel("REPO_CONTENT");
 
 		bin.Write(repo.mName);
-		bin.Write((uint32)repo.mFiles.Size());
 
-		// Get the total size of the file paths.
+		// Get the number of files and the total size of the file paths.
+		uint32 file_count        = 0;
 		uint32 string_pool_bytes = 0;
 		for (const FileInfo& file : repo.mFiles)
 		{
@@ -1973,14 +1973,16 @@ void FileSystem::SaveCache()
 			if (file.IsDeleted())
 				continue;
 
+			file_count++;
 			string_pool_bytes += file.mPath.size() + 1; // + 1 for null terminator.
 		}
+
+		bin.Write(file_count);
 		bin.Write(string_pool_bytes);
 
 		bin.WriteLabel("STRINGS");
 
 		// Write the paths.
-		// TODO try lz4 on this
 		for (const FileInfo& file : repo.mFiles)
 		{
 			// Skip deleted files.
