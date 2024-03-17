@@ -484,11 +484,13 @@ void gDrawCookingQueue()
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
-
+		bool all_empty = true;
 		for (auto& bucket : gCookingSystem.mCommandsDirty.mPrioBuckets)
 		{
 			if (bucket.mCommands.empty())
 				continue;
+
+			all_empty = false;
 
 			ImGui::SeparatorText(TempString64("Priority {} ({} items)", bucket.mPriority, bucket.mCommands.size()));
 
@@ -506,6 +508,12 @@ void gDrawCookingQueue()
 			clipper.End();
 
 			ImGui::PopStyleVar();
+		}
+
+		if (all_empty)
+		{
+			ImGui::Spacing();
+			ImGui::TextUnformatted("All caught up! " ICON_FK_HAND_PEACE_O);
 		}
 	}
 	ImGui::EndChild();
