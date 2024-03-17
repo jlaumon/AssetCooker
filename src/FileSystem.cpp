@@ -1718,13 +1718,14 @@ void FileSystem::LoadCache()
 
 	TempString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
 	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "rb");
-	defer { fclose(cache_file); };
 
 	if (cache_file == nullptr)
 	{
 		gApp.Log(R"(No cached state found ("{}"))", cache_file_path);
 		return;
 	}
+
+	defer { fclose(cache_file); };
 
 	BinaryReader bin;
 	if (!bin.ReadFile(cache_file))
