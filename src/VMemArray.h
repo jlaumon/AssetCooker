@@ -122,7 +122,7 @@ struct VMemArray : NoCopy
 		Span elements = *this;
 		mEnd          = mBegin;
 
-		for (taType& element :elements)
+		for (taType& element : elements)
 			element.~taType();
 	}
 
@@ -151,5 +151,5 @@ private:
 	uint8*               mEndCommitted  = nullptr;
 	std::mutex           mMutex;
 	size_t               mSizeToReserve = 1024ull * 1024 * 1024;
-	size_t               mMinCommitSize = 1024ull * 1024;			// Minimum size to commit at once, to avoid calling gVMemCommit too often.
+	size_t               mMinCommitSize = 256ull * 1024;			// Minimum size to commit at once, to avoid calling gVMemCommit too often.
 };

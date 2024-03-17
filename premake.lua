@@ -80,6 +80,8 @@ solution "AssetCooker"
 			"thirdparty/tomlplusplus/include/**.inl",
 			"thirdparty/fmt/include/**.h",
 			"thirdparty/fmt/src/format.cc",
+			"thirdparty/lz4/lib/lz4.h",
+			"thirdparty/lz4/lib/lz4.c",
 			"data/**.rc",
 			"data/**.h",
         }
@@ -96,6 +98,7 @@ solution "AssetCooker"
 			"thirdparty/xxHash",
 			"thirdparty/tomlplusplus/include",
 			"thirdparty/fmt/include",
+			"thirdparty/lz4/lib",
         }
         
         links

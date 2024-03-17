@@ -4,6 +4,7 @@
 #include "Ticks.h"
 #include "CookingSystem.h"
 #include "Paths.h"
+#include "lz4.h"
 
 #include "win32/misc.h"
 #include "win32/file.h"
@@ -1511,8 +1512,22 @@ struct BinaryWriter : NoCopy
 	// Write the internal buffer to this file.
 	bool WriteFile(FILE* ioFile)
 	{
-		size_t written_size = fwrite(mBuffer.Begin(), 1, mBuffer.Size(), ioFile);
-		return written_size == mBuffer.Size();
+		// Compress the data with LZ4.
+		// LZ4HC gives a slightly better ratio but is 10 times as slow, so not worth it here.
+		int    uncompressed_size   = (int)mBuffer.SizeRelaxed();
+		int    compressed_size_max = LZ4_compressBound(uncompressed_size);
+		char*  compressed_buffer   = (char*)malloc(compressed_size_max);
+		int    compressed_size     = LZ4_compress_default((const char*)mBuffer.Begin(), compressed_buffer, uncompressed_size, compressed_size_max);
+
+		defer { free(compressed_buffer); };
+
+		// Write the uncompressed size first, we'll need it to decompress.
+		if (fwrite(&uncompressed_size, sizeof(uncompressed_size), 1, ioFile) != 1)
+			return false;
+
+		// Write the compressed data.
+		int written_size = fwrite(compressed_buffer, 1, compressed_size, ioFile);
+		return written_size == compressed_size;
 	}
 
 	template <typename taType>
@@ -1561,37 +1576,40 @@ struct BinaryReader : NoCopy
 	}
 
 	// Read the entire file into the internal buffer.
-	void ReadFile(FILE* inFile)
+	bool ReadFile(FILE* inFile)
 	{
 		if (fseek(inFile, 0, SEEK_END) != 0)
-		{
-			mError = true;
-			return;
-		}
+			return false;
 
 		int file_size = ftell(inFile);
 		if (file_size == -1)
-		{
-			mError = true;
-			return;
-		}
+			return false;
 
 		if (fseek(inFile, 0, SEEK_SET) != 0)
-		{
-			mError = true;
-			return;
-		}
+			return false;
 
-		mBuffer.EnsureCapacity(file_size, mBufferLock);
+		// First read the uncompressed size.
+		int uncompressed_size = 0;
+		if (fread(&uncompressed_size, sizeof(uncompressed_size), 1, inFile) != 1)
+			return false;
 
-		size_t read_count = fread(mBuffer.Begin(), 1, file_size, inFile);
-		if (read_count != (size_t)file_size)
-		{
-			mError = true;
-			return;
-		}
+		// Then read the compressed data.
+		int   compressed_size   = file_size - (int)sizeof(uncompressed_size);
+		char* compressed_buffer = (char*)malloc(compressed_size);
+		defer { free(compressed_buffer); };
 
-		mBuffer.IncreaseSize(file_size, mBufferLock);
+		if (fread(compressed_buffer, 1, compressed_size, inFile) != compressed_size)
+			return false;
+
+		Span uncompressed_buffer = mBuffer.EnsureCapacity(uncompressed_size, mBufferLock);
+
+		// Decompress the data.
+		int actual_uncompressed_size = LZ4_decompress_safe(compressed_buffer, (char*)uncompressed_buffer.data(), compressed_size, uncompressed_buffer.size());
+		gAssert(actual_uncompressed_size == uncompressed_size);
+
+		mBuffer.IncreaseSize(uncompressed_size, mBufferLock);
+
+		return true;
 	}
 
 	template <typename taType>
@@ -1700,6 +1718,7 @@ void FileSystem::LoadCache()
 
 	TempString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
 	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "rb");
+	defer { fclose(cache_file); };
 
 	if (cache_file == nullptr)
 	{
@@ -1708,9 +1727,8 @@ void FileSystem::LoadCache()
 	}
 
 	BinaryReader bin;
-	bin.ReadFile(cache_file);
-
-	fclose(cache_file);
+	if (!bin.ReadFile(cache_file))
+		return;
 
 	if (!bin.ExpectLabel("VERSION"))
 	{
