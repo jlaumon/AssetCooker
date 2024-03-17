@@ -1016,6 +1016,9 @@ void FileSystem::StartMonitoring()
 
 void FileSystem::StopMonitoring()
 {
+	if (!IsMonitoringStarted())
+		return;
+
 	mMonitorDirThread.request_stop();
 	KickMonitorDirectoryThread();
 	mMonitorDirThread.join();
