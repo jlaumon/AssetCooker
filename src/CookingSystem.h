@@ -255,6 +255,7 @@ struct CookingSystem : NoCopy
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
 	void                                  QueueUpdateDirtyState(CookingCommandID inCommandID);
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
+	void                                  UpdateDirtyStates(); // Update the dirty state of all commands. Only needed during init.
 
 	void                                  ForceCook(CookingCommandID inCommandID);
 	bool                                  IsIdle() const; // Return true if nothing is happening. Used by the UI to decide if it needs to draw.

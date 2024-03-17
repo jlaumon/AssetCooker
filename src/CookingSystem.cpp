@@ -1271,6 +1271,15 @@ bool CookingSystem::ProcessUpdateDirtyStates()
 }
 
 
+void CookingSystem::UpdateDirtyStates()
+{
+	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+
+	for (CookingCommand& command : mCommands)
+		command.UpdateDirtyState();
+}
+
+
 void CookingSystem::ForceCook(CookingCommandID inCommandID)
 {
 	auto& command       = GetCommand(inCommandID);

@@ -1404,7 +1404,7 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			gCookingSystem.CreateCommandsForFile(file);
 
 	// Check which commmands need to cook.
-	gCookingSystem.ProcessUpdateDirtyStates();
+	gCookingSystem.UpdateDirtyStates();
 
 	mInitStats.mReadyTicks = gGetTickCount();
 	mInitState = InitState::Ready;
