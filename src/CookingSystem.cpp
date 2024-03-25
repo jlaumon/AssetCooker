@@ -849,12 +849,11 @@ bool CookingSystem::ValidateRules()
 void CookingSystem::StartCooking()
 {
 	// Zero/negative means no limit on thread count.
-	if (mWantedCookingThreadCount <= 0)
-		mWantedCookingThreadCount = INT_MAX;
+	int thread_count = (mWantedCookingThreadCount <= 0) ? INT_MAX : mWantedCookingThreadCount;
 
 	// Number of threads is at least one, and is capped by number of CPU cores minus one,
 	// because we want to leave one core for the file system monitoring thread (and main thread).
-	int thread_count = gClamp(mWantedCookingThreadCount, 1, (int)std::thread::hardware_concurrency() - 1);
+	thread_count = gClamp(thread_count, 1, (int)std::thread::hardware_concurrency() - 1);
 
 	gApp.Log("Starting {} Cooking Threads.", thread_count);
 

@@ -21,7 +21,7 @@ void gReadConfigFile(StringView inPath)
 	}
 
 	// Initialize a reader on the root table.
-	TomlReader reader(config_toml.table(), gCookingSystem.GetRuleStringPool());
+	TomlReader reader(config_toml.table(), nullptr);
 
 	defer
 	{
@@ -59,37 +59,6 @@ void gReadConfigFile(StringView inPath)
 		TempString512 rule_file_path;
 		if (reader.TryRead("RuleFile", rule_file_path))
 			gApp.mRuleFilePath = rule_file_path.AsStringView();
-	}
-
-	// Start paused, or cook immediately?
-	// TODO: move this to a user preferences config file
-	{
-		bool start_paused = gCookingSystem.IsCookingPaused();
-		if (reader.TryRead("StartPaused", start_paused))
-			gCookingSystem.SetCookingPaused(start_paused);
-	}
-
-	// Number of Cooking Threads.
-	// TODO: move this to a user preferences config file
-	{
-		int num_cooking_threads = 0;
-		if (reader.TryRead("NumCookingThreads", num_cooking_threads))
-			gCookingSystem.SetCookingThreadCount(num_cooking_threads);
-	}
-
-	// Filesystem log verbosity.
-	{
-		TempString64 log_level;
-		if (reader.TryRead("LogFSActivity", log_level))
-		{
-			StringView log_level_sv = log_level.AsStringView();
-			if (gIsEqualNoCase(log_level_sv, "None"))
-				gApp.mLogFSActivity = LogLevel::None;
-			else if (gIsEqualNoCase(log_level_sv, "Normal"))
-				gApp.mLogFSActivity = LogLevel::Normal;
-			else if (gIsEqualNoCase(log_level_sv, "Verbose"))
-				gApp.mLogFSActivity = LogLevel::Verbose;
-		}
 	}
 
 	// Log directory path

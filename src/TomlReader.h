@@ -127,7 +127,7 @@ struct TomlReader
 
 		if constexpr (std::is_same_v<taType, StringView>)
 			// For StringView allocate a copy into the StringPool
-			outVar = mStringPool.AllocateCopy(*node->value<std::string_view>());
+			outVar = mStringPool->AllocateCopy(*node->value<std::string_view>());
 		else if constexpr (std::is_same_v<taType, TempString32>
 			|| std::is_same_v<taType, TempString64>
 			|| std::is_same_v<taType, TempString128>
@@ -158,7 +158,7 @@ struct TomlReader
 		return true;
 	}
 
-	TomlReader(const toml::table& inRootTable, StringPool& ioStringPool)
+	TomlReader(const toml::table& inRootTable, StringPool* ioStringPool)
 		: mStringPool(ioStringPool)
 	{
 		mStack.push_back({ &inRootTable });
@@ -298,7 +298,7 @@ struct TomlReader
 	};
 	std::vector<Element> mStack;
 	toml::path           mPath;
-	StringPool&          mStringPool;
+	StringPool*          mStringPool = nullptr;
 	int                  mErrorCount = 0;
 };
 

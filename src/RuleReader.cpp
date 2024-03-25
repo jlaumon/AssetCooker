@@ -19,7 +19,7 @@ void gReadRuleFile(StringView inPath)
 	}
 
 	// Initialize a reader on the root table.
-	TomlReader reader(rules_toml.table(), gCookingSystem.GetRuleStringPool());
+	TomlReader reader(rules_toml.table(), &gCookingSystem.GetRuleStringPool());
 
 	defer
 	{

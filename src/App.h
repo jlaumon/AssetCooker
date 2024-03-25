@@ -8,7 +8,23 @@ enum class LogLevel : uint8
 	None,
 	Normal,
 	Verbose,
+	_Count,
 };
+
+
+constexpr StringView gToStringView(LogLevel inVar)
+{
+	constexpr StringView cStrings[]
+	{
+		"None",
+		"Normal",
+		"Verbose",
+	};
+	static_assert(gElemCount(cStrings) == (size_t)LogLevel::_Count);
+
+	return cStrings[(int)inVar];
+};
+
 
 // Manages the initialization and life time of the application.
 struct App
@@ -35,12 +51,13 @@ struct App
 	void                            OpenLogFile();
 	void                            CloseLogFile();
 
-	String                          mMainWindowTitle = "Asset Cooker";
-	void*                           mMainWindowHwnd  = nullptr;
-	bool                            mExitRequested   = false;
-	bool                            mExitReady       = false;
-	String                          mRuleFilePath    = "rules.toml";
-	LogLevel                        mLogFSActivity   = LogLevel::Normal;
+	String                          mMainWindowTitle   = "Asset Cooker";
+	void*                           mMainWindowHwnd    = nullptr;
+	bool                            mExitRequested     = false;
+	bool                            mExitReady         = false;
+	String                          mUserPrefsFilePath = "prefs.toml";
+	String                          mRuleFilePath      = "rules.toml";
+	LogLevel                        mLogFSActivity     = LogLevel::Normal;
 	struct Log                      mLog;
 	FILE*                           mLogFile        = nullptr;
 	String                          mLogDirectory   = "Logs";

@@ -1,6 +1,7 @@
 #include "App.h"
 
 #include "ConfigReader.h"
+#include "UserPreferencesReader.h"
 #include "RuleReader.h"
 #include "Debug.h"
 #include "CookingSystem.h"
@@ -26,6 +27,9 @@ void App::Init()
 	// Read the config file.
 	gReadConfigFile("config.toml");
 
+	// Read the user prefs file.
+	gReadUserPreferencesFile(mUserPrefsFilePath);
+
 	// Open the log file after reading the config since it can change the log directory.
 	OpenLogFile();
 
@@ -41,6 +45,8 @@ void App::Init()
 
 void App::Exit()
 {
+	gWriteUserPreferencesFile(mUserPrefsFilePath);
+
 	CloseLogFile();
 }
 
