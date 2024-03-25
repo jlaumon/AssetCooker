@@ -301,7 +301,6 @@ private:
 	friend void                              gDrawCookingLog();
 	friend void                              gDrawSelectedCookingLogEntry();
 	VMemArray<CookingLogEntry>               mCookingLog;
-	std::mutex                               mCookingLogMutex;
 
 	std::array<HashSet<CookingLogEntry*>, 2> mTimeOutBatches;
 	mutable std::mutex                       mTimeOutsMutex;
