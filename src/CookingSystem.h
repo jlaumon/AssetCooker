@@ -276,6 +276,7 @@ private:
 	void                                  CleanupCommand(CookingCommand& ioCommand, CookingThread& ioThread); // Delete all outputs.
 	void                                  AddTimeOut(CookingLogEntry* inLogEntry);
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
+	void                                  QueueDirtyCommands();
 
 	SegmentedVector<CookingRule, 256>     mRules;
 	StringPool                            mRuleStringPool = { 64ull * 1024 };

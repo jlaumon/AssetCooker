@@ -868,6 +868,10 @@ void CookingSystem::StartCooking()
 
 	// Start the thread updating the time outs.
 	mTimeOutUpdateThread = std::jthread(std::bind_front(&CookingSystem::TimeOutUpdateThread, this));
+
+	// If the cooking isn't paused, queue the dirty commands.
+	if (!IsCookingPaused())
+		QueueDirtyCommands();
 }
 
 
@@ -906,26 +910,29 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 		mCookingPaused = false;
 
 		// Queue all the dirty commands that need to cook.
-		// TODO make a function for that
+		QueueDirtyCommands();
+	}
+}
+
+
+void CookingSystem::QueueDirtyCommands()
+{
+	std::lock_guard lock(mCommandsDirty.mMutex);
+
+	for (auto& bucket : mCommandsDirty.mPrioBuckets)
+	{
+		for (CookingCommandID command_id : bucket.mCommands)
 		{
-			std::lock_guard lock(mCommandsDirty.mMutex);
+			const CookingCommand& command = GetCommand(command_id);
+			CookingState          cooking_state = command.GetCookingState();
 
-			for (auto& bucket : mCommandsDirty.mPrioBuckets)
-			{
-				for (CookingCommandID command_id : bucket.mCommands)
-				{
-					const CookingCommand& command = GetCommand(command_id);
-					CookingState          cooking_state = command.GetCookingState();
+			if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
+				continue; // Skip commands already cooking.
 
-					if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
-						continue; // Skip commands already cooking.
+			if (cooking_state == CookingState::Error && (command.mDirtyState & CookingCommand::InputChanged) == 0)
+				continue; // Skip commands that errored if their input hasn't changed since last time.
 
-					if (cooking_state == CookingState::Error && (command.mDirtyState & CookingCommand::InputChanged) == 0)
-						continue; // Skip commands that errored if their input hasn't changed since last time.
-
-					mCommandsToCook.Push(command_id);
-				}
-			}
+			mCommandsToCook.Push(command_id);
 		}
 	}
 }
