@@ -1311,7 +1311,6 @@ void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_tok
 		if (inStopToken.stop_requested())
 			return;
 
-		// TODO need to wait until all commands of prio N have properly finished cooking before starting prio N + 1
 		if (command_id.IsValid())
 		{
 			auto& command = GetCommand(command_id);
