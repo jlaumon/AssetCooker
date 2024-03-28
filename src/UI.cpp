@@ -26,6 +26,7 @@ bool                   gOpenDebugWindow                 = false;
 bool                   gOpenCookingThreadsWindow        = false;
 CookingLogEntryID      gSelectedCookingLogEntry         = {};
 bool                   gScrollToSelectedCookingLogEntry = false;
+int                    gFirstCookingLogEntryIndex       = 0;
 
 constexpr const char*  cWindowNameAppLog                = "App Log";
 constexpr const char*  cWindowNameCommandOutput         = "Command Output";
@@ -545,7 +546,14 @@ void gDrawCookingLog()
 	if (!visible)
 		return;
 
-	ImGui::TextUnformatted(TempString128("{} items", gCookingSystem.mCookingLog.Size()));
+	// Clear doesn't actually clear anything, it just doesn't display old logs.
+	if (ImGui::Button("Clear"))
+		gFirstCookingLogEntryIndex = gCookingSystem.mCookingLog.Size();
+
+	ImGui::SameLine();
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted(TempString128("{} items", gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex));
+
 
 	if (!ImGui::BeginTable("CookingLog", 4, ImGuiTableFlags_ScrollY))
 		return;
@@ -561,7 +569,7 @@ void gDrawCookingLog()
 	bool scroll_target_changed = false;
 
 	ImGuiListClipper clipper;
-	clipper.Begin((int)gCookingSystem.mCookingLog.Size());
+	clipper.Begin((int)gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex);
 	defer { clipper.End(); };
 	while (clipper.Step())
 	{
@@ -572,7 +580,7 @@ void gDrawCookingLog()
 			scroll_target_changed = true;
 		}
 
-		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+		for (int i = (gFirstCookingLogEntryIndex + clipper.DisplayStart); i < (gFirstCookingLogEntryIndex + clipper.DisplayEnd); i++)
 		{
 			const CookingLogEntry& log_entry = gCookingSystem.mCookingLog[i];
 			const CookingCommand&  command   = gCookingSystem.GetCommand(log_entry.mCommandID);
