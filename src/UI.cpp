@@ -1021,6 +1021,7 @@ void gDrawStatusBar()
 			ICON_FK_CUTLERY" Let's cook! LET'S COOK!",
 			ICON_FK_CUTLERY" A fort wasn't cooked in a day. It took 0.4 seconds.",
 			ICON_FK_CUTLERY" Are you going to change a file today?",
+			ICON_FK_CUTLERY" Too many cooks? Too many Cooks!",
 		};
 		static int message_choice = gRand32() % gElemCount(messages);
 		ImGui::TextUnformatted(messages[message_choice]);
