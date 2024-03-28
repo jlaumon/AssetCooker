@@ -2,6 +2,7 @@
 
 #include "Core.h"
 #include "Log.h"
+#include "Notifications.h"
 
 enum class LogLevel : uint8
 {
@@ -51,18 +52,25 @@ struct App
 	void                            OpenLogFile();
 	void                            CloseLogFile();
 
-	String                          mMainWindowTitle   = "Asset Cooker";
-	void*                           mMainWindowHwnd    = nullptr;
-	bool                            mExitRequested     = false;
-	bool                            mExitReady         = false;
-	String                          mUserPrefsFilePath = "prefs.toml";
-	String                          mRuleFilePath      = "rules.toml";
-	LogLevel                        mLogFSActivity     = LogLevel::Normal;
+	String                          mMainWindowTitle       = "Asset Cooker";
+	void*                           mMainWindowHwnd        = nullptr;
+	bool                            mMainWindowIsMinimized = false;
+	bool                            mExitRequested         = false;
+	bool                            mExitReady             = false;
+	String                          mUserPrefsFilePath     = "prefs.toml";
+	String                          mRuleFilePath          = "rules.toml";
+	LogLevel                        mLogFSActivity         = LogLevel::Normal;
 	struct Log                      mLog;
 	FILE*                           mLogFile        = nullptr;
 	String                          mLogDirectory   = "Logs";
 	String                          mCacheDirectory = "Cache";
 	String                          mInitError;
+
+	bool                            mHideWindowOnMinimize       = true; // Hide the window when minimizing it.
+	NotifEnabled                    mEnableNotifOnHideWindow    = NotifEnabled::Always; // Show a notification when the window is hidden saying that Asset Cooker is still running.
+	NotifEnabled                    mEnableNotifOnCookingFinish = NotifEnabled::WhenMinimized; // Show a notification when cooking finishes.
+	NotifEnabled                    mEnableNotifOnCookingError  = NotifEnabled::Always; // Show a notification when a cooking error occurs (even if cooking isn't finished yet).
+	NotifEnabled                    mEnableNotifSound           = NotifEnabled::Always; // Play a sound when a notification is shown.
 };
 
 inline App gApp;

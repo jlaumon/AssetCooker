@@ -100,6 +100,7 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	void                               Format(StringView inFmt, fmt::format_args inArgs);
 	void                               Set(StringView inString);
 	void                               Append(StringView inString);
+	TempString&                        operator=(StringView inString) { Set(inString); return *this; }
 
 	StringView                         AsStringView() const { return { mBuffer, mSize }; }
 	const char*                        AsCStr() const { return mBuffer; }
@@ -177,7 +178,7 @@ constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr)
 
 	return { ioDest.data() + copy_size, ioDest.size() - copy_size };
 }
-
+constexpr MutStringView gStringCopy(MutStringView ioDest, const StringView inStr) { return gAppend(ioDest, inStr); }
 
 constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr)
 {

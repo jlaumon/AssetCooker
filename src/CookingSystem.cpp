@@ -1,6 +1,8 @@
 #include "CookingSystem.h"
 #include "App.h"
 #include "Debug.h"
+#include "Notifications.h"
+#include "Ticks.h"
 #include "subprocess/subprocess.h"
 #include "win32/misc.h"
 
@@ -1192,37 +1194,46 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 		// Wait until there are time outs to update.
 		mTimeOutAddedSignal.acquire();
 
-		// Swap the buffers.
+		// Always check all the batches between each wait on the signal because it's racy.
+		for (int i = 0; i < (int)mTimeOutBatches.size(); ++i)
 		{
-			std::lock_guard lock(mTimeOutsMutex);
-			mTimeOutBatchCurrentIndex = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
-		}
-
-		do
-		{
-			// Wait for the time out.
-			(void)mTimeOutTimerSignal.try_acquire_for(0.3s);
-
-			if (inStopToken.stop_requested())
-				return;
-
-			// If the file system is still busy, wait more. Otherwise we might incorrectly declare some commands are errors.
-			// It can take a long time to process the events, especially if we need to open a lot of new files to get their path.
-		} while (!gFileSystem.IsMonitoringIdle());
-		
-		// Declare all the unfinished commands in the current buffer as errored.
-		{
-			std::lock_guard lock(mTimeOutsMutex);
-
-			HashSet<CookingLogEntry*>& time_outs = mTimeOutBatches[mTimeOutBatchCurrentIndex];
-			for (CookingLogEntry* log_entry : time_outs)
+			// Swap the buffers.
 			{
-				// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
-				if (log_entry->mCookingState == CookingState::Waiting)
-					log_entry->mCookingState = CookingState::Error;
+				std::lock_guard lock(mTimeOutsMutex);
+				mTimeOutBatchCurrentIndex = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
 			}
 
-			time_outs.clear();
+			do
+			{
+				// Wait for the time out.
+				(void)mTimeOutTimerSignal.try_acquire_for(0.3s);
+
+				if (inStopToken.stop_requested())
+					return;
+
+				// If the file system is still busy, wait more. Otherwise we might incorrectly declare some commands are errors.
+				// It can take a long time to process the events, especially if we need to open a lot of new files to get their path.
+			} while (!gFileSystem.IsMonitoringIdle());
+			
+			// Declare all the unfinished commands in the current buffer as errored.
+			{
+				std::lock_guard lock(mTimeOutsMutex);
+
+				HashSet<CookingLogEntry*>& time_outs = mTimeOutBatches[mTimeOutBatchCurrentIndex];
+				for (CookingLogEntry* log_entry : time_outs)
+				{
+					// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
+					if (log_entry->mCookingState == CookingState::Waiting)
+					{
+						log_entry->mCookingState = CookingState::Error;
+
+						// Update the total count of errors.
+						mCookingErrors++;
+					}
+				}
+
+				time_outs.clear();
+			}
 		}
 	}
 }
@@ -1319,6 +1330,11 @@ void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_tok
 			else
 				CookCommand(command, *ioThread);
 
+			// Update the total count of errors.
+			if (command.GetCookingState() == CookingState::Error)
+				mCookingErrors++;
+
+			// TODO is this ok or should we actually wait until the command is in success/error state rather than waiting state?
 			mCommandsToCook.FinishedCooking(command_id);
 		}
 	}
@@ -1366,4 +1382,70 @@ bool CookingSystem::IsIdle() const
 
 	// Guess we're idle.
 	return true;
+}
+
+
+void CookingSystem::UpdateNotifications()
+{
+	// The code below doesn't check if the cooking is finished because the queue is empty or because cooking is paused.
+	// To make things simpler, never do notifications when cooking is paused (we don't need them anyway).
+	if (IsCookingPaused())
+		return;
+
+	size_t cooking_log_size = mCookingLog.SizeRelaxed();
+
+	// If no command was cooked since last time, nothing to do.
+	if (mLastNotifCookingLogSize == cooking_log_size)
+		return;
+
+	// Wait some time between notifs, we don't want to spam.
+	constexpr double cNotifPeriodSeconds = 10.0;
+	int64            current_ticks       = gGetTickCount();
+	if (mLastNotifTicks != 0 && gTicksToSeconds(current_ticks - mLastNotifTicks) < cNotifPeriodSeconds)
+	{
+		// Update the log size that we only generate a notif if something new is cooked (and not just time has passed).
+		mLastNotifCookingLogSize = cooking_log_size;
+		// Also update the number of cooking errors. It does mean that some errors will never get notified, but it
+		// subjectively seems better than reporting potentially very old errors after a new command succeeded.
+		mLastNotifCookingErrors  = mCookingErrors;
+		return;
+	}
+
+	// Cooking system being idle is equivalent to cooking being finished.
+	bool   cooking_is_finished = IsIdle();
+	size_t error_count         = mCookingErrors - mLastNotifCookingErrors;
+
+	if (cooking_is_finished)
+	{
+		if (error_count == 0)
+		{
+			size_t command_count = cooking_log_size - mLastNotifCookingLogSize;
+			if (gShouldNotify(gApp.mEnableNotifOnCookingFinish))
+				gNotifAdd(NotifType::Info, "Cooking finished!", TempString128("{} {}.", command_count, command_count > 1 ? "commands" : "command"));
+		}
+		else
+		{
+			if (gShouldNotify(gApp.mEnableNotifOnCookingFinish) || gShouldNotify(gApp.mEnableNotifOnCookingError))
+				gNotifAdd(NotifType::Error, "Cooking finished with errors.", TempString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
+		}
+
+		// Update the last notif values even if we didn't actually display a notif,
+		// because we want the number of cooked commands to be correct if we re-enable the notifs.
+		mLastNotifCookingErrors  = mCookingErrors;
+		mLastNotifCookingLogSize = cooking_log_size;
+		mLastNotifTicks          = current_ticks;
+	}
+	else if (error_count > 0)
+	{
+		if (gShouldNotify(gApp.mEnableNotifOnCookingError))
+		{
+			gNotifAdd(NotifType::Error, "Oh la la!", TempString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
+
+			// Here however only update the last notif values if we actually display a notif,
+			// because otherwise it might cause the next cooking finished notif to be skipped.
+			mLastNotifCookingErrors  = mCookingErrors;
+			mLastNotifCookingLogSize = cooking_log_size;
+			mLastNotifTicks          = current_ticks;
+		}
+	}
 }

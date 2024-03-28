@@ -3,6 +3,8 @@
 #include "CookingSystemIDs.h"
 
 void gUISetDPIScale(float inDPIScale);
+void gUISetUserScale(float inScale);
+float gUIGetUserScale();
 void gUIUpdate();
 
 void gDrawMainMenuBar();

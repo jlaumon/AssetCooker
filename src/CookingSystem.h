@@ -257,6 +257,7 @@ struct CookingSystem : NoCopy
 	void                                  QueueUpdateDirtyState(CookingCommandID inCommandID);
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
 	void                                  UpdateDirtyStates(); // Update the dirty state of all commands. Only needed during init.
+	void                                  UpdateNotifications();
 
 	void                                  ForceCook(CookingCommandID inCommandID);
 	bool                                  IsIdle() const; // Return true if nothing is happening. Used by the UI to decide if it needs to draw.
@@ -302,11 +303,16 @@ private:
 	friend void                              gDrawSelectedCookingLogEntry();
 	VMemArray<CookingLogEntry>               mCookingLog;
 
+	std::atomic<size_t>                      mCookingErrors           = 0;	// Total number of commands that ended in error.
+	size_t                                   mLastNotifCookingErrors  = 0;
+	size_t                                   mLastNotifCookingLogSize = 0;
+	int64                                    mLastNotifTicks          = 0;
+
 	std::array<HashSet<CookingLogEntry*>, 2> mTimeOutBatches;
 	mutable std::mutex                       mTimeOutsMutex;
 	int                                      mTimeOutBatchCurrentIndex = 0;
 	std::jthread                             mTimeOutUpdateThread;
-	std::binary_semaphore                    mTimeOutAddedSignal = std::binary_semaphore(0);
+	std::binary_semaphore                    mTimeOutAddedSignal = std::binary_semaphore(0);	// TODO releasing binary_semaphores more than once works but is actually UB, replace by an Event/Signal
 	std::binary_semaphore                    mTimeOutTimerSignal = std::binary_semaphore(0);
 };
 

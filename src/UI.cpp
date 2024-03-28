@@ -89,7 +89,7 @@ void gUISetDPIScale(float inDPIScale)
 
 
 // Set the user setting scale.
-void gUISetScale(float inScale)
+void gUISetUserScale(float inScale)
 {
 	float scale = gClamp(inScale, UIScale::cMin, UIScale::cMax);
 	if (scale == gUIScale.mFromSettings)
@@ -97,6 +97,12 @@ void gUISetScale(float inScale)
 
 	gUIScale.mFromSettings = scale;
 	gUIScale.mNeedUpdate   = true;
+}
+
+
+float gUIGetUserScale()
+{
+	return gUIScale.mFromSettings;
 }
 
 
@@ -145,6 +151,20 @@ void gUIUpdate()
 }
 
 
+template <typename taEnumType>
+static void sMenuEnum(StringView inLabel, taEnumType& ioValue)
+{
+	if (ImGui::BeginMenu(inLabel))
+	{
+		int current_index = (int)ioValue;
+
+		if (ImGui::ListBox("##List", &current_index, [](void*, int inIndex) { return gToStringView((taEnumType)inIndex).AsCStr(); }, nullptr, (int)taEnumType::_Count))
+			ioValue = (taEnumType)current_index;
+
+		ImGui::EndMenu();
+	}
+}
+
 void gDrawMainMenuBar()
 {
 	if (ImGui::BeginMainMenuBar())
@@ -166,27 +186,22 @@ void gDrawMainMenuBar()
 
 		if (ImGui::BeginMenu("Settings"))
 		{
+			ImGui::MenuItem("Hide Window On Minimize", nullptr, &gApp.mHideWindowOnMinimize);
+			sMenuEnum("Enable Notif On Cooking Finish", gApp.mEnableNotifOnCookingFinish);
+			sMenuEnum("Enable Notif On Cooking Error", gApp.mEnableNotifOnCookingError);
+			sMenuEnum("Enable Notif Sound", gApp.mEnableNotifSound);
+
 			float ui_scale = gUIScale.mFromSettings;
 			if (ImGui::DragFloat("UI Scale", &ui_scale, 0.01f, UIScale::cMin, UIScale::cMax, "%.1f"))
-				gUISetScale(ui_scale);
+				gUISetUserScale(ui_scale);
+
 
 			ImGui::EndMenu();
 		}
 
 		if (ImGui::BeginMenu("Debug"))
 		{
-			if (ImGui::BeginMenu("Log FileSystem Activity"))
-			{
-				const char* log_levels[] = { "None", "Basic", "Verbose" };
-				static_assert(gElemCount(log_levels) == (size_t)LogLevel::Verbose + 1);
-
-				int current_log_level = (int)gApp.mLogFSActivity;
-
-				if (ImGui::ListBox("##Verbosity", &current_log_level, log_levels, gElemCount(log_levels)))
-					gApp.mLogFSActivity = (LogLevel)current_log_level;
-
-				ImGui::EndMenu();
-			}
+			sMenuEnum("Log FileSystem Activity", gApp.mLogFSActivity);
 
 			ImGui::MenuItem("ImGui Demo Window", nullptr, &gOpenImGuiDemo);
 			ImGui::MenuItem("Debug Window", nullptr, &gOpenDebugWindow);
@@ -855,6 +870,8 @@ void gDrawCookingThreads()
 	ImGui::End();
 }
 
+extern bool gDebugFailCookingRandomly;
+extern bool gDebugFailOpenFileRandomly;
 
 void gDrawDebugWindow()
 {
@@ -866,18 +883,30 @@ void gDrawDebugWindow()
 
 	if (ImGui::ButtonGrad("Cook 100"))
 	{
-		for (int i = 0; i<gMin(100, (int)gCookingSystem.mCommands.Size()); ++i)
-			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
+		int num_commands  = gCookingSystem.mCommands.Size();
+		int first_command = gRand32() % num_commands;
+		for (int i = 0; i<gMin(100, (int)num_commands); ++i)
+		{
+			int command_index = (first_command + i) % num_commands;
+			gCookingSystem.ForceCook(gCookingSystem.mCommands[command_index].mID);
+		}
 	}
 
 	ImGui::SameLine();
 	if (ImGui::ButtonGrad("Cook 1000"))
 	{
-		for (int i = 0; i<gMin(1000, (int)gCookingSystem.mCommands.Size()); ++i)
+		int num_commands  = gCookingSystem.mCommands.Size();
+		int first_command = gRand32() % num_commands;
+		for (int i = 0; i<gMin(1000, (int)num_commands); ++i)
+		{
+			int command_index = (first_command + i) % num_commands;
 			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
+		}
 	}
 
 	ImGui::Checkbox("Slow mode", &gCookingSystem.mSlowMode);
+	ImGui::Checkbox("Cause random Cooking errors", &gDebugFailCookingRandomly);
+	ImGui::Checkbox("Cause random FileSystem errors", &gDebugFailOpenFileRandomly);
 
 	if (ImGui::CollapsingHeader(TempString64("Rules ({})##Rules", gCookingSystem.mRules.size()).AsCStr()))
 	{

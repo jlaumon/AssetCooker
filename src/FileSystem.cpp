@@ -1474,6 +1474,9 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 		// Instead the cooking threads will wake this thread up any time a command finishes (which usually also means there are file changes to process).
 		gCookingSystem.ProcessUpdateDirtyStates();
 
+		// Launch notifications if there are errors or cooking is finished.
+		gCookingSystem.UpdateNotifications();
+
 		if (!any_work_done)
 		{
 			// Going idle here.

@@ -18,6 +18,7 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 #include "Ticks.h"
+#include "Notifications.h"
 
 
 // Data
@@ -33,6 +34,7 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 
 // Helper struct to measure CPU/GPU times of the UI updates.
 struct FrameTimer
@@ -224,6 +226,9 @@ int WinMain(
 
 	gApp.mMainWindowHwnd = hwnd;
 
+	// Initialize the notifications and add the system tray icon.
+	gNotifInit(hwnd);
+
 	// Initialize Direct3D
 	if (!CreateDeviceD3D(hwnd))
 		gApp.FatalError("Failed to create D3D device - {}", GetLastErrorString());
@@ -246,7 +251,7 @@ int WinMain(
 	//io.ConfigDockingAlwaysTabBar = true;
 	//io.ConfigDockingTransparentPayload = true;
 	//io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;     // FIXME-DPI: Experimental. THIS CURRENTLY DOESN'T WORK AS EXPECTED. DON'T USE IN USER APP!
-	//io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI: Experimental.
+	io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI: Experimental.
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
@@ -272,7 +277,8 @@ int WinMain(
 	FrameTimer fame_timer;
 	fame_timer.Init();
 
-	constexpr int cIdleFramesDelay = 1; // TODO should ideally be zero, but needs some fixes, check the other todos
+	// TODO imgui tooltips are hard to deal with, maybe keep drawing for a fixed time longer than tooltip delay? (instead of frames)
+	constexpr int cIdleFramesDelay = 30; // TODO should ideally be zero, but needs some fixes, check the other todos
 	int           idle_frames      = 0;
 
 	// Main loop
@@ -294,7 +300,7 @@ int WinMain(
 				if (MsgWaitForMultipleObjects(0, nullptr, FALSE, timeout, QS_ALLINPUT) == WAIT_OBJECT_0)
 					break; // There's an event in the queue, go call PeekMessage!
 
-				// After one second, check if the cooking system is still idle (may have been files modified).
+				// After one second, check if the cooking system is still idle (files may have been modified).
 				if (!gCookingSystem.IsIdle())
 					break;
 			}
@@ -319,7 +325,8 @@ int WinMain(
 			break;
 
 		// If the window is minimized, never draw.
-		if (IsIconic(hwnd))
+		gAssert(gApp.mMainWindowIsMinimized == (bool)IsIconic(hwnd));
+		if (gApp.mMainWindowIsMinimized)
 		{
 			// We're not going to call EndFrame, so reset the timer.
 			fame_timer.Reset();
@@ -367,6 +374,7 @@ int WinMain(
 	}
 
 	gFileSystem.StopMonitoring();
+	gNotifExit();
 
 	// Cleanup
 	fame_timer.Shutdown();
@@ -458,8 +466,25 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch (msg)
 	{
 	case WM_SIZE:
+		// Any size message where the size is not minized means it's not minimized anymore.
+		gApp.mMainWindowIsMinimized = (wParam == SIZE_MINIMIZED);
+
 		if (wParam == SIZE_MINIMIZED)
+		{
+			if (gApp.mHideWindowOnMinimize)
+			{
+				// Hide the window.
+				::ShowWindow(hWnd, SW_HIDE);
+
+				// First time that happens, show a notification.
+				if (gApp.mEnableNotifOnHideWindow != NotifEnabled::Never)
+				{
+					gApp.mEnableNotifOnHideWindow = NotifEnabled::Never;
+					gNotifAdd(NotifType::Info, "Asset Cooker is still running!", "Click on the tray icon to make it appear again.");
+				}
+			}
 			return 0;
+		}
 		g_ResizeWidth = (UINT)LOWORD(lParam); // Queue resize
 		g_ResizeHeight = (UINT)HIWORD(lParam);
 		return 0;
@@ -475,21 +500,31 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		gApp.RequestExit();
 		return 0;
 	case WM_DPICHANGED:
-
-		// Update the UI DPI scale.
-		const int   dpi       = HIWORD(wParam);
-		const float dpi_scale = (float)dpi / 96.0f;
-		gUISetDPIScale(dpi_scale);
-
-#ifdef IMGUI_HAS_VIEWPORT
-		if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports)
 		{
-			//const int dpi = HIWORD(wParam);
-			//printf("WM_DPICHANGED to %d (%.0f%%)\n", dpi, (float)dpi / 96.0f * 100.0f);
-			const RECT* suggested_rect = (RECT*)lParam;
-			::SetWindowPos(hWnd, nullptr, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
+			// Update the UI DPI scale.
+			const int   dpi       = HIWORD(wParam);
+			const float dpi_scale = (float)dpi / 96.0f;
+			gUISetDPIScale(dpi_scale);
+
+	#ifdef IMGUI_HAS_VIEWPORT
+			if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports)
+			{
+				//const int dpi = HIWORD(wParam);
+				//printf("WM_DPICHANGED to %d (%.0f%%)\n", dpi, (float)dpi / 96.0f * 100.0f);
+				const RECT* suggested_rect = (RECT*)lParam;
+				::SetWindowPos(hWnd, nullptr, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
+			}
+	#endif
 		}
-#endif
+		break;
+	case cNotifCallbackID:
+		if (lParam == WM_LBUTTONDOWN ||     // Click on the notif icon
+			lParam == NIN_BALLOONUSERCLICK) // Click on the notif popup
+		{
+			ShowWindow(hWnd, SW_RESTORE);   // Restore the window (if minimized or hidden).
+			SetFocus(hWnd);                 // Set the focus on the window.
+			SetForegroundWindow(hWnd);      // And bring it to the foreground.
+		}
 		break;
 	}
 	return ::DefWindowProcW(hWnd, msg, wParam, lParam);
