@@ -113,6 +113,8 @@ struct TomlReader
 			is_right_type = node->is_string();
 		else if constexpr (std::is_same_v<taType, bool>)
 			is_right_type = node->is_boolean();
+		else if constexpr (std::is_floating_point_v<taType>)
+			is_right_type = node->is_floating_point();
 		else if constexpr (std::is_integral_v<taType>)
 			is_right_type = node->is_integer();
 		else
@@ -138,6 +140,8 @@ struct TomlReader
 			outVar = StringView(*node->value<std::string_view>());
 		else if constexpr (std::is_same_v<taType, bool>)
 			outVar = *node->value<bool>();
+		else if constexpr (std::is_floating_point_v<taType>)
+			outVar = *node->value<taType>();
 		else if constexpr (std::is_integral_v<taType>)
 			outVar = (taType)*node->value<int64>();
 		else
