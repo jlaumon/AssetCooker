@@ -1349,7 +1349,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 
 void FileSystem::KickMonitorDirectoryThread()
 {
-	mMonitorDirThreadSignal.release();
+	mMonitorDirThreadSignal.Set();
 }
 
 
@@ -1483,7 +1483,7 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			mIsMonitorDirThreadIdle = true;
 
 			// Wait for some time before checking the USN journals again (unless we're being signaled).
-			std::ignore = mMonitorDirThreadSignal.try_acquire_for(1s);
+			std::ignore = mMonitorDirThreadSignal.WaitFor(gSecondsToTicks(1.0));
 
 			// Not idle anymore.
 			mIsMonitorDirThreadIdle = false;

@@ -3,6 +3,7 @@
 #include "StringPool.h"
 #include "CookingSystemIDs.h"
 #include "Queue.h"
+#include "Signal.h"
 
 #include <thread>
 #include <semaphore>
@@ -262,7 +263,7 @@ struct FileInfo : NoCopy
 	FileTime                      mLastChangeTime = {}; // Time of the last change to this file.
 
 	std::vector<CookingCommandID> mInputOf;             // List of commands that use this file as input.
-	std::vector<CookingCommandID> mOutputOf;            // List of commands that use this file as output. There should be only one, othewise it's an error. // TODO tiny vector optimization // TODO actually detect that error
+	std::vector<CookingCommandID> mOutputOf;            // List of commands that use this file as output. There should be only one, otherwise it's an error. // TODO tiny vector optimization // TODO actually detect that error
 
 	bool                          IsDeleted() const { return !mRefNumber.IsValid(); }
 	bool                          IsDirectory() const { return mIsDirectory != 0; }
@@ -467,7 +468,7 @@ private:
 	SegmentedHashSet<FileID>   mChangedFiles;
 
 	std::jthread               mMonitorDirThread;
-	std::binary_semaphore      mMonitorDirThreadSignal = std::binary_semaphore(0); // TODO fixme releasing more than once is UB (although it works with current implem)
+	Signal                     mMonitorDirThreadSignal;
 	std::atomic<bool>          mIsMonitorDirThreadIdle = true;
 
 	struct FileToRescan
