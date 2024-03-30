@@ -308,11 +308,11 @@ private:
 	size_t                                   mLastNotifCookingLogSize = 0;
 	int64                                    mLastNotifTicks          = 0;
 
-	std::array<HashSet<CookingLogEntry*>, 2> mTimeOutBatches;
-	mutable std::mutex                       mTimeOutsMutex;
-	int                                      mTimeOutBatchCurrentIndex = 0;
+	HashSet<CookingLogEntry*>                mTimeOutCurrentBatch;
+	HashSet<CookingLogEntry*>                mTimeOutNextBatch;
+	mutable std::mutex                       mTimeOutMutex;
 	std::jthread                             mTimeOutUpdateThread;
-	std::binary_semaphore                    mTimeOutAddedSignal = std::binary_semaphore(0);	// TODO releasing binary_semaphores more than once works but is actually UB, replace by an Event/Signal
+	std::condition_variable                  mTimeOutAddedSignal;
 	std::binary_semaphore                    mTimeOutTimerSignal = std::binary_semaphore(0);
 };
 

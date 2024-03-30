@@ -888,7 +888,7 @@ void CookingSystem::StopCooking()
 		thread.mThread.join();
 
 	mTimeOutUpdateThread.request_stop();
-	mTimeOutAddedSignal.release();
+	mTimeOutAddedSignal.notify_one();
 	mTimeOutTimerSignal.release();
 	mTimeOutUpdateThread.join();
 }
@@ -1172,14 +1172,12 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 {
 	{
-		std::lock_guard lock(mTimeOutsMutex);
-
-		int next_index = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
-		mTimeOutBatches[next_index].insert(inLogEntry);
+		std::lock_guard lock(mTimeOutMutex);
+		mTimeOutNextBatch.insert(inLogEntry);
 	}
 
 	// Tell the thread there are timeouts to process.
-	mTimeOutAddedSignal.release();
+	mTimeOutAddedSignal.notify_one();
 }
 
 
@@ -1189,51 +1187,57 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 
 	gSetCurrentThreadName(L"TimeOut Update Thread");
 
+	// The logic in this loop is a bit weird, but the idea is to wait *at least* this amount of time before declaring a command is in error.
+	// Many commands will wait twice as much because they won't be in the first batch to be processed, but that's okay.
+	constexpr auto cTimeout = 0.3s;
+
 	while (true)
 	{
-		// Wait until there are time outs to update.
-		mTimeOutAddedSignal.acquire();
-
-		// Always check all the batches between each wait on the signal because it's racy.
-		for (int i = 0; i < (int)mTimeOutBatches.size(); ++i)
 		{
-			// Swap the buffers.
-			{
-				std::lock_guard lock(mTimeOutsMutex);
-				mTimeOutBatchCurrentIndex = (mTimeOutBatchCurrentIndex + 1) % (int)mTimeOutBatches.size();
-			}
+			std::unique_lock lock(mTimeOutMutex);
 
-			do
+			// Wait until there are time outs to update.
+			while (mTimeOutNextBatch.empty())
 			{
-				// Wait for the time out.
-				(void)mTimeOutTimerSignal.try_acquire_for(0.3s);
+				mTimeOutAddedSignal.wait(lock);
 
 				if (inStopToken.stop_requested())
 					return;
-
-				// If the file system is still busy, wait more. Otherwise we might incorrectly declare some commands are errors.
-				// It can take a long time to process the events, especially if we need to open a lot of new files to get their path.
-			} while (!gFileSystem.IsMonitoringIdle());
-			
-			// Declare all the unfinished commands in the current buffer as errored.
-			{
-				std::lock_guard lock(mTimeOutsMutex);
-
-				HashSet<CookingLogEntry*>& time_outs = mTimeOutBatches[mTimeOutBatchCurrentIndex];
-				for (CookingLogEntry* log_entry : time_outs)
-				{
-					// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
-					if (log_entry->mCookingState == CookingState::Waiting)
-					{
-						log_entry->mCookingState = CookingState::Error;
-
-						// Update the total count of errors.
-						mCookingErrors++;
-					}
-				}
-
-				time_outs.clear();
 			}
+
+			// Swap the buffers.
+			std::swap(mTimeOutNextBatch, mTimeOutCurrentBatch);
+		}
+
+		do
+		{
+			// Wait for the time out.
+			(void)mTimeOutTimerSignal.try_acquire_for(cTimeout);
+
+			if (inStopToken.stop_requested())
+				return;
+
+			// If the file system is still busy, wait more. Otherwise we might incorrectly declare some commands are errors.
+			// It can take a long time to process the events, especially if we need to open a lot of new files to get their path.
+		} while (!gFileSystem.IsMonitoringIdle());
+		
+		// Declare all the unfinished commands in the current buffer as errored.
+		{
+			std::lock_guard lock(mTimeOutMutex);
+
+			for (CookingLogEntry* log_entry : mTimeOutCurrentBatch)
+			{
+				// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
+				if (log_entry->mCookingState == CookingState::Waiting)
+				{
+					log_entry->mCookingState = CookingState::Error;
+
+					// Update the total count of errors.
+					mCookingErrors++;
+				}
+			}
+
+			mTimeOutCurrentBatch.clear();
 		}
 	}
 }
@@ -1367,10 +1371,11 @@ bool CookingSystem::IsIdle() const
 
 	// If any command is still waiting for its final status, we're not idle.
 	{
-		std::lock_guard lock(mTimeOutsMutex);
+		std::lock_guard lock(mTimeOutMutex);
 
-		for (auto& timeouts : mTimeOutBatches)
-			if (!timeouts.empty())
+		if (!mTimeOutCurrentBatch.empty())
+				return false;
+		if (!mTimeOutNextBatch.empty())
 				return false;
 	}
 

@@ -467,7 +467,7 @@ private:
 	SegmentedHashSet<FileID>   mChangedFiles;
 
 	std::jthread               mMonitorDirThread;
-	std::binary_semaphore      mMonitorDirThreadSignal = std::binary_semaphore(0);
+	std::binary_semaphore      mMonitorDirThreadSignal = std::binary_semaphore(0); // TODO fixme releasing more than once is UB (although it works with current implem)
 	std::atomic<bool>          mIsMonitorDirThreadIdle = true;
 
 	struct FileToRescan
