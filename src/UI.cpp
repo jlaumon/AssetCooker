@@ -718,7 +718,7 @@ void gDrawCommandSearch()
 	{
 		// Rebuild the filtered list.
 		filtered_list.clear();
-		for (const auto& command : gCookingSystem.mCommands)
+		for (const CookingCommand& command : gCookingSystem.mCommands)
 		{
 			auto command_str = gFormat(command);
 			if (filter.PassFilter(command_str))
@@ -726,6 +726,22 @@ void gDrawCommandSearch()
 		}
 	}
 
+	if (ImGui::Button("Cook All"))
+	{
+		if (filter.IsActive())
+		{
+			for (CookingCommandID command_id : filtered_list)
+				gCookingSystem.ForceCook(command_id);
+		}
+		else
+		{
+			for (const CookingCommand& command : gCookingSystem.mCommands)
+				gCookingSystem.ForceCook(command.mID);
+		}
+	}
+
+	ImGui::SameLine();
+	ImGui::AlignTextToFramePadding();
 	ImGui::TextUnformatted(TempString128("{} items", filter.IsActive() ? filtered_list.size() : gCookingSystem.mCommands.Size()));
 
 	if (ImGui::BeginChild("ScrollingRegion"))
