@@ -1477,7 +1477,8 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 		// Launch notifications if there are errors or cooking is finished.
 		gCookingSystem.UpdateNotifications();
 
-		if (!any_work_done)
+		if (!any_work_done															// If there was any work done, do another loop before declaring the thread idle.
+			&& mMonitorDirThreadSignal.WaitFor(0) == Signal::WaitResult::Timeout)	// Check if the signal is already set without waiting.
 		{
 			// Going idle here.
 			mIsMonitorDirThreadIdle = true;
