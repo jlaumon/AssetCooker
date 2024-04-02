@@ -1831,7 +1831,7 @@ void FileSystem::LoadCache()
 		}
 
 		// If all repos for this drive are valid, we can use the cached state.
-		if (valid_repos.size() == drive->mRepos.size())
+		if (drive_valid && valid_repos.size() == drive->mRepos.size())
 		{
 			// Set the next USN we should read.
 			drive->mNextUSN = next_usn;
