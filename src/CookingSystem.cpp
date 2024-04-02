@@ -327,6 +327,7 @@ void CookingCommand::UpdateDirtyState()
 		else
 			all_output_missing = false;
 
+		// TODO this comparison does not work if multiple drives are involved, we can only compare USNs from the same journal
 		if (file.mLastChangeUSN < mLastCook)
 			all_output_written = false;
 	}
@@ -954,6 +955,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	ioCommand.mLastCookingLog = &log_entry;
 
 	// Get the max USN of all inputs (to later know if this command needs to cook again).
+	// TODO this does not work if multiple drives are involved, we can only compare USNs from the same journal
 	USN max_input_usn = 0;
 	for (FileID input_id : ioCommand.mInputs)
 		max_input_usn = gMax(max_input_usn, gFileSystem.GetFile(input_id).mLastChangeUSN);
