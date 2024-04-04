@@ -28,10 +28,10 @@ constexpr size_t cMaxPathSizeUTF8  = 8192ull;
 using TempPath = TempString<cMaxPathSizeUTF8>;
 
 
-TempPath                gGetAbsolutePath(StringView inPath);
-constexpr MutStringView gNormalizePath(MutStringView ioPath); // Replaces / by \.
-constexpr bool          gIsNormalized(StringView inPath);
-constexpr bool          gIsAbsolute(StringView inPath);
+constexpr MutStringView gNormalizePath(MutStringView ioPath); // Replace / by \.
+constexpr bool          gIsNormalized(StringView inPath);     // Return true if path only contains backslashes.
+TempPath                gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
+constexpr bool          gIsAbsolute(StringView inPath);       // Return true if the path is absolute and canonical.
 
 bool                    gCreateDirectoryRecursive(StringView inAbsolutePath);
 
@@ -59,11 +59,7 @@ constexpr bool gIsNormalized(StringView inPath)
 
 constexpr bool gIsAbsolute(StringView inPath)
 {
-	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath[1] == ':' && (inPath[2] == '\\' || inPath[2] == '/'); 
-}
-
-
-constexpr bool gIsRelative(StringView inPath)
-{
-	return inPath.Contains(".\\") || inPath.Contains("./"); // Note: That will also return true for ../
+	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath[1] == ':' && (inPath[2] == '\\' || inPath[2] == '/')
+		&& !inPath.Contains(".\\")	// Not canonical if it contains "./" or ".\"
+		&& !inPath.Contains("./");  // Note: This also catches "../"
 }

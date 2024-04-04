@@ -30,27 +30,24 @@ using PathBufferUTF8  = std::array<char, cWin32MaxPathSizeUTF8>;
 // That's used to get a unique identifier for the file even if the file itself doesn't exist.
 // The hash is 128 bits, assume no collision.
 // Clearly not the most efficient implementation, but good enough for now.
-Hash128 gHashPath(StringView inRootPath, StringView inPath)
+Hash128 gHashPath(StringView inAbsolutePath)
 {
-	// Build the full path.
-	PathBufferUTF8  abs_path_buffer;
-	MutStringView   abs_path = gConcat(abs_path_buffer, inRootPath, inPath);
-
-	// Make sure it's normalized.
-	gNormalizePath(abs_path);
-	gAssert(gIsAbsolute(abs_path));
+	// Make sure it's normalized, absolute, and doesn't contain any relative components.
+	gAssert(gIsNormalized(inAbsolutePath));
+	gAssert(gIsAbsolute(inAbsolutePath));
 
 	// Convert it to wide char.
 	PathBufferUTF16     wpath_buffer;
-	OptionalWStringView wpath = gUtf8ToWideChar(abs_path, wpath_buffer);
+	OptionalWStringView wpath = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
 	if (!wpath)
-		gApp.FatalError("Failed to convert path {} to WideChar", inPath);
+		gApp.FatalError("Failed to convert path {} to WideChar", inAbsolutePath);
 
 	// Convert it to uppercase.
+	// Note: LCMapStringA does not seem to work with UTF8 (or at least not with LOCALE_INVARIANT) so we are forced to use wchars here.
 	PathBufferUTF16 uppercase_buffer;
 	int uppercase_size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, wpath->data(), (int)wpath->size(), uppercase_buffer.data(), uppercase_buffer.size() / 2, nullptr, nullptr, 0);
 	if (uppercase_size == 0)
-		gApp.FatalError("Failed to convert path {} to uppercase", inPath);
+		gApp.FatalError("Failed to convert path {} to uppercase", inAbsolutePath);
 
 	WStringView uppercase_wpath = { uppercase_buffer.data(), (size_t)uppercase_size };
 
@@ -149,14 +146,8 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 	// Make sure the root path exists.
 	gCreateDirectoryRecursive(mRootPath);
 
-	// Convert the root path to wchars.
-	PathBufferUTF16     root_path_buffer;
-	OptionalWStringView root_path_wchar = gUtf8ToWideChar(mRootPath, root_path_buffer);
-	if (!root_path_wchar)
-		gApp.FatalError("Failed to convert root path {} to WideChar", mRootPath);
-
 	// Get a handle to the root path.
-	OwnedHandle root_dir_handle = CreateFileW(root_path_wchar->data(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+	OwnedHandle root_dir_handle = CreateFileA(mRootPath.AsCStr(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 	if (!root_dir_handle.IsValid())
 		gApp.FatalError("Failed to get handle to {} - {}", mRootPath, GetLastErrorString());
 
@@ -176,8 +167,12 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 
 FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber)
 {
+	// Make sure the path is normalized.
+	TempPath path = inPath;
+	gNormalizePath(path.AsSpan());
+
 	// Calculate the case insensitive path hash that will be used to identify the file.
-	Hash128   path_hash = gHashPath(mRootPath, inPath);
+	Hash128   path_hash = gHashPath(TempPath("{}{}", mRootPath, path));
 
 	FileInfo* file      = nullptr;
 
@@ -230,7 +225,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 				if (previous_file_id != actual_file_id || previous_file_id.GetFile().mPathHash != path_hash)
 				{
 					gApp.LogError(R"(Found two files with the same RefNumber! {}:\{} and {}{})", 
-						mDrive.mLetter, inPath,
+						mDrive.mLetter, path,
 						previous_file_id.GetRepo().mRootPath, previous_file_id.GetFile().mPath);
 
 					// Mark the old file as deleted, and add the new one instead.
@@ -243,7 +238,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		if (actual_file_id == new_file_id)
 		{
 			// The file wasn't already known, add it to the list.
-			file = &mFiles.Emplace({}, new_file_id, gNormalizePath(mStringPool.AllocateCopy(inPath)), path_hash, inType, inRefNumber);
+			file = &mFiles.Emplace({}, new_file_id, gNormalizePath(mStringPool.AllocateCopy(path)), path_hash, inType, inRefNumber);
 		}
 		else
 		{

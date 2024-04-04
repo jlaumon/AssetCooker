@@ -88,7 +88,6 @@ template <> struct ankerl::unordered_dense::hash<FileRefNumber> : MemoryHasher<F
 
 
 
-
 // Wrapper for a 128-bits hash value.
 struct Hash128
 {
@@ -96,6 +95,10 @@ struct Hash128
 
 	constexpr auto operator<=>(const Hash128&) const = default;
 };
+
+
+// Hash the absolute path of a file in a case insensitive manner.
+Hash128 gHashPath(StringView inAbsolutePath);
 
 
 template <> struct ankerl::unordered_dense::hash<Hash128>
