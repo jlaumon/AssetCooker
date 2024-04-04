@@ -93,7 +93,7 @@ struct VMemArray : NoCopy
 
 	// Make sure enough memory is committed for that many more elements.
 	// Return the span for the new elements (not constructed).
-	Span<taType> EnsureCapacity(size_t inExtraCapacityInElements, const VMemArrayLock& inLock)
+	[[nodiscard]] Span<taType> EnsureCapacity(size_t inExtraCapacityInElements, const VMemArrayLock& inLock)
 	{
 		ValidateLock(inLock);
 

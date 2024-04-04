@@ -73,7 +73,7 @@ struct StringPool
 			gAssert(mPool.mBuffer.End() == mData + mSize);
 
 			size_t additional_size = inStr.size();
-			mPool.mBuffer.EnsureCapacity(additional_size, mPoolLock);
+			(void)mPool.mBuffer.EnsureCapacity(additional_size, mPoolLock);
 
 			// Append the new part.
 			// Note: -1 because we write over the null terminator of the current string.
