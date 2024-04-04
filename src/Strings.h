@@ -107,7 +107,7 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	size_t                             Size() const { return mSize; }
 	char                               operator[](size_t inIndex) const { gAssert(inIndex <= mSize); return mBuffer[inIndex]; }
 
-	size_t      mSize = 0;
+	size_t      mSize = 0; // Size of the string, not including the null terminator.
 	char        mBuffer[taSize];
 };
 
@@ -254,8 +254,12 @@ OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 // Helper to format a string into a fixed size buffer.
 inline StringView gFormatV(MutStringView ioBuffer, StringView inFmt, fmt::format_args inArgs)
 {
-	auto result = fmt::vformat_to_n(ioBuffer.data(), ioBuffer.size() - 1, inFmt, inArgs);
+	// Assert if destination isn't large enough, but still make sure we don't overflow.
+	size_t dest_available_size = ioBuffer.size() - 1; // Keep 1 for null terminator.
+
+	auto result = fmt::vformat_to_n(ioBuffer.data(), dest_available_size, inFmt, inArgs);
 	*result.out = 0; // Add the null terminator.
+	gAssert(result.size <= dest_available_size);
 
 	return { ioBuffer.data(), result.out };
 }
