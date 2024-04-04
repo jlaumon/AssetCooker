@@ -103,6 +103,7 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	TempString&                        operator=(StringView inString) { Set(inString); return *this; }
 
 	StringView                         AsStringView() const { return { mBuffer, mSize }; }
+	Span<char>                         AsSpan() { return { mBuffer, mSize + 1 }; }
 	const char*                        AsCStr() const { return mBuffer; }
 	size_t                             Size() const { return mSize; }
 	char                               operator[](size_t inIndex) const { gAssert(inIndex <= mSize); return mBuffer[inIndex]; }

@@ -24,42 +24,40 @@ TempPath gGetAbsolutePath(StringView inPath)
 }
 
 
-static bool sDirectoryExistsW(WStringView inPath)
+static bool sDirectoryExists(StringView inPath)
 {
 	gAssert(!inPath.ends_with(L'\\'));
-	gAssert(*(inPath.data() + inPath.size()) == 0);
 
-	DWORD attributes = GetFileAttributesW(inPath.data());
+	DWORD attributes = GetFileAttributesA(inPath.AsCStr());
 
 	return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
 }
 
 
-static bool sCreateDirectoryW(WStringView inPath)
+static bool sCreateDirectory(StringView inPath)
 {
 	gAssert(!inPath.ends_with(L'\\'));
-	gAssert(*(inPath.data() + inPath.size()) == 0);
 
-	BOOL success = CreateDirectoryW(inPath.data(), nullptr);
+	BOOL success = CreateDirectoryA(inPath.AsCStr(), nullptr);
 
 	return success || GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
 
-static bool sCreateDirectoryRecursiveW(Span<wchar_t> ioPath)
+static bool sCreateDirectoryRecursive(MutStringView ioPath)
 {
 	gAssert(ioPath[ioPath.size() - 1] == 0);
 	gAssert(ioPath[ioPath.size() - 2] != L'\\');
 	gAssert(ioPath.size() > 2 && ioPath[1] == L':'); // We expect an absolute path, first two characters should be the drive (ioPath might be the drive itself without trailing slash).
 
 	// Early out if the directory already exists.
-	if (sDirectoryExistsW(WStringView(ioPath.data(), ioPath.size() - 1)))
+	if (sDirectoryExists(ioPath))
 		return true;
 
 	// Otherwise try to create every parent directory.
-	wchar_t* p_begin = ioPath.data();
-	wchar_t* p_end   = ioPath.data() + ioPath.size() - 1; // Just before the null-terminator.
-	wchar_t* p       = p_begin + 3;
+	char* p_begin = ioPath.data();
+	char* p_end   = ioPath.data() + ioPath.size() - 1; // Just before the null-terminator.
+	char* p       = p_begin + 3;
 	while(p != p_end)
 	{
 		if (*p == L'\\')
@@ -68,7 +66,7 @@ static bool sCreateDirectoryRecursiveW(Span<wchar_t> ioPath)
 			*p = 0;
 
 			// Create the parent directory.
-			if (!sCreateDirectoryW({ p_begin, p }))
+			if (!sCreateDirectory({ p_begin, p }))
 				return false; // Uh-oh failed.
 
 			// Put back the slash we overwrote earlier.
@@ -79,7 +77,7 @@ static bool sCreateDirectoryRecursiveW(Span<wchar_t> ioPath)
 	}
 
 	// Create the final directory.
-	return sCreateDirectoryW({ p_begin, p });
+	return sCreateDirectory({ p_begin, p });
 }
 
 
@@ -87,20 +85,14 @@ bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 {
 	gAssert(gIsNormalized(inAbsolutePath) && gIsAbsolute(inAbsolutePath));
 
-	// TODO replace this with the UTF8 version of the Win32 functions
-	std::array<wchar_t, cMaxPathSizeUTF8> wpath_buffer;
-	OptionalWStringView wpath_optional = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
-	if (!wpath_optional)
-		return false;
-
-	WStringView wpath = *wpath_optional;
+	TempPath path_copy = inAbsolutePath;
 
 	// If the path ends with a slash, remove it, because that's what the other functions expect.
-	if (wpath.back() == L'\\')
+	if (gEndsWith(path_copy, "\\"))
 	{
-		wpath.remove_suffix(1);
-		wpath_buffer[wpath.size()] = 0; // Replace slash with null terminator.
+		path_copy.mSize--;
+		path_copy.mBuffer[path_copy.mSize] = 0;
 	}
 
-	return sCreateDirectoryRecursiveW({ wpath_buffer.data(), wpath.size() + 1 }); // +1 to include the null terminator.
+	return sCreateDirectoryRecursive(path_copy.AsSpan());
 }
