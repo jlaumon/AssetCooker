@@ -235,7 +235,7 @@ TempString256 gFormat(const CookingLogEntry& inLogEntry)
 {
 	const CookingCommand& command = gCookingSystem.GetCommand(inLogEntry.mCommandID);
 	const CookingRule&    rule    = gCookingSystem.GetRule(command.mRuleID);
-	SystemTime            start_time = inLogEntry.mTimeStart.ToLocalTime();
+	LocalTime             start_time = inLogEntry.mTimeStart.ToLocalTime();
 	return { "[#{} {:02}:{:02}:{:02}] {}{} {} - {}",
 		rule.mPriority,
 		start_time.mHour, start_time.mMinute, start_time.mSecond,
