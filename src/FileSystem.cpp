@@ -3,7 +3,6 @@
 #include "Debug.h"
 #include "Ticks.h"
 #include "CookingSystem.h"
-#include "Paths.h"
 #include "lz4.h"
 
 #include "win32/misc.h"
@@ -18,12 +17,13 @@
 bool             gDebugFailOpenFileRandomly = false;
 
 // These are not exactly the max path length allowed by Windows in all cases, but should be good enough.
-// TODO: these numbers are actually ridiculously high, lower them (except maybe in scanning code) and crash hard and blame user if they need more
-constexpr size_t cMaxPathSizeUTF16 = 32768;
-constexpr size_t cMaxPathSizeUTF8  = 32768 * 3ull;	// UTF8 can use up to 6 bytes per character, but let's suppose 3 is good enough on average.
+// This is meant for paths that might be outside repos that the monitoring code has to deal with.
+// TODO use the smaller cMaxPathSizeUTF8 where appropriate instead.
+constexpr size_t cWin32MaxPathSizeUTF16 = 32768;
+constexpr size_t cWin32MaxPathSizeUTF8  = 32768 * 3ull;	// UTF8 can use up to 6 bytes per character, but let's suppose 3 is good enough on average.
 
-using PathBufferUTF16 = std::array<wchar_t, cMaxPathSizeUTF16>;
-using PathBufferUTF8  = std::array<char, cMaxPathSizeUTF8>;
+using PathBufferUTF16 = std::array<wchar_t, cWin32MaxPathSizeUTF16>;
+using PathBufferUTF8  = std::array<char, cWin32MaxPathSizeUTF8>;
 
 
 // Hash the absolute path of a file in a case insensitive manner.
@@ -84,107 +84,6 @@ FileRefNumber& FileRefNumber::operator=(const _FILE_ID_128& inFileID128)
 }
 
 
-_FILETIME FileTime::ToWin32() const
-{
-	static_assert(sizeof(FileTime) == sizeof(_FILETIME));
-
-	_FILETIME file_time;
-	memcpy(&file_time, this, sizeof(*this));
-	return file_time;
-}
-
-
-FileTime& FileTime::operator=(const _FILETIME& inFileTime)
-{
-	static_assert(sizeof(FileTime) == sizeof(_FILETIME));
-
-	memcpy(this, &inFileTime, sizeof(FileTime));
-	return *this;
-}
-
-
-SystemTime FileTime::ToSystemTime() const
-{
-	const FILETIME ft = ToWin32();
-	SYSTEMTIME     st = {};
-	FileTimeToSystemTime(&ft, &st);
-	return st;
-}
-
-
-LocalTime FileTime::ToLocalTime() const
-{
-	return ToSystemTime().ToLocalTime();
-}
-
-
-
-_SYSTEMTIME SystemTime::ToWin32() const
-{
-	static_assert(sizeof(SystemTime) == sizeof(_SYSTEMTIME));
-
-	_SYSTEMTIME system_time;
-	memcpy(&system_time, this, sizeof(*this));
-	return system_time;
-}
-
-
-SystemTime& SystemTime::operator=(const _SYSTEMTIME& inSystemTime)
-{
-	static_assert(sizeof(SystemTime) == sizeof(_SYSTEMTIME));
-
-	memcpy(this, &inSystemTime, sizeof(*this));
-	return *this;
-}
-
-
-
-FileTime SystemTime::ToFileTime() const
-{
-	const SYSTEMTIME st = ToWin32();
-	FILETIME         ft = {};
-	SystemTimeToFileTime(&st, &ft);
-	return ft;
-}
-
-
-LocalTime SystemTime::ToLocalTime() const
-{
-	const SYSTEMTIME st = ToWin32();
-	SYSTEMTIME       local_st = {};
-	SystemTimeToTzSpecificLocalTime(nullptr, &st, &local_st);
-	return local_st;
-}
-
-
-SystemTime gGetSystemTime()
-{
-	SYSTEMTIME st = {};
-	GetSystemTime(&st);
-	return st;
-}
-
-
-LocalTime  gGetLocalTime()
-{
-	return gGetSystemTime().ToLocalTime();
-}
-
-
-FileTime gGetSystemTimeAsFileTime()
-{
-	FILETIME ft = {};
-	GetSystemTimeAsFileTime(&ft);
-	return ft;
-}
-
-
-OwnedHandle::~OwnedHandle()
-{
-	if (mHandle != cInvalid)
-		CloseHandle(mHandle);
-}
-
 
 // Find the offset of the character after the last slash, or 0 if there's no slash.
 static uint16 sFindNamePos(StringView inPath)
@@ -224,83 +123,8 @@ FileInfo::FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType 
 }
 
 
-static bool sDirectoryExistsW(WStringView inPath)
-{
-	gAssert(!inPath.ends_with(L'\\'));
-	gAssert(*(inPath.data() + inPath.size()) == 0);
-
-	DWORD attributes = GetFileAttributesW(inPath.data());
-
-	return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
-}
-
-static bool sCreateDirectoryW(WStringView inPath)
-{
-	gAssert(!inPath.ends_with(L'\\'));
-	gAssert(*(inPath.data() + inPath.size()) == 0);
-
-	BOOL success = CreateDirectoryW(inPath.data(), nullptr);
-
-	return success || GetLastError() == ERROR_ALREADY_EXISTS;
-}
 
 
-static bool sCreateDirectoryRecursiveW(Span<wchar_t> ioPath)
-{
-	gAssert(ioPath[ioPath.size() - 1] == 0);
-	gAssert(ioPath[ioPath.size() - 2] != L'\\');
-	gAssert(ioPath.size() > 2 && ioPath[1] == L':'); // We expect an absolute path, first two characters should be the drive (ioPath might be the drive itself without trailing slash).
-
-	// Early out if the directory already exists.
-	if (sDirectoryExistsW(WStringView(ioPath.data(), ioPath.size() - 1)))
-		return true;
-
-	// Otherwise try to create every parent directory.
-	wchar_t* p_begin = ioPath.data();
-	wchar_t* p_end   = ioPath.data() + ioPath.size() - 1; // Just before the null-terminator.
-	wchar_t* p       = p_begin + 3;
-	while(p != p_end)
-	{
-		if (*p == L'\\')
-		{
-			// Null terminate the dir path.
-			*p = 0;
-
-			// Create the parent directory.
-			if (!sCreateDirectoryW({ p_begin, p }))
-				return false; // Uh-oh failed.
-
-			// Put back the slash we overwrote earlier.
-			*p = L'\\';
-		}
-
-		p++;
-	}
-
-	// Create the final directory.
-	return sCreateDirectoryW({ p_begin, p });
-}
-
-bool gCreateDirectoryRecursive(StringView inAbsolutePath)
-{
-	gAssert(gIsNormalized(inAbsolutePath) && gIsAbsolute(inAbsolutePath));
-
-	PathBufferUTF16     wpath_buffer;
-	OptionalWStringView wpath_optional = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
-	if (!wpath_optional)
-		return false;
-
-	WStringView wpath = *wpath_optional;
-
-	// If the path ends with a slash, remove it, because that's what the other functions expect.
-	if (wpath.back() == L'\\')
-	{
-		wpath.remove_suffix(1);
-		wpath_buffer[wpath.size()] = 0; // Replace slash with null terminator.
-	}
-
-	return sCreateDirectoryRecursiveW({ wpath_buffer.data(), wpath.size() + 1 }); // +1 to include the null terminator.
-}
 
 
 static bool sShouldRetryLater(OpenFileError inError)
@@ -715,9 +539,9 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 
 			// Turn it into a string.
 			if (file_id.IsValid())
-				return TempString<cMaxPathSizeUTF8>("{}", file_id.GetFile());
+				return TempString<cWin32MaxPathSizeUTF8>("{}", file_id.GetFile());
 			else
-				return TempString<cMaxPathSizeUTF8>("Unknown");
+				return TempString<cWin32MaxPathSizeUTF8>("Unknown");
 		};
 
 		uint32 error = GetLastError();
@@ -1073,8 +897,7 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 	}
 
 	// Get the absolute path (in case it's relative).
-	TempString512 root_path;
-	root_path.mSize = GetFullPathNameA(inRootPath.AsCStr(), root_path.cCapacity, root_path.mBuffer, nullptr);
+	TempPath root_path = gGetAbsolutePath(inRootPath);
 
 	gAssert(gIsNormalized(root_path));
 

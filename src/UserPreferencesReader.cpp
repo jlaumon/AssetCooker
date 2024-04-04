@@ -3,7 +3,6 @@
 #include "CookingSystem.h"
 #include "App.h"
 #include "TomlReader.h"
-#include "Paths.h"
 #include "UI.h"
 
 #include <win32/file.h>

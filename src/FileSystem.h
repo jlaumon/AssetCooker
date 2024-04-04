@@ -4,6 +4,8 @@
 #include "CookingSystemIDs.h"
 #include "Queue.h"
 #include "Signal.h"
+#include "FileUtils.h"
+#include "FileTime.h"
 
 #include <thread>
 #include <semaphore>
@@ -15,14 +17,9 @@ struct FileInfo;
 struct FileRepo;
 struct FileDrive;
 struct FileSystem;
-struct FileTime;
-struct SystemTime;
-struct LocalTime;
 
 // Forward declarations of Win32 types.
 struct _FILE_ID_128;
-struct _FILETIME;
-struct _SYSTEMTIME;
 using USN = int64;
 
 constexpr USN cMaxUSN = 9223372036854775807;
@@ -32,24 +29,6 @@ static constexpr int cFileIndexBits     = 26;
 
 static constexpr uint32 cMaxFileRepos   = (1u << cFileRepoIndexBits) - 1;
 static constexpr uint32 cMaxFilePerRepo = (1u << cFileIndexBits) - 1;
-
-
-// Wrapper for a HANDLE that closes it on destruction.
-struct OwnedHandle : NoCopy
-{
-	static constexpr void* cInvalid = (void*)-1;
-
-	OwnedHandle()									= default;
-	OwnedHandle(void* inHandle)						{ mHandle = inHandle; }
-	~OwnedHandle();									// Close the handle.
-	OwnedHandle(OwnedHandle&& ioOther)				{ mHandle = ioOther.mHandle; ioOther.mHandle = cInvalid; }
-	OwnedHandle& operator=(OwnedHandle&& ioOther)	{ mHandle = ioOther.mHandle; ioOther.mHandle = cInvalid; return *this; }
-
-	operator void*() const							{ return mHandle; }
-	bool IsValid() const							{ return mHandle != cInvalid; }
-
-	void* mHandle = cInvalid;
-};
 
 
 enum class OpenFileError : uint8
@@ -108,92 +87,6 @@ static_assert(sizeof(FileRefNumber) == 16);
 template <> struct ankerl::unordered_dense::hash<FileRefNumber> : MemoryHasher<FileRefNumber> {};
 
 
-// Alias for FILETIME.
-struct FileTime
-{
-	uint64 mDateTime                                              = 0;
-
-	constexpr FileTime()                                          = default;
-	constexpr FileTime(const FileTime&)                           = default;
-	constexpr ~FileTime()                                         = default;
-	constexpr FileTime& operator=(const FileTime&)                = default;
-	constexpr bool      operator==(const FileTime& inOther) const = default;
-
-	// Conversion to/from FILETIME.
-	FileTime(const _FILETIME& inFileTime) { *this = inFileTime; }
-	FileTime(uint64 inTime) { mDateTime = inTime; }
-	_FILETIME ToWin32() const;
-	FileTime& operator=(const _FILETIME&);
-	FileTime& operator=(uint64 inTime)
-	{
-		mDateTime = inTime;
-		return *this;
-	}
-
-	int64                     operator-(FileTime inOther) const { return ((int64)mDateTime - (int64)inOther.mDateTime) * 100; } // Difference in nano seconds.
-
-	SystemTime                ToSystemTime() const;
-	LocalTime                 ToLocalTime() const;
-
-	constexpr bool            IsValid() const { return *this != cInvalid(); }
-	static constexpr FileTime cInvalid() { return {}; }
-};
-static_assert(sizeof(FileTime) == 8);
-
-
-// Alias for SYSTEMTIME.
-// TODO all time stuff to its own file
-struct SystemTime
-{
-	uint16 mYear                                                      = 0;
-	uint16 mMonth                                                     = 0;
-	uint16 mDayOfWeek                                                 = 0;
-	uint16 mDay                                                       = 0;
-	uint16 mHour                                                      = 0;
-	uint16 mMinute                                                    = 0;
-	uint16 mSecond                                                    = 0;
-	uint16 mMilliseconds                                              = 0;
-
-	constexpr SystemTime()                                            = default;
-	constexpr SystemTime(const SystemTime&)                           = default;
-	constexpr ~SystemTime()                                           = default;
-	constexpr SystemTime& operator=(const SystemTime&)                = default;
-	constexpr bool        operator==(const SystemTime& inOther) const = default;
-
-	// Conversion to/from SYSTEMTIME.
-	SystemTime(const _SYSTEMTIME& inSystemTime) { *this = inSystemTime; }
-	_SYSTEMTIME                 ToWin32() const;
-	SystemTime&                 operator=(const _SYSTEMTIME&);
-
-	FileTime                    ToFileTime() const;
-	LocalTime                   ToLocalTime() const;
-
-	constexpr bool              IsValid() const { return *this != cInvalid(); }
-	static constexpr SystemTime cInvalid() { return {}; }
-};
-static_assert(sizeof(SystemTime) == 16);
-
-// TODO implicit conversion from LocalTime to SystemTime should not be allowed
-struct LocalTime : SystemTime
-{
-	constexpr LocalTime()                                           = default;
-	constexpr LocalTime(const LocalTime&)                           = default;
-	constexpr ~LocalTime()                                          = default;
-	constexpr LocalTime& operator=(const LocalTime&)                = default;
-	constexpr bool       operator==(const LocalTime& inOther) const = default;
-
-private:
-	// LocalTime is the final type used, don't allow converting to anything.
-	using SystemTime::SystemTime;
-	using SystemTime::ToLocalTime;
-	using SystemTime::ToFileTime;
-};
-static_assert(sizeof(SystemTime) == 16);
-
-
-SystemTime gGetSystemTime();
-LocalTime  gGetLocalTime();
-FileTime   gGetSystemTimeAsFileTime();
 
 
 // Wrapper for a 128-bits hash value.
@@ -266,7 +159,7 @@ struct FileInfo : NoCopy
 	std::vector<CookingCommandID> mOutputOf;            // List of commands that use this file as output. There should be only one, otherwise it's an error. // TODO tiny vector optimization // TODO actually detect that error
 
 	bool                          IsDeleted() const { return !mRefNumber.IsValid(); }
-	bool                          IsDirectory() const { return mIsDirectory != 0; }
+	bool                          IsDirectory() const { return mIsDirectory; }
 	FileType                      GetType() const { return mIsDirectory ? FileType::Directory : FileType::File; }
 	StringView                    GetName() const { return mPath.substr(mNamePos); }
 	StringView                    GetNameNoExt() const { return mPath.substr(mNamePos, mExtensionPos - mNamePos); }
@@ -527,7 +420,7 @@ template <> struct fmt::formatter<FileTime> : fmt::formatter<fmt::string_view>
 	{
 		if (inFileTime.IsValid())
 		{
-			SystemTime local_time = inFileTime.ToLocalTime();
+			LocalTime local_time = inFileTime.ToLocalTime();
 			return fmt::format_to(ioCtx.out(), "{:04}/{:02}/{:02} {:02}:{:02}:{:02}", 
 				local_time.mYear,
 				local_time.mMonth,

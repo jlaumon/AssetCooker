@@ -3,7 +3,6 @@
 #include "CookingSystem.h"
 #include "App.h"
 #include "TomlReader.h"
-#include "Paths.h"
 
 
 void gReadConfigFile(StringView inPath)
