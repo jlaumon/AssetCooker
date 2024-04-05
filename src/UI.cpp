@@ -159,7 +159,7 @@ static void sMenuEnum(StringView inLabel, taEnumType& ioValue)
 	{
 		int current_index = (int)ioValue;
 
-		if (ImGui::ListBox("##List", &current_index, [](void*, int inIndex) { return gToStringView((taEnumType)inIndex).AsCStr(); }, nullptr, (int)taEnumType::_Count))
+		if (ImGui::ListBox("##List", &current_index, [](void*, int inIndex) -> ImStrv { return gToStringView((taEnumType)inIndex); }, nullptr, (int)taEnumType::_Count))
 			ioValue = (taEnumType)current_index;
 
 		ImGui::EndMenu();
