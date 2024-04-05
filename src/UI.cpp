@@ -526,7 +526,7 @@ void gDrawCookingQueue()
 			ImGui::PopStyleVar();
 		}
 
-		if (all_empty)
+		if (all_empty && gFileSystem.GetInitState() == FileSystem::InitState::Ready)
 		{
 			ImGui::Spacing();
 			ImGui::TextUnformatted("All caught up! " ICON_FK_HAND_PEACE_O);
