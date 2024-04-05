@@ -7,33 +7,11 @@
 
 #include <win32/file.h>
 
-static bool sFileExists(StringView inPath)
-{
-	DWORD attributes = GetFileAttributesA(inPath.AsCStr());
-	return attributes != INVALID_FILE_ATTRIBUTES;
-}
-
-
-template <typename taEnumType>
-bool gStringViewToEnum(StringView inStrValue, taEnumType& outValue)
-{
-	for (int i = 0; i < (int)taEnumType::_Count; ++i)
-	{
-		taEnumType value = (taEnumType)i;
-		if (gIsEqualNoCase(inStrValue, gToStringView(value)))
-		{
-			outValue = value;
-			return true;
-		}
-	}
-
-	return false;
-}
 
 
 void gReadUserPreferencesFile(StringView inPath)
 {
-	if (!sFileExists(inPath))
+	if (!gFileExists(inPath))
 		return; // It's fine if that file doesn't exist, it's optional.
 
 	gApp.Log(R"(Reading User Preferences file "{}".)", inPath);
