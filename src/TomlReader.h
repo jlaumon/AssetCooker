@@ -168,7 +168,7 @@ struct TomlReader
 		mStack.push_back({ &inRootTable });
 	}
 
-	bool OpenTable(StringView inVarName)
+	bool TryOpenTable(StringView inVarName)
 	{
 		const toml::node* node = GetNode(inVarName);
 
@@ -189,9 +189,9 @@ struct TomlReader
 		return true;
 	}
 
-	bool TryOpenTable(StringView inVarName)
+	bool OpenTable(StringView inVarName)
 	{
-		if (!OpenTable(inVarName))
+		if (!TryOpenTable(inVarName))
 		{
 			gApp.LogError("{} (table) is mandatory but was not found.", GetPath(inVarName));
 			mErrorCount++;
