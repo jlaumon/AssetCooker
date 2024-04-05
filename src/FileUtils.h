@@ -35,6 +35,11 @@ constexpr bool          gIsAbsolute(StringView inPath);       // Return true if 
 
 bool                    gCreateDirectoryRecursive(StringView inAbsolutePath);
 
+bool                    gDirectoryExists(StringView inPath);
+bool                    gFileExists(StringView inPath);
+
+
+
 constexpr MutStringView gNormalizePath(MutStringView ioPath)
 {
 	for (char& c : ioPath)

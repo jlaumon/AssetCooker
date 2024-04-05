@@ -24,19 +24,9 @@ TempPath gGetAbsolutePath(StringView inPath)
 }
 
 
-static bool sDirectoryExists(StringView inPath)
-{
-	gAssert(!inPath.ends_with(L'\\'));
-
-	DWORD attributes = GetFileAttributesA(inPath.AsCStr());
-
-	return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
-}
-
-
 static bool sCreateDirectory(StringView inPath)
 {
-	gAssert(!inPath.ends_with(L'\\'));
+	gAssert(!gEndsWith(inPath, "\\"));
 
 	BOOL success = CreateDirectoryA(inPath.AsCStr(), nullptr);
 
@@ -51,7 +41,7 @@ static bool sCreateDirectoryRecursive(MutStringView ioPath)
 	gAssert(ioPath.size() > 2 && ioPath[1] == L':'); // We expect an absolute path, first two characters should be the drive (ioPath might be the drive itself without trailing slash).
 
 	// Early out if the directory already exists.
-	if (sDirectoryExists(ioPath))
+	if (gDirectoryExists(ioPath))
 		return true;
 
 	// Otherwise try to create every parent directory.
@@ -95,4 +85,29 @@ bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 	}
 
 	return sCreateDirectoryRecursive(path_copy.AsSpan());
+}
+
+
+bool gDirectoryExists(StringView inPath)
+{
+	StringView path = inPath;
+	TempPath   path_copy;
+
+	// If the path ends with a backslash, make a copy and remove it. The Win32 function doesn't like that.
+	if (gEndsWith(inPath, "\\"))
+	{
+		path_copy = path.substr(0, path.size() - 1);
+		path      = path_copy;
+	}
+
+	DWORD attributes = GetFileAttributesA(path.AsCStr());
+
+	return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
+}
+
+
+bool gFileExists(StringView inPath)
+{
+	DWORD attributes = GetFileAttributesA(inPath.AsCStr());
+	return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
