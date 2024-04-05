@@ -27,7 +27,12 @@ struct StringView : public std::string_view
 {
 	// Inherit string_view's constructors.
 	using std::string_view::string_view;
-	constexpr StringView(const char* inString, size_t inSize) : std::string_view(inString, inSize) {}
+	constexpr StringView(const char* inString, size_t inSize) : std::string_view(inString, inSize)
+	{
+		// Don't include the null terminator if there's one.
+		if (!empty() && back() == 0)
+			remove_suffix(1);
+	}
 
 	// Bunch of defaults.
 	constexpr StringView(const StringView&)				= default;
@@ -119,7 +124,7 @@ using TempString256 = TempString<256>;
 using TempString512 = TempString<512>;
 
 
-template<size_t taSize> constexpr StringView::StringView(const TempString<taSize>& inString) : std::string_view(inString.AsStringView()) {}
+template<size_t taSize> constexpr StringView::StringView(const TempString<taSize>& inString) : std::string_view(inString.mBuffer, inString.mSize) {}
 
 
 // Return true if inString1 and inString2 are identical.
