@@ -43,6 +43,11 @@ constexpr uint32       cColorTextError                  = IM_COL32(255, 100, 100
 constexpr uint32       cColorTextSuccess                = IM_COL32( 98, 214,  86, 255);
 constexpr uint32       cColorFrameBgError               = IM_COL32(150,  60,  60, 255);
 
+constexpr uint32       cColorTextFileDeleted            = IM_COL32(170, 170, 170, 255);
+constexpr uint32       cColorTextInputModified          = IM_COL32( 65, 171, 240, 255);
+constexpr uint32       cColorTextOuputOutdated          = IM_COL32(255, 100, 100, 255);
+
+
 
 StringView gGetAnimatedHourglass()
 {
@@ -216,9 +221,9 @@ void gDrawMainMenuBar()
 	}
 }
 
+struct FileContext;
 
-
-void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs);
+void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, FileContext inContext);
 void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs);
 
 
@@ -233,8 +238,8 @@ TempString256 gFormat(const CookingCommand& inCommand)
 
 TempString256 gFormat(const CookingLogEntry& inLogEntry)
 {
-	const CookingCommand& command = gCookingSystem.GetCommand(inLogEntry.mCommandID);
-	const CookingRule&    rule    = gCookingSystem.GetRule(command.mRuleID);
+	const CookingCommand& command    = gCookingSystem.GetCommand(inLogEntry.mCommandID);
+	const CookingRule&    rule       = gCookingSystem.GetRule(command.mRuleID);
 	LocalTime             start_time = inLogEntry.mTimeStart.ToLocalTime();
 	return { "[#{} {:02}:{:02}:{:02}] {}{} {} - {}",
 		rule.mPriority,
@@ -251,13 +256,80 @@ TempString512 gFormat(const FileInfo& inFile)
 }
 
 
-void gDrawFileInfo(const FileInfo& inFile)
+enum class DependencyType
+{
+	Unknown,
+	Input,
+	Output
+};
+
+
+struct FileContext
+{
+	DependencyType mDepType  = DependencyType::Unknown;
+	USN            mLastCook = 0;
+};
+
+
+void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 {
 	ImGui::PushID(TempString32("File {}", inFile.mID.AsUInt()).AsCStr());
 	defer { ImGui::PopID(); };
 
+	enum
+	{
+		None = -1,
+		Deleted = 0,
+		Modified,
+		Outdated
+	} file_state = None;
+
+	constexpr struct
+	{
+		uint32 mColor;
+		StringView mTooltip;
+	} cFileStateData[] = 
+	{
+		{ cColorTextFileDeleted, "Deleted" },
+		{ cColorTextInputModified, "Modified" },
+		{ cColorTextOuputOutdated, "Outdated" },
+	};
+
+	int pushed_colors = 0;
+	if (inFile.IsDeleted())
+	{
+		file_state = Deleted;
+	}
+	else
+	{
+		switch (inContext.mDepType)
+		{
+		case DependencyType::Unknown:
+			break;
+
+		case DependencyType::Input:
+			if (inFile.mLastChangeUSN > inContext.mLastCook)
+				file_state = Modified;
+			break;
+
+		case DependencyType::Output:
+			if (inFile.mLastChangeUSN < inContext.mLastCook)
+				file_state = Outdated;
+			break;
+		}
+	}
+
+	if (file_state != None)
+		ImGui::PushStyleColor(ImGuiCol_Text, cFileStateData[file_state].mColor);
+
 	bool clicked = ImGui::Selectable(gFormat(inFile).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
+
+	if (file_state != None && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+		ImGui::SetTooltip(cFileStateData[file_state].mTooltip.AsCStr());
+
+	if (file_state != None)
+		ImGui::PopStyleColor();
 
 	if (open)
 		ImGui::OpenPopup("Popup");
@@ -380,42 +452,71 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 		}
 	}
 
-	ImGui::SeparatorText("Cooking State");
+	ImGui::SeparatorText("Details");
 
-	if (inCommand.IsDirty())
+	if (ImGui::BeginTable("Details", 2))
 	{
-		ImGui::TextUnformatted("Dirty");
+		ImGui::TableNextRow();
 
-		ImGui::Indent();
-
-		if (inCommand.mDirtyState & CookingCommand::AllInputsMissing)
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("Cooking State");
+		ImGui::TableNextColumn();
 		{
-			ImGui::TextUnformatted("All Inputs Missing - Needs cleanup");
-		}
-		else
-		{
-			if (inCommand.mDirtyState & CookingCommand::InputMissing)
-				ImGui::TextUnformatted("Input Missing");
-			if (inCommand.mDirtyState & CookingCommand::InputChanged)
-				ImGui::TextUnformatted("Input Changed");
-			if (inCommand.mDirtyState & CookingCommand::OutputMissing)
-				ImGui::TextUnformatted("Output Missing");
+			if (inCommand.IsDirty())
+			{
+				TempString256 dirty_details("Dirty (");
+				if (inCommand.mDirtyState & CookingCommand::Error)
+					dirty_details.Append("Error|");
+				if (inCommand.mDirtyState & CookingCommand::InputMissing)
+					dirty_details.Append("Input Missing|");
+				if (inCommand.mDirtyState & CookingCommand::InputChanged)
+					dirty_details.Append("Input Changed|");
+				if (inCommand.mDirtyState & CookingCommand::OutputMissing)
+					dirty_details.Append("Output Missing|");
+
+				// Replace the last | with )
+				dirty_details.mBuffer[dirty_details.mSize - 1] = ')'; 
+				
+				ImGui::TextUnformatted(dirty_details);
+			}
+			else if (inCommand.IsCleanedUp())
+				ImGui::TextUnformatted("Cleaned Up");
+			else
+				ImGui::TextUnformatted("Up To Date");
 		}
 
-		ImGui::Unindent();
-	}
-	else
-	{
-		if (inCommand.IsCleanedUp())
-			ImGui::TextUnformatted("Cleaned Up");
-		else
-			ImGui::TextUnformatted("Up To Date");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook");
+		ImGui::TableNextColumn();
+		{
+			ImGui::TextUnformatted(TempString64("{}", (inCommand.mDirtyState & CookingCommand::Error) ? "Error" : "Success"));
+			if (inCommand.mLastCookingLog)
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Select in Log"))
+					gSelectCookingLogEntry(inCommand.mLastCookingLog->mID, true);
+			}
+		}
+
+
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook Time");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCookingLog ? inCommand.mLastCookingLog->mTimeStart : FileTime::cInvalid()));
+
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook USN");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCook));
+		
+		ImGui::EndTable();
 	}
 
 	ImGui::SeparatorText("Related Files");
 
-	gDrawFileInfoSpan("Inputs", inCommand.mInputs);
-	gDrawFileInfoSpan("Outputs", inCommand.mOutputs);
+	gDrawFileInfoSpan("Inputs", inCommand.mInputs, { DependencyType::Input, inCommand.mLastCook });
+	
+	if (!inCommand.mDepFileInputs.empty())
+		gDrawFileInfoSpan("DepFile Inputs", inCommand.mDepFileInputs, { DependencyType::Input, inCommand.mLastCook });
+
+	gDrawFileInfoSpan("Outputs", inCommand.mOutputs, { DependencyType::Output, inCommand.mLastCook });
+
+	if (!inCommand.mDepFileOutputs.empty())
+		gDrawFileInfoSpan("DepFile Outputs", inCommand.mDepFileOutputs, { DependencyType::Output, inCommand.mLastCook });
 
 	ImGui::PopStyleVar();
 }
@@ -451,7 +552,7 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 
 
 
-void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs)
+void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, FileContext inContext)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
 	ImGui::SetNextItemOpen(inFileIDs.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
@@ -460,7 +561,7 @@ void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs)
 	{
 		for (FileID file_id : inFileIDs)
 		{
-			gDrawFileInfo(file_id.GetFile());
+			gDrawFileInfo(file_id.GetFile(), inContext);
 		}
 		ImGui::TreePop();
 	}

@@ -142,6 +142,7 @@ constexpr auto gEmplaceSorted(taContainer& ioContainer, const taValue& inElem)
 		return ioContainer.emplace(it, inElem);
 }
 
+
 // Helper to find a value in a vector-like container.
 template<typename taValue, typename taContainer>
 constexpr auto gFind(taContainer& inContainer, const taValue& inElem)
@@ -157,6 +158,38 @@ constexpr auto gFind(taContainer& inContainer, const taValue& inElem)
 
 	return end;
 }
+
+
+#include <utility> // For std::swap
+
+// Helper to erase an element from a vector-like container by swapping it with the last one and reducing the size by 1.
+template<typename taContainer, typename taIterator>
+constexpr void gSwapErase(taContainer& inContainer, const taIterator& inIterator)
+{
+	std::swap(inContainer.back(), *inIterator);
+	inContainer.pop_back();
+}
+
+
+// Helper to remove the first value that matches predicate from a vector-like container.
+template<typename taContainer, typename taPred>
+constexpr bool gSwapEraseFirstIf(taContainer& inContainer, const taPred& inPredicate)
+{
+	auto end = inContainer.end();
+	auto begin = inContainer.begin();
+
+	for (auto it = begin; it != end; ++it)
+	{
+		if (inPredicate(*it))
+		{
+			gSwapErase(inContainer, it);
+			return true;	
+		}
+	}
+
+	return false;
+}
+
 
 
 // Basic containers.
@@ -197,6 +230,7 @@ template <	typename T,
 			size_t MaxSegmentSizeElements = 1024,
 			typename Allocator = std::allocator<T>>
 using SegmentedVector = ankerl::unordered_dense::segmented_vector<T, Allocator, MaxSegmentSizeElements * sizeof(T)>;
+
 
 // Hash helper to hash entire structs.
 // Only use on structs/classes that don't contain any padding.
@@ -248,3 +282,58 @@ template <typename taType>
 using Optional = std::optional<taType>;
 template <typename taType>
 using OptionalRef = std::optional<std::reference_wrapper<taType>>;
+
+// Helper struct to iterate multiple Spans as a single one.
+template <typename taType, size_t taSpanCount>
+struct MultiSpanRange
+{
+	struct Iterator
+	{
+		Span<Span<taType>> mSpans;
+		size_t             mSpanIndex = 0;
+		size_t             mElemIndex = 0;
+
+		bool               operator!=(const Iterator& inOther) const { return mSpanIndex != inOther.mSpanIndex || mElemIndex != inOther.mElemIndex; }
+		taType&            operator*() { return mSpans[mSpanIndex][mElemIndex]; }
+		void               operator++()
+		{
+			gAssert(mSpanIndex < mSpans.size() && mElemIndex < mSpans[mSpanIndex].size());
+
+			mElemIndex++;
+
+			// Loop in case there are empty spans.
+			while (mSpanIndex < mSpans.size() && mElemIndex == mSpans[mSpanIndex].size())
+			{
+				mElemIndex = 0;
+				mSpanIndex++;
+			}
+		}
+	};
+
+	Iterator begin() { return { mSpans, 0, 0 }; }
+	Iterator end() { return { mSpans, taSpanCount, 0 }; }
+	bool     empty() const { return size() == 0; }
+	size_t   size() const
+	{
+		size_t total_size = 0;
+		for (auto& span : mSpans)
+			total_size += span.size();
+		return total_size;
+	}
+
+	Span<taType> mSpans[taSpanCount] = {};
+};
+
+
+// Helper to turn a Span into a HashSet.
+template <typename taType>
+static HashSet<taType> gToHashSet(Span<taType> inSpan)
+{
+	HashSet<taType> hash_set;
+	hash_set.reserve(inSpan.size());
+
+	for (taType& element : inSpan)
+		hash_set.insert(element);
+
+	return hash_set;
+}

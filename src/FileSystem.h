@@ -152,6 +152,7 @@ struct FileInfo : NoCopy
 	const Hash128                 mPathHash;            // Case-insensitive hash of the path.
 
 	bool                          mIsDirectory     : 1; // Is this a directory or a file. Note: could change if a file is deleted then a directory of the same name is created.
+	bool                          mIsDepFile       : 1; // Is this a dep file.
 	bool                          mCommandsCreated : 1; // Are cooking commands already created for this file.
 	FileRefNumber                 mRefNumber      = {}; // File ID used by Windows. Can change when the file is deleted and re-created.
 	FileTime                      mCreationTime   = {}; // Time of the creation of this file (or its deletion if the file is deleted).
@@ -310,6 +311,7 @@ struct FileSystem : NoCopy
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 
 	FileRepo*       FindRepo(StringView inRepoName);               // Return nullptr if not found.
+	FileRepo*       FindRepoFromPath(StringView inAbsolutePath);   // Return nullptr if not found.
 	FileDrive*      FindDrive(char inLetter);                      // Return nullptr if not found.
 
 	bool            CreateDirectory(FileID inFileID);              // Make sure all the parent directories for this file exist.

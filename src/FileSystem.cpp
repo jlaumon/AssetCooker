@@ -857,6 +857,16 @@ FileRepo* FileSystem::FindRepo(StringView inRepoName)
 }
 
 
+FileRepo* FileSystem::FindRepoFromPath(StringView inAbsolutePath)
+{
+	for (FileRepo& repo : mRepos)
+		if (gStartsWithNoCase(inAbsolutePath, repo.mRootPath))
+			return &repo;
+
+	return nullptr;
+}
+
+
 FileDrive* FileSystem::FindDrive(char inLetter)
 {
 	for (FileDrive& drive : mDrives)
@@ -1222,7 +1232,7 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			gCookingSystem.CreateCommandsForFile(file);
 
 	// Check which commmands need to cook.
-	gCookingSystem.UpdateDirtyStates();
+	gCookingSystem.UpdateAllDirtyStates();
 
 	mInitStats.mReadyTicks = gGetTickCount();
 	mInitState = InitState::Ready;
@@ -1741,7 +1751,7 @@ void FileSystem::LoadCache()
 		total_files, gTicksToSeconds(timer.GetTicks()));
 }
 
-
+// TODO add command infos to the state: last cook USN, last cook time, dep file content, error state
 void FileSystem::SaveCache()
 {
 	// Make sure the cache dir exists.

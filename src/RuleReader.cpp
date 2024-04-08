@@ -83,9 +83,23 @@ void gReadRuleFile(StringView inPath)
 		reader.TryRead     ("Priority",			rule.mPriority);
 		reader.TryRead     ("Vresion",			rule.mVersion);
 		reader.TryRead     ("MatchMoreRules",	rule.mMatchMoreRules);
-		reader.TryRead     ("DepFilePath",		rule.mDepFilePath);
 		reader.TryReadArray("InputPaths",		rule.mInputPaths);
 		reader.TryReadArray("OutputPaths",		rule.mOutputPaths);
+
+		if (reader.TryOpenTable("DepFile"))
+		{
+			reader.Read    ("Path",				rule.mDepFilePath);
+
+			TempString64 format;
+			reader.Read("Format", format);
+			gStringViewToEnum(format,			rule.mDepFileFormat);
+			
+			reader.CloseTable();
+
+			// Only read the dep file command line if there is a dep file.
+			// TODO also error if it's provided but there is no dep file?
+			reader.TryRead("DepFileCommandLine", rule.mDepFileCommandLine);
+		}
 	}
 
 	// Validate the rules.

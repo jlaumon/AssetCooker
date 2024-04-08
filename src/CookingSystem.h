@@ -64,6 +64,26 @@ struct InputFilter
 };
 
 
+enum class DepFileFormat : uint8
+{
+	AssetCooker, // Custom Asset Cooker dep file format.
+	Make,        // For dep files generated with -M from Clang/GCC/DXC.
+	_Count,
+};
+
+
+constexpr StringView gToStringView(DepFileFormat inVar)
+{
+	constexpr StringView cStrings[]
+	{
+		"AssetCooker",
+		"Make",
+	};
+	static_assert(gElemCount(cStrings) == (size_t)DepFileFormat::_Count);
+
+	return cStrings[(int)inVar];
+};
+
 
 struct CookingRule : NoCopy
 {
@@ -73,15 +93,18 @@ struct CookingRule : NoCopy
 	StringView               mName;
 	std::vector<InputFilter> mInputFilters;
 	StringView               mCommandLine;
-	int                      mPriority       = 0;
-	uint16                   mVersion        = 0;
-	bool                     mMatchMoreRules = false; // If false, we'll stop matching rules once an input file is matched with this rule. If true, we'll keep looking.
-	StringView               mDepFilePath;
+	int16                    mPriority            = 0;
+	uint16                   mVersion             = 0;
+	bool                     mMatchMoreRules      = false; // If false, we'll stop matching rules once an input file is matched with this rule. If true, we'll keep looking.
+	DepFileFormat            mDepFileFormat       = DepFileFormat::AssetCooker;
+	StringView               mDepFilePath;        // Optional file containing extra inputs/ouputs for the command.
+	StringView               mDepFileCommandLine; // Optional separate command line used to generate the dep file (in case the main command cannot generate it directly).
 	std::vector<StringView>  mInputPaths;
 	std::vector<StringView>  mOutputPaths;
 
 	bool                     UseDepFile() const { return !mDepFilePath.empty(); }
 };
+
 
 enum class CookingState : uint8
 {
@@ -92,6 +115,7 @@ enum class CookingState : uint8
 	Success,
 	_Count,
 };
+
 
 constexpr StringView gToStringView(CookingState inVar)
 {
@@ -124,10 +148,12 @@ struct CookingLogEntry
 // Instance of a rule for a specific input file.
 struct CookingCommand : NoCopy
 {
-	CookingCommandID       mID;
-	CookingRuleID          mRuleID;
-	std::vector<FileID>    mInputs;
-	std::vector<FileID>    mOutputs;
+	CookingCommandID    mID;
+	CookingRuleID       mRuleID;
+	std::vector<FileID> mInputs;
+	std::vector<FileID> mOutputs;
+	std::vector<FileID> mDepFileInputs;  // Dynamic inputs specified by the dep file.
+	std::vector<FileID> mDepFileOutputs; // Dynamic outputs specified by the dep file.
 
 	enum DirtyState : uint8
 	{
@@ -140,23 +166,28 @@ struct CookingCommand : NoCopy
 		Error             = 0b100000, // Last cook errored.
 	};
 
-	DirtyState                mDirtyState     = NotDirty;
-	bool                      mIsQueued       = false;
-	USN                       mLastCook       = 0;
-	CookingLogEntry*          mLastCookingLog = nullptr;
+	// TODO should also store last cook time here, so we can save it in the cached state (currently it's only in the log entries)
+	DirtyState                      mDirtyState      = NotDirty;
+	bool                            mIsQueued        = false;
+	USN                             mLastDepFileRead = 0;
+	USN                             mLastCook        = 0;
+	CookingLogEntry*                mLastCookingLog  = nullptr;
 
-	void                      UpdateDirtyState();
-	bool                      IsDirty() const { return mDirtyState != NotDirty && !IsCleanedUp(); }
-	bool                      NeedsCleanup() const { return (mDirtyState & AllInputsMissing) && !IsCleanedUp(); }
-	bool                      IsCleanedUp() const { return (mDirtyState & (AllInputsMissing | AllOutputsMissing)) == (AllInputsMissing | AllOutputsMissing); }
+	void                            UpdateDirtyState();
+	bool                            IsDirty() const { return mDirtyState != NotDirty && !IsCleanedUp(); }
+	bool                            NeedsCleanup() const { return (mDirtyState & AllInputsMissing) && !IsCleanedUp(); }
+	bool                            IsCleanedUp() const { return (mDirtyState & (AllInputsMissing | AllOutputsMissing)) == (AllInputsMissing | AllOutputsMissing); }
 
-	CookingState              GetCookingState() const { return mLastCookingLog ? mLastCookingLog->mCookingState.load() : CookingState::Unknown; }
+	CookingState                    GetCookingState() const { return mLastCookingLog ? mLastCookingLog->mCookingState.load() : CookingState::Unknown; }
 
-	void                      ReadDepFile();
+	bool                            ReadDepFile();
 
-	FileID                    GetMainInput() const { return mInputs[0]; }
-	FileID                    GetDepFile() const;
-	const CookingRule&        GetRule() const;
+	FileID                          GetMainInput() const { return mInputs[0]; }
+	FileID                          GetDepFile() const;
+	const CookingRule&              GetRule() const;
+
+	MultiSpanRange<const FileID, 2> GetAllInputs() const { return { mInputs, mDepFileInputs }; }
+	MultiSpanRange<const FileID, 2> GetAllOutputs() const { return { mOutputs, mDepFileOutputs }; }
 };
 
 constexpr CookingCommand::DirtyState& operator|=(CookingCommand::DirtyState& ioA, CookingCommand::DirtyState inB) { return ioA = (CookingCommand::DirtyState)(ioA | inB); }
@@ -256,7 +287,7 @@ struct CookingSystem : NoCopy
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
 	void                                  QueueUpdateDirtyState(CookingCommandID inCommandID);
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
-	void                                  UpdateDirtyStates(); // Update the dirty state of all commands. Only needed during init.
+	void                                  UpdateAllDirtyStates(); // Update the dirty state of all commands. Only needed during init.
 	void                                  UpdateNotifications();
 
 	void                                  ForceCook(CookingCommandID inCommandID);
