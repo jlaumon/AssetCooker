@@ -454,7 +454,7 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
-	ImGui::SetNextItemOpen(inListName.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
+	ImGui::SetNextItemOpen(inFileIDs.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
 
 	if (ImGui::TreeNode(inListName.data(), TempString64("{} ({} items)", inListName, inFileIDs.size()).AsCStr()))
 	{
@@ -470,7 +470,7 @@ void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs)
 void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
-	ImGui::SetNextItemOpen(inListName.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
+	ImGui::SetNextItemOpen(inCommandIDs.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
 
 	if (ImGui::TreeNode(inListName.data(), TempString64("{} ({} items)", inListName, inCommandIDs.size()).AsCStr()))
 	{
