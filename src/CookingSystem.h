@@ -303,6 +303,8 @@ struct CookingSystem : NoCopy
 	void                                  ForceCook(CookingCommandID inCommandID);
 	bool                                  IsIdle() const; // Return true if nothing is happening. Used by the UI to decide if it needs to draw.
 
+	CookingLogEntry&                      AllocateCookingLogEntry(CookingCommandID inCommandID);
+
 	bool                                  mSlowMode = false; // Slows down cooking, for debugging.
 private:
 	friend struct CookingCommand;
@@ -313,7 +315,6 @@ private:
 	struct CookingThread;
 
 	void                                  CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken);
-	CookingLogEntry&                      AllocateCookingLogEntry(CookingCommandID inCommandID);
 	void                                  CookCommand(CookingCommand& ioCommand, CookingThread& ioThread);
 	void                                  CleanupCommand(CookingCommand& ioCommand, CookingThread& ioThread); // Delete all outputs.
 	void                                  AddTimeOut(CookingLogEntry* inLogEntry);

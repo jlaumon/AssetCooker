@@ -14,6 +14,7 @@
 #include "xxHash/xxh3.h"
 
 #include <array>
+#include <algorithm> // for std::sort, sad!
 
 // Debug toggle to fake files failing to open, to test error handling.
 bool             gDebugFailOpenFileRandomly = false;
@@ -1589,9 +1590,11 @@ void FileSystem::LoadCache()
 		}
 	}
 
+	std::vector<CookingCommandID> errored_commands;
+
 	// Read the commands.
 	size_t total_commands = 0;
-	uint16 rule_count          = 0;
+	uint16 rule_count     = 0;
 	bin.Read(rule_count);
 	for (int rule_index = 0; rule_index < (int)rule_count; ++rule_index)
 	{
@@ -1636,12 +1639,14 @@ void FileSystem::LoadCache()
 				// Find the command. Should be found, unless the rule changed.
 				command = gCookingSystem.FindCommandByMainInput(rule->mID, main_input);
 
-				// TODO also initialize error state (create a cooking log)
 				if (command)
 				{
 					command->mLastCookUSN         = (USN)serialized_command.mLastCookUSN;
 					command->mLastCookTime        = serialized_command.mLastCookTime;
 					command->mLastCookRuleVersion = rule_version;
+
+					if (serialized_command.mLastCookIsError)
+						errored_commands.push_back(command->mID);
 				}
 			}
 
@@ -1682,6 +1687,28 @@ void FileSystem::LoadCache()
 			}
 		}
 	}
+
+	// Now we need to add a cooking log entry for the errored commands.
+	{
+		// Sort the commands in error by cooking time, so that the log entries are in a sensible order.
+		std::sort(errored_commands.begin(), errored_commands.end(), [](CookingCommandID inA, CookingCommandID inB) {
+			return gCookingSystem.GetCommand(inA).mLastCookTime.mDateTime < gCookingSystem.GetCommand(inB).mLastCookTime.mDateTime;
+		});
+
+		// Add a cooking log for each.
+		for (CookingCommandID command_id : errored_commands)
+		{
+			CookingCommand&  command   = gCookingSystem.GetCommand(command_id);
+
+			CookingLogEntry& log_entry = gCookingSystem.AllocateCookingLogEntry(command_id);
+			log_entry.mTimeStart       = command.mLastCookTime;
+			log_entry.mOutput          = "No info recorded.";
+			log_entry.mCookingState    = CookingState::Error;
+
+			command.mLastCookingLog    = &log_entry;
+		}
+	}
+	
 
 	bin.ExpectLabel("FIN");
 
@@ -1842,6 +1869,7 @@ void FileSystem::SaveCache()
 			serialized_command.mMainInputPathHash = gHashPath(TempPath("{}{}", main_input.GetRepo().mRootPath, main_input.mPath));
 			serialized_command.mLastCookUSN       = command.mLastCookUSN;
 			serialized_command.mLastCookIsError   = (command.mDirtyState & CookingCommand::Error) != 0;
+			serialized_command.mLastCookTime      = command.mLastCookTime;
 			bin.Write(serialized_command);
 
 			// Write the dep file data, if needed.
