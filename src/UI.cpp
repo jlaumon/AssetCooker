@@ -438,7 +438,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
 
-	if (!inCommand.IsCleanedUp() && ImGui::ButtonGrad("Cook"))
+	if (!inCommand.IsCleanedUp() && ImGui::ButtonGrad("Cook Now"))
 		gCookingSystem.ForceCook(inCommand.mID);
 
 	// TODO add a Cleanup button
