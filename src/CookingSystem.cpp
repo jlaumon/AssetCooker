@@ -1026,8 +1026,8 @@ void CookingSystem::QueueDirtyCommands()
 			if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
 				continue; // Skip commands already cooking.
 
-			if (cooking_state == CookingState::Error && (command.mDirtyState & CookingCommand::InputChanged) == 0)
-				continue; // Skip commands that errored if their input hasn't changed since last time.
+			if (cooking_state == CookingState::Error && (command.mDirtyState & (CookingCommand::InputChanged | CookingCommand::VersionMismatch)) == 0)
+				continue; // Skip commands that errored if their input hasn't changed since last time (unless the rule version changed).
 
 			mCommandsToCook.Push(command_id);
 		}
