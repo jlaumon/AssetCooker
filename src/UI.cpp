@@ -604,6 +604,10 @@ void gDrawCookingQueue()
 	if (ImGui::ButtonGrad(paused ? ICON_FK_PLAY " Start Cooking" : ICON_FK_STOP " Stop Cooking"))
 		gCookingSystem.SetCookingPaused(!paused);
 
+	ImGui::SameLine();
+	if (ImGui::Button(ICON_FK_REPEAT " Cook Errored"))
+		gCookingSystem.QueueErroredCommands();
+
 	// Lock the dirty command list while we're browsing it.
 	std::lock_guard lock(gCookingSystem.mCommandsDirty.mMutex);
 

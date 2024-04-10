@@ -1035,6 +1035,25 @@ void CookingSystem::QueueDirtyCommands()
 }
 
 
+void CookingSystem::QueueErroredCommands()
+{
+	std::lock_guard lock(mCommandsDirty.mMutex);
+
+	for (auto& bucket : mCommandsDirty.mPrioBuckets)
+	{
+		for (CookingCommandID command_id : bucket.mCommands)
+		{
+			const CookingCommand& command = GetCommand(command_id);
+			CookingState          cooking_state = command.GetCookingState();
+
+			// If the command is in error state, queue it again.
+			if (cooking_state == CookingState::Error)
+				mCommandsToCook.Push(command_id);
+		}
+	}
+}
+
+
 static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStringView& ioOutput)
 {
 	// Create the process for the command line.
