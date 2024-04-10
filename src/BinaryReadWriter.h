@@ -39,7 +39,7 @@ struct BinaryWriter : NoCopy
 
 	void Write(StringView inStr)
 	{
-		Write((uint16)inStr.size());
+		Write((uint32)inStr.size());
 		Write(Span(inStr));
 	}
 
@@ -91,7 +91,7 @@ struct BinaryReader : NoCopy
 	template <size_t taSize>
 	void Read(TempString<taSize>& outStr)
 	{
-		uint16 size = 0;
+		uint32 size = 0;
 		Read(size);
 
 		if (size > outStr.cCapacity - 1)
@@ -111,6 +111,17 @@ struct BinaryReader : NoCopy
 		}
 	}
 
+	[[nodiscard]] StringView Read(StringPool& ioStringPool)
+	{
+		uint32 size = 0;
+		Read(size);
+
+		MutStringView buffer = ioStringPool.Allocate(size);
+		Read(Span(buffer.data(), size));
+
+		return buffer;
+	}
+
 	void Skip(size_t inSizeInBytes)
 	{
 		if (mCurrentOffset + inSizeInBytes > mBuffer.SizeRelaxed())
@@ -120,6 +131,13 @@ struct BinaryReader : NoCopy
 		}
 
 		mCurrentOffset += inSizeInBytes;
+	}
+
+	void SkipString()
+	{
+		uint32 size = 0;
+		Read(size);
+		Skip(size);
 	}
 
 	template <size_t taSize>

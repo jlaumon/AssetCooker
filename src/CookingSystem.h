@@ -276,7 +276,7 @@ struct CookingSystem : NoCopy
 	CookingLogEntry&                      GetLogEntry(CookingLogEntryID inID) { return mCookingLog[inID.mIndex]; }
 
 	CookingRule&                          AddRule() { return mRules.Emplace({}, CookingRuleID{ (int16)mRules.Size() }); }
-	StringPool&                           GetRuleStringPool() { return mRuleStringPool; }
+	StringPool&                           GetStringPool() { return mStringPool; }
 	void                                  CreateCommandsForFile(FileInfo& ioFile);
 
 	const CookingRule*                    FindRule(StringView inRuleName) const;
@@ -321,8 +321,8 @@ private:
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
 	void                                  QueueDirtyCommands();
 
-	VMemArray<CookingRule>                mRules          = { 1024ull * 1024, 4096 };
-	StringPool                            mRuleStringPool = { 64ull * 1024 };
+	VMemArray<CookingRule>                mRules      = { 1024ull * 1024, 4096 };
+	StringPool                            mStringPool = { 64ull * 1024 };
 	VMemArray<CookingCommand>             mCommands;
 
 	SegmentedHashSet<CookingCommandID>    mCommandsQueuedForUpdateDirtyState;

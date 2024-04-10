@@ -1361,8 +1361,6 @@ void FileSystem::RescanLater(FileID inFileID)
 
 
 
-
-
 struct SerializedFileInfo
 {
 	uint32        mPathOffset       = 0;
@@ -1395,7 +1393,7 @@ struct SerializedDepFileHeader
 static_assert(sizeof(SerializedDepFileHeader) == 16);
 
 
-constexpr int        cStateFormatVersion = 3;
+constexpr int        cStateFormatVersion = 5;
 constexpr StringView cCacheFileName      = "cache.bin";
 
 void FileSystem::LoadCache()
@@ -1590,7 +1588,12 @@ void FileSystem::LoadCache()
 		}
 	}
 
-	std::vector<CookingCommandID> errored_commands;
+	struct ErroredCommand
+	{
+		CookingCommandID mCommandID;
+		StringView       mLastCookOutput;
+	};
+	std::vector<ErroredCommand> errored_commands;
 
 	// Read the commands.
 	size_t total_commands = 0;
@@ -1644,10 +1647,17 @@ void FileSystem::LoadCache()
 					command->mLastCookUSN         = (USN)serialized_command.mLastCookUSN;
 					command->mLastCookTime        = serialized_command.mLastCookTime;
 					command->mLastCookRuleVersion = rule_version;
-
-					if (serialized_command.mLastCookIsError)
-						errored_commands.push_back(command->mID);
 				}
+			}
+
+			// If that command had an error, store it because we still want to display the error.
+			if (serialized_command.mLastCookIsError)
+			{
+				// If the rule/command are valid, also read the last cooking log output, otherwise skip it.
+				if (command)
+					errored_commands.push_back({ command->mID, bin.Read(gCookingSystem.GetStringPool()) });
+				else
+					bin.SkipString();
 			}
 
 			if (rule_use_dep_file)
@@ -1691,18 +1701,18 @@ void FileSystem::LoadCache()
 	// Now we need to add a cooking log entry for the errored commands.
 	{
 		// Sort the commands in error by cooking time, so that the log entries are in a sensible order.
-		std::sort(errored_commands.begin(), errored_commands.end(), [](CookingCommandID inA, CookingCommandID inB) {
-			return gCookingSystem.GetCommand(inA).mLastCookTime.mDateTime < gCookingSystem.GetCommand(inB).mLastCookTime.mDateTime;
+		std::sort(errored_commands.begin(), errored_commands.end(), [](const ErroredCommand& inA, const ErroredCommand& inB) {
+			return gCookingSystem.GetCommand(inA.mCommandID).mLastCookTime.mDateTime < gCookingSystem.GetCommand(inB.mCommandID).mLastCookTime.mDateTime;
 		});
 
 		// Add a cooking log for each.
-		for (CookingCommandID command_id : errored_commands)
+		for (auto [command_id, output_log] : errored_commands)
 		{
 			CookingCommand&  command   = gCookingSystem.GetCommand(command_id);
 
 			CookingLogEntry& log_entry = gCookingSystem.AllocateCookingLogEntry(command_id);
 			log_entry.mTimeStart       = command.mLastCookTime;
-			log_entry.mOutput          = "No info recorded.";
+			log_entry.mOutput          = output_log;
 			log_entry.mCookingState    = CookingState::Error;
 
 			command.mLastCookingLog    = &log_entry;
@@ -1871,6 +1881,15 @@ void FileSystem::SaveCache()
 			serialized_command.mLastCookIsError   = (command.mDirtyState & CookingCommand::Error) != 0;
 			serialized_command.mLastCookTime      = command.mLastCookTime;
 			bin.Write(serialized_command);
+
+			// If the command had an error, also write the last cooking log output.
+			if (serialized_command.mLastCookIsError)
+			{
+				if (command.mLastCookingLog)
+					bin.Write(command.mLastCookingLog->mOutput);
+				else
+					bin.Write("No output recorded."); // Can this case happen? Probably not, but better be safe.
+			}
 
 			// Write the dep file data, if needed.
 			if (rule.UseDepFile())
