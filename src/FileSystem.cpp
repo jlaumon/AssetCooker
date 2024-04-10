@@ -1393,7 +1393,7 @@ struct SerializedDepFileHeader
 static_assert(sizeof(SerializedDepFileHeader) == 16);
 
 
-constexpr int        cStateFormatVersion = 5;
+constexpr int        cCacheFormatVersion = 5;
 constexpr StringView cCacheFileName      = "cache.bin";
 
 void FileSystem::LoadCache()
@@ -1425,9 +1425,9 @@ void FileSystem::LoadCache()
 
 	int format_version = -1;
 	bin.Read(format_version);
-	if (format_version != cStateFormatVersion)
+	if (format_version != cCacheFormatVersion)
 	{
-		gApp.Log("Unsupported cached state version, ignoring cache. (Expected: {} Found: {}).", cStateFormatVersion, format_version);
+		gApp.Log("Unsupported cached state version, ignoring cache. (Expected: {} Found: {}).", cCacheFormatVersion, format_version);
 		return;
 	}
 
@@ -1752,7 +1752,7 @@ void FileSystem::SaveCache()
 	BinaryWriter bin;
 
 	bin.WriteLabel("VERSION");
-	bin.Write(cStateFormatVersion);
+	bin.Write(cCacheFormatVersion);
 
 	std::vector<StringView> valid_repos;
 	int total_repo_count = 0;
