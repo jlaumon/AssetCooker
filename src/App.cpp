@@ -18,6 +18,7 @@
 void App::Init()
 {
 	mLog.mAutoAddTime = true;
+	Log("Bonjour.");
 
 	// The application includes a manifest that should make the default code page be UTF8 (if at least Windows 10 1903).
 	// This in turn should mean that most ANSI win32 functions actually support UTF8.
@@ -47,6 +48,7 @@ void App::Exit()
 {
 	gWriteUserPreferencesFile(mUserPrefsFilePath);
 
+	Log("Au revoir.");
 	CloseLogFile();
 }
 
