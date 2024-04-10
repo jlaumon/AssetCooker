@@ -22,7 +22,7 @@ struct FileSystem;
 struct _FILE_ID_128;
 using USN = int64;
 
-constexpr USN cMaxUSN = 9223372036854775807;
+constexpr USN cMaxUSN = INT64_MAX;
 
 static constexpr int cFileRepoIndexBits = 6;
 static constexpr int cFileIndexBits     = 26;
@@ -96,11 +96,6 @@ struct Hash128
 	constexpr auto operator<=>(const Hash128&) const = default;
 };
 
-
-// Hash the absolute path of a file in a case insensitive manner.
-Hash128 gHashPath(StringView inAbsolutePath);
-
-
 template <> struct ankerl::unordered_dense::hash<Hash128>
 {
 	using is_avalanching = void; // mark class as high quality avalanching hash
@@ -108,6 +103,14 @@ template <> struct ankerl::unordered_dense::hash<Hash128>
 	// Hash128 is already a good quality hash, just return the lower 8 bytes.
     uint64 operator()(const Hash128& inValue) const noexcept { return inValue.mData[0]; }
 };
+
+
+// Hash type specific to paths.
+struct PathHash : Hash128 {};
+template <> struct ankerl::unordered_dense::hash<PathHash> : public ankerl::unordered_dense::hash<Hash128> {};
+
+// Hash the absolute path of a file in a case insensitive manner.
+PathHash gHashPath(StringView inAbsolutePath);
 
 
 // Identifier for a file. 4 bytes.
@@ -252,15 +255,15 @@ struct FileRepo : NoCopy
 	};
 	void                ScanFile(FileInfo& ioFile, RequestedAttributes inRequestedAttributes);
 
-	uint32              mIndex = 0;  // The index of this repo.
-	StringView          mName;       // A named used to identify the repo.
-	StringView          mRootPath;   // Absolute path to the repo. Starts with the drive letter, ends with a slash.
-	FileDrive&          mDrive;      // The drive this repo is on.
-	FileID              mRootDirID;  // The FileID of the root dir.
+	uint32              mIndex = 0;    // The index of this repo.
+	StringView          mName;         // A named used to identify the repo.
+	StringView          mRootPath;     // Absolute path to the repo. Starts with the drive letter, ends with a slash.
+	FileDrive&          mDrive;        // The drive this repo is on.
+	FileID              mRootDirID;    // The FileID of the root dir.
 
-	VMemArray<FileInfo> mFiles;      // All the files in this repo.
+	VMemArray<FileInfo> mFiles;        // All the files in this repo.
 
-	StringPool          mStringPool; // Pool for storing all the paths.
+	StringPool          mStringPool;   // Pool for storing all the paths.
 };
 
 
@@ -286,13 +289,11 @@ struct FileDrive : NoCopy
 	USN                    mNextUSN      = 0;
 	bool                   mLoadedFromCache = false;
 	std::vector<FileRepo*> mRepos;
-	
-	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
-	using FilesByPathHash = SegmentedHashMap<Hash128, FileID>;
 
-	FilesByRefNumberMap        mFilesByRefNumber; // Map to find files by ref number.
-	FilesByPathHash            mFilesByPathHash;  // Map to find files by path hash.
-	mutable std::mutex         mFilesMutex;       // Mutex to protect access to the maps.
+	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
+
+	FilesByRefNumberMap    mFilesByRefNumber;      // Map to find files by ref number.
+	mutable std::mutex     mFilesByRefNumberMutex; // Mutex to protect access to the map.
 };
 
 
@@ -310,15 +311,17 @@ struct FileSystem : NoCopy
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
 
-	FileRepo*       FindRepo(StringView inRepoName);               // Return nullptr if not found.
-	FileRepo*       FindRepoFromPath(StringView inAbsolutePath);   // Return nullptr if not found.
-	FileDrive*      FindDrive(char inLetter);                      // Return nullptr if not found.
+	FileRepo*       FindRepo(StringView inRepoName);                   // Find a repo by name. Return nullptr if not found.
+	FileRepo*       FindRepoByPath(StringView inAbsolutePath);         // Find a repo by path. The path can be of a file inside the repo. Return nullptr if not found.
+	FileDrive*      FindDrive(char inLetter);                          // Find a drive by its letter. Return nullptr if not found.
+	FileID          FindFileIDByPath(StringView inAbsolutePath) const; // Find a file by its full path. Return invalid FileID if not found.
+	FileID          FindFileIDByPathHash(PathHash inPathHash) const;   // Find a file by the hash of its full path. See gHashPath(). Return invalid FileID if not found.
 
-	bool            CreateDirectory(FileID inFileID);              // Make sure all the parent directories for this file exist.
-	bool            DeleteFile(FileID inFileID);                   // Delete this file on disk.
+	bool            CreateDirectory(FileID inFileID);                  // Make sure all the parent directories for this file exist.
+	bool            DeleteFile(FileID inFileID);                       // Delete this file on disk.
 
-	size_t          GetRepoCount() const { return mRepos.Size(); } // Number of repos, for debug/display.
-	size_t          GetFileCount() const;                          // Total number of files, for debug/display.
+	size_t          GetRepoCount() const { return mRepos.Size(); }     // Number of repos, for debug/display.
+	size_t          GetFileCount() const;                              // Total number of files, for debug/display.
 
 	void			KickMonitorDirectoryThread();
 
@@ -377,6 +380,10 @@ private:
 
 	Queue<FileToRescan> mFilesToRescan;
 	std::mutex          mFilesToRescanMutex;
+
+	using FilesByPathHash = SegmentedHashMap<PathHash, FileID>;
+	FilesByPathHash     mFilesByPathHash;      // Map to find files by path hash.
+	mutable std::mutex  mFilesByPathHashMutex; // Mutex to protect access to the map.
 };
 
 

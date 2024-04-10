@@ -60,7 +60,7 @@ struct InputFilter
 	std::vector<StringView> mNamePrefixes;
 	std::vector<StringView> mNameSuffixes;
 
-	bool       Pass(const FileInfo& inFile) const;
+	bool                    Pass(const FileInfo& inFile) const;
 };
 
 
@@ -87,6 +87,8 @@ constexpr StringView gToStringView(DepFileFormat inVar)
 
 struct CookingRule : NoCopy
 {
+	static constexpr uint16  cInvalidVersion = UINT16_MAX;
+
 	CookingRule(CookingRuleID inID) : mID(inID) {}
 
 	const CookingRuleID      mID;
@@ -158,20 +160,23 @@ struct CookingCommand : NoCopy
 	enum DirtyState : uint8
 	{
 		NotDirty          = 0,
-		InputMissing      = 0b000001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
-		InputChanged      = 0b000010,
-		OutputMissing     = 0b000100,
-		AllInputsMissing  = 0b001000, // Command needs to be cleaned up.
-		AllOutputsMissing = 0b010000,
-		Error             = 0b100000, // Last cook errored.
+		InputMissing      = 0b0000001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
+		InputChanged      = 0b0000010,
+		OutputMissing     = 0b0000100,
+		AllInputsMissing  = 0b0001000, // Command needs to be cleaned up.
+		AllOutputsMissing = 0b0010000,
+		Error             = 0b0100000, // Last cook errored.
+		VersionMismatch   = 0b1000000, // Rule version changed.
 	};
 
 	// TODO should also store last cook time here, so we can save it in the cached state (currently it's only in the log entries)
-	DirtyState                      mDirtyState      = NotDirty;
-	bool                            mIsQueued        = false;
-	USN                             mLastDepFileRead = 0;
-	USN                             mLastCook        = 0;
-	CookingLogEntry*                mLastCookingLog  = nullptr;
+	DirtyState                      mDirtyState          = NotDirty;
+	bool                            mIsQueued            = false;
+	uint16                          mLastCookRuleVersion = CookingRule::cInvalidVersion;
+	USN                             mLastDepFileRead     = 0;
+	USN                             mLastCookUSN         = 0;
+	FileTime                        mLastCookTime        = {};
+	CookingLogEntry*                mLastCookingLog      = nullptr;
 
 	void                            UpdateDirtyState();
 	bool                            IsDirty() const { return mDirtyState != NotDirty && !IsCleanedUp(); }
@@ -270,9 +275,14 @@ struct CookingSystem : NoCopy
 	CookingCommand&                       GetCommand(CookingCommandID inID) { return mCommands[inID.mIndex]; }
 	CookingLogEntry&                      GetLogEntry(CookingLogEntryID inID) { return mCookingLog[inID.mIndex]; }
 
-	CookingRule&                          AddRule() { return mRules.emplace_back(CookingRuleID{ (int16)mRules.size() }); }
+	CookingRule&                          AddRule() { return mRules.Emplace({}, CookingRuleID{ (int16)mRules.Size() }); }
 	StringPool&                           GetRuleStringPool() { return mRuleStringPool; }
 	void                                  CreateCommandsForFile(FileInfo& ioFile);
+
+	const CookingRule*                    FindRule(StringView inRuleName) const;
+	CookingCommand*                       FindCommandByMainInput(CookingRuleID inRule, FileID inFileID);
+	Span<const CookingRule>               GetRules() const { return { mRules }; }
+	Span<const CookingCommand>            GetCommands() const { return { mCommands }; }
 
 	bool                                  ValidateRules(); // Return false if problems were found (see log).
 	void                                  StartCooking();
@@ -310,7 +320,7 @@ private:
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
 	void                                  QueueDirtyCommands();
 
-	SegmentedVector<CookingRule, 256>     mRules;
+	VMemArray<CookingRule>                mRules          = { 1024ull * 1024, 4096 };
 	StringPool                            mRuleStringPool = { 64ull * 1024 };
 	VMemArray<CookingCommand>             mCommands;
 

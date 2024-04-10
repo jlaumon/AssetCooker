@@ -85,7 +85,7 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 		TempPath abs_path = gGetAbsolutePath(path);
 
 		// Find the repo.
-		FileRepo* repo = gFileSystem.FindRepoFromPath(abs_path);
+		FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
 		if (repo == nullptr)
 		{
 			gApp.LogError(R"(Failed to parse Dep File {}, path doesn't belong in any Repo ("{}"))", inDepFileID.GetFile(), abs_path);
@@ -134,4 +134,50 @@ bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, std::vector<FileID
 		// Unsupported.
 		return false;
 	}
+}
+
+
+void gApplyDepFileContent(CookingCommand& ioCommand, Span<FileID> inDepFileInputs, Span<FileID> inDepFileOutputs)
+{
+	// Update the mInputOf fields.
+	{
+		HashSet<FileID> old_dep_file_inputs = gToHashSet(Span(ioCommand.mDepFileInputs));
+		HashSet<FileID> new_dep_file_inputs = gToHashSet(Span(inDepFileInputs));
+
+		// If there are new inputs, let them know about this command.
+		for (FileID input : inDepFileInputs)
+			if (!old_dep_file_inputs.contains(input) && !gContains(ioCommand.mInputs, input))
+				input.GetFile().mInputOf.push_back(ioCommand.mID);
+
+		// If some inputs disappeared, remove this command from them.
+		for (FileID old_input : old_dep_file_inputs)
+			if (!new_dep_file_inputs.contains(old_input) && !gContains(ioCommand.mInputs, old_input))
+			{
+				bool found = gSwapEraseFirstIf(old_input.GetFile().mInputOf, [&ioCommand](CookingCommandID inID) { return inID == ioCommand.mID; });
+				gAssert(found);
+			}
+	}
+
+	// Update the mOutputOf fields.
+	{
+		HashSet<FileID> old_dep_file_outputs = gToHashSet(Span(ioCommand.mDepFileOutputs));
+		HashSet<FileID> new_dep_file_outputs = gToHashSet(Span(inDepFileOutputs));
+
+		// If there are new outputs, let them know about this command.
+		for (FileID output : inDepFileOutputs)
+			if (!old_dep_file_outputs.contains(output) && !gContains(ioCommand.mOutputs, output))
+				output.GetFile().mOutputOf.push_back(ioCommand.mID);
+
+		// If some outputs disappeared, remove this command from them.
+		for (FileID old_output : old_dep_file_outputs)
+			if (!new_dep_file_outputs.contains(old_output) && !gContains(ioCommand.mOutputs, old_output))
+			{
+				bool found = gSwapEraseFirstIf(old_output.GetFile().mOutputOf, [&ioCommand](CookingCommandID inID) { return inID == ioCommand.mID; });
+				gAssert(found);
+			}
+	}
+
+	// Update the DepFile input/output lists.
+	ioCommand.mDepFileInputs.assign(inDepFileInputs.begin(), inDepFileInputs.end());
+	ioCommand.mDepFileOutputs.assign(inDepFileOutputs.begin(), inDepFileOutputs.end());
 }

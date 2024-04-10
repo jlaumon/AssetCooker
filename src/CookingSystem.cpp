@@ -303,7 +303,7 @@ void CookingCommand::UpdateDirtyState()
 			USN max_input_usn = 0;
 			for (FileID input_id : GetAllInputs())
 				max_input_usn = gMax(max_input_usn, input_id.GetFile().mLastChangeUSN);
-			mLastCook = max_input_usn;
+			mLastCookUSN = max_input_usn;
 		}
 		else
 		{
@@ -311,7 +311,11 @@ void CookingCommand::UpdateDirtyState()
 		}
 	}
 
-	USN last_cook = mLastCook;
+	// If the rule version changed since the last time this command was cooked, it needs to cook again.
+	if (mLastCookRuleVersion != GetRule().mVersion)
+		dirty_state |= VersionMismatch;
+
+	USN last_cook = mLastCookUSN;
 
 	// If we don't have a last cook USN, estimate one.
 	// Normally this should be stored in the cached state and read on start up,
@@ -358,7 +362,7 @@ void CookingCommand::UpdateDirtyState()
 			all_output_missing = false;
 
 		// TODO this comparison does not work if multiple drives are involved, we can only compare USNs from the same journal
-		if (file.mLastChangeUSN < mLastCook)
+		if (file.mLastChangeUSN < mLastCookUSN)
 			all_output_written = false;
 	}
 	
@@ -432,64 +436,25 @@ bool CookingCommand::ReadDepFile()
 	// Update the USN of the last time we read the dep file.
 	mLastDepFileRead = dep_file.mLastChangeUSN;
 
-	// If the file is deleted, don't actually try to read it.
-	if (dep_file.IsDeleted())
-	{
-		mDepFileInputs.clear();
-		mDepFileOutputs.clear();
-		return true;
-	}
-
 	std::vector<FileID> inputs, outputs;
-	if (!gReadDepFile(GetRule().mDepFileFormat, GetDepFile(), inputs, outputs))
-	{
-		// TODO fixme this should set the command that CREATES the dep file to error, which is not necessarily this one
-		// If the command was cooking, set its state to error.
-		if (mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting)
-			mLastCookingLog->mCookingState = CookingState::Error;
 
-		// Return failure.
-		return false;
+	// If the file is deleted, don't actually try to read it.
+	if (!dep_file.IsDeleted())
+	{
+		// Read the dep file.
+		if (!gReadDepFile(GetRule().mDepFileFormat, GetDepFile(), inputs, outputs))
+		{
+			// If the command was cooking, set its state to error.
+			if (mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting)
+				mLastCookingLog->mCookingState = CookingState::Error;
+
+			// Return failure.
+			return false;
+		}
 	}
 
-	{
-		HashSet<FileID> old_dep_file_inputs = gToHashSet(Span(mDepFileInputs));
-		HashSet<FileID> new_dep_file_inputs = gToHashSet(Span(inputs));
-
-		// If there are new inputs, let them know about this command.
-		for (FileID input : inputs)
-			if (!old_dep_file_inputs.contains(input) && !gContains(mInputs, input))
-				input.GetFile().mInputOf.push_back(mID);
-
-		// If some inputs disappeared, remove this command from them.
-		for (FileID old_input : old_dep_file_inputs)
-			if (!new_dep_file_inputs.contains(old_input) && !gContains(mInputs, old_input))
-			{
-				bool found = gSwapEraseFirstIf(old_input.GetFile().mInputOf, [this](CookingCommandID inID) { return inID == mID; });
-				gAssert(found);
-			}
-	}
-
-	{
-		HashSet<FileID> old_dep_file_outputs = gToHashSet(Span(mDepFileOutputs));
-		HashSet<FileID> new_dep_file_outputs = gToHashSet(Span(outputs));
-
-		// If there are new outputs, let them know about this command.
-		for (FileID output : outputs)
-			if (!old_dep_file_outputs.contains(output) && !gContains(mOutputs, output))
-				output.GetFile().mOutputOf.push_back(mID);
-
-		// If some outputs disappeared, remove this command from them.
-		for (FileID old_output : old_dep_file_outputs)
-			if (!new_dep_file_outputs.contains(old_output) && !gContains(mOutputs, old_output))
-			{
-				bool found = gSwapEraseFirstIf(old_output.GetFile().mOutputOf, [this](CookingCommandID inID) { return inID == mID; });
-				gAssert(found);
-			}
-	}
-
-	mDepFileInputs = std::move(inputs);
-	mDepFileOutputs = std::move(outputs);
+	// Update this command with the new list of input/output.
+	gApplyDepFileContent(*this, inputs, outputs);
 
 	return true;
 }
@@ -852,14 +817,40 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 }
 
 
+const CookingRule* CookingSystem::FindRule(StringView inRuleName) const
+{
+	for (const CookingRule& rule : mRules)
+		if (gIsEqual(rule.mName, inRuleName))
+			return &rule;
+
+	return nullptr;
+}
+
+
+CookingCommand* CookingSystem::FindCommandByMainInput(CookingRuleID inRule, FileID inFileID)
+{
+	const FileInfo& file = inFileID.GetFile();
+	for (CookingCommandID command_id : file.mInputOf)
+	{
+		CookingCommand& command = GetCommand(command_id);
+
+		if (command.mRuleID == inRule && command.GetMainInput() == inFileID)
+			return &command;
+	}
+
+	return nullptr;
+}
+
+
 bool CookingSystem::ValidateRules()
 {
 	HashSet<StringView> all_names;
 	int                 errors = 0;
+	Span                rules  = GetRules();
 
-	for (size_t rule_index = 0; rule_index < mRules.size(); ++rule_index)
+	for (size_t rule_index = 0; rule_index < rules.size(); ++rule_index)
 	{
-		const CookingRule& rule = mRules[rule_index];
+		const CookingRule& rule = rules[rule_index];
 
 		// Validate the name.
 		if (!rule.mName.empty())
@@ -875,6 +866,13 @@ bool CookingSystem::ValidateRules()
 		{
 			errors++;
 			gApp.LogError(R"(Rule[{}] has no name)", rule_index);
+		}
+
+		// Validate the version.
+		if (rule.mVersion == CookingRule::cInvalidVersion)
+		{
+			errors++;
+			gApp.LogError(R"(Rule {}, Version {} is a reserved value to indicate an invalid version.)", rule.mName, rule.mVersion);
 		}
 
 		// Validate the input filters.
@@ -1059,6 +1057,7 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 
 	// Get the output.
 	// TODO: use the async API to get the output before the process is finished? but may need an extra thread to read stderr
+	// TODO: optionally skip getting the output?
 	{
 		FILE* p_stdout = subprocess_stdout(&process);
 		char  buffer[16384];
@@ -1112,7 +1111,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	// Set the log entry on the command.
 	ioCommand.mLastCookingLog = &log_entry;
 
-	const CookingRule& rule    = gCookingSystem.GetRule(ioCommand.mRuleID);
+	const CookingRule& rule    = ioCommand.GetRule();
 
 	// Update the last cook USN (used later know if this command needs to cook again).
 	// Note: when there's a DepFile, we don't know the full list of inputs before reading it, so it will be done later, after reading it.
@@ -1125,8 +1124,14 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 			max_input_usn = gMax(max_input_usn, input_id.GetFile().mLastChangeUSN);
 		
 		// Set the inputs USN on the command.
-		ioCommand.mLastCook = max_input_usn;
+		ioCommand.mLastCookUSN = max_input_usn;
 	}
+
+	// Update the last cook time.
+	ioCommand.mLastCookTime = log_entry.mTimeStart;
+
+	// Update the last cook version.
+	ioCommand.mLastCookRuleVersion = rule.mVersion;
 
 	defer
 	{
@@ -1228,7 +1233,11 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		
 		success = sRunCommandLine(*dep_command_line, output_str);
 	}
-	
+
+	// Set the end time and add the duration at the end of the log.
+	log_entry.mTimeEnd = gGetSystemTimeAsFileTime();
+	output_str.AppendFormat("\nDuration: {:.3f} seconds\n", (double)(log_entry.mTimeEnd - log_entry.mTimeStart) / 1'000'000'000.0);
+
 	// Store the log output.
 	log_entry.mOutput = output_str.AsStringView();
 
@@ -1238,9 +1247,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	}
 	else
 	{
-		// Set the end time and add the duration at the end of the log.
-		log_entry.mTimeEnd = gGetSystemTimeAsFileTime();
-		output_str.AppendFormat("\nDuration: {:.3f} seconds\n", (double)(log_entry.mTimeEnd - log_entry.mTimeStart) / 1'000'000'000.0);
 
 		// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
 		log_entry.mCookingState = CookingState::Waiting;

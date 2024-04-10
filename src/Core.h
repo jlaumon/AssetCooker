@@ -7,7 +7,7 @@
 #ifdef ASSERTS_ENABLED
 #define gAssert(condition) do { if (!(condition)) breakpoint; } while(0)
 #else
-#define gAssert(condition) do { (void)sizeof(condition); } while(0)
+#define gAssert(condition) do { (void)sizeof(!(condition)); } while(0)
 #endif
 
 // Preprocessor utilities.

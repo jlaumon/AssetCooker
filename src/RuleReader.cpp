@@ -81,7 +81,7 @@ void gReadRuleFile(StringView inPath)
 
 		reader.Read        ("CommandLine",		rule.mCommandLine);
 		reader.TryRead     ("Priority",			rule.mPriority);
-		reader.TryRead     ("Vresion",			rule.mVersion);
+		reader.TryRead     ("Version",			rule.mVersion);
 		reader.TryRead     ("MatchMoreRules",	rule.mMatchMoreRules);
 		reader.TryReadArray("InputPaths",		rule.mInputPaths);
 		reader.TryReadArray("OutputPaths",		rule.mOutputPaths);

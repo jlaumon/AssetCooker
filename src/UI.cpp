@@ -300,7 +300,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 	{
 		file_state = Deleted;
 	}
-	else
+	else if (inContext.mLastCook != 0) // Zero means we have no info.
 	{
 		switch (inContext.mDepType)
 		{
@@ -466,6 +466,8 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 				TempString256 dirty_details("Dirty (");
 				if (inCommand.mDirtyState & CookingCommand::Error)
 					dirty_details.Append("Error|");
+				if (inCommand.mDirtyState & CookingCommand::VersionMismatch)
+					dirty_details.Append("Version Mismatch|");
 				if (inCommand.mDirtyState & CookingCommand::InputMissing)
 					dirty_details.Append("Input Missing|");
 				if (inCommand.mDirtyState & CookingCommand::InputChanged)
@@ -487,7 +489,13 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook");
 		ImGui::TableNextColumn();
 		{
-			ImGui::TextUnformatted(TempString64("{}", (inCommand.mDirtyState & CookingCommand::Error) ? "Error" : "Success"));
+			StringView last_cook_status = "Unknown";
+			if (inCommand.mDirtyState & CookingCommand::Error)
+				last_cook_status = "Error";
+			else if (inCommand.mLastCookingLog != nullptr)
+				last_cook_status = "Success";
+
+			ImGui::TextUnformatted(last_cook_status);
 			if (inCommand.mLastCookingLog)
 			{
 				ImGui::SameLine();
@@ -498,25 +506,25 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook Time");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCookingLog ? inCommand.mLastCookingLog->mTimeStart : FileTime::cInvalid()));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCookTime));
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook USN");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCook));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCookUSN));
 		
 		ImGui::EndTable();
 	}
 
 	ImGui::SeparatorText("Related Files");
 
-	gDrawFileInfoSpan("Inputs", inCommand.mInputs, { DependencyType::Input, inCommand.mLastCook });
+	gDrawFileInfoSpan("Inputs", inCommand.mInputs, { DependencyType::Input, inCommand.mLastCookUSN });
 	
 	if (!inCommand.mDepFileInputs.empty())
-		gDrawFileInfoSpan("DepFile Inputs", inCommand.mDepFileInputs, { DependencyType::Input, inCommand.mLastCook });
+		gDrawFileInfoSpan("DepFile Inputs", inCommand.mDepFileInputs, { DependencyType::Input, inCommand.mLastCookUSN });
 
-	gDrawFileInfoSpan("Outputs", inCommand.mOutputs, { DependencyType::Output, inCommand.mLastCook });
+	gDrawFileInfoSpan("Outputs", inCommand.mOutputs, { DependencyType::Output, inCommand.mLastCookUSN });
 
 	if (!inCommand.mDepFileOutputs.empty())
-		gDrawFileInfoSpan("DepFile Outputs", inCommand.mDepFileOutputs, { DependencyType::Output, inCommand.mLastCook });
+		gDrawFileInfoSpan("DepFile Outputs", inCommand.mDepFileOutputs, { DependencyType::Output, inCommand.mLastCookUSN });
 
 	ImGui::PopStyleVar();
 }
@@ -1033,15 +1041,16 @@ void gDrawDebugWindow()
 	ImGui::Checkbox("Cause random Cooking errors", &gDebugFailCookingRandomly);
 	ImGui::Checkbox("Cause random FileSystem errors", &gDebugFailOpenFileRandomly);
 
-	if (ImGui::CollapsingHeader(TempString64("Rules ({})##Rules", gCookingSystem.mRules.size()).AsCStr()))
+	Span rules = gCookingSystem.GetRules();
+	if (ImGui::CollapsingHeader(TempString64("Rules ({})##Rules", rules.size()).AsCStr()))
 	{
 		ImGuiListClipper clipper;
-		clipper.Begin((int)gCookingSystem.mRules.size());
+		clipper.Begin((int)rules.size());
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 			{
-				const CookingRule& rule = gCookingSystem.mRules[i];
+				const CookingRule& rule = rules[i];
 				ImGui::TextUnformatted(rule.mName);
 				// TODO add a gDrawCookingRule
 			}

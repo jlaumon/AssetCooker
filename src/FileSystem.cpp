@@ -3,7 +3,9 @@
 #include "Debug.h"
 #include "Ticks.h"
 #include "CookingSystem.h"
-#include "lz4.h"
+#include "DepFile.h"
+#include "BinaryReadWriter.h"
+#include "Strings.h"
 
 #include "win32/misc.h"
 #include "win32/file.h"
@@ -30,7 +32,7 @@ using PathBufferUTF8  = std::array<char, cWin32MaxPathSizeUTF8>;
 // That's used to get a unique identifier for the file even if the file itself doesn't exist.
 // The hash is 128 bits, assume no collision.
 // Clearly not the most efficient implementation, but good enough for now.
-Hash128 gHashPath(StringView inAbsolutePath)
+PathHash gHashPath(StringView inAbsolutePath)
 {
 	// Make sure it's normalized, absolute, and doesn't contain any relative components.
 	gAssert(gIsNormalized(inAbsolutePath));
@@ -55,7 +57,7 @@ Hash128 gHashPath(StringView inAbsolutePath)
 	XXH128_hash_t hash_xx = XXH3_128bits(uppercase_wpath.data(), uppercase_wpath.size() * sizeof(uppercase_wpath[0]));
 
 	// Convert to our hash wrapper.
-	Hash128       path_hash;
+	PathHash      path_hash;
 	static_assert(sizeof(path_hash.mData) == sizeof(hash_xx));
 	memcpy(path_hash.mData, &hash_xx, sizeof(path_hash.mData));
 
@@ -172,21 +174,24 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 	gNormalizePath(path.AsSpan());
 
 	// Calculate the case insensitive path hash that will be used to identify the file.
-	Hash128   path_hash = gHashPath(TempPath("{}{}", mRootPath, path));
+	PathHash  path_hash = gHashPath(TempPath("{}{}", mRootPath, path));
 
 	FileInfo* file      = nullptr;
 
 	{
-		// TODO: not great to access these internals, maybe find a better way?
-		std::unique_lock lock(mDrive.mFilesMutex);
+		// Lock during the entire operation because we need to reserve a file ID.
+		auto files_lock = mFiles.Lock();
 
 		// Prepare a new FileID in case this file wasn't already added.
-		FileID           new_file_id = { mIndex, (uint32)mFiles.Size() };
+		FileID           new_file_id = { mIndex, (uint32)mFiles.SizeRelaxed() };
 		FileID           actual_file_id;
 
 		// Try to insert it to the path hash map.
 		{
-			auto [it, inserted] = mDrive.mFilesByPathHash.insert({ path_hash, new_file_id });
+			// TODO: not great to access these internals, maybe find a better way?
+			std::unique_lock map_lock(gFileSystem.mFilesByPathHashMutex);
+
+			auto [it, inserted] = gFileSystem.mFilesByPathHash.insert({ path_hash, new_file_id });
 			if (!inserted)
 			{
 				actual_file_id = it->second;
@@ -214,6 +219,9 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		// Update the ref number hash map.
 		if (inRefNumber.IsValid())
 		{
+			// TODO: not great to access these internals, maybe find a better way?
+			std::unique_lock map_lock(mDrive.mFilesByRefNumberMutex);
+
 			auto [it, inserted] = mDrive.mFilesByRefNumber.insert({ inRefNumber, actual_file_id });
 			if (!inserted)
 			{
@@ -229,7 +237,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 						previous_file_id.GetRepo().mRootPath, previous_file_id.GetFile().mPath);
 
 					// Mark the old file as deleted, and add the new one instead.
-					MarkFileDeleted(GetFile(previous_file_id), {}, lock);
+					MarkFileDeleted(GetFile(previous_file_id), {}, map_lock);
 				}
 			}
 		}
@@ -238,7 +246,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		if (actual_file_id == new_file_id)
 		{
 			// The file wasn't already known, add it to the list.
-			file = &mFiles.Emplace({}, new_file_id, gNormalizePath(mStringPool.AllocateCopy(path)), path_hash, inType, inRefNumber);
+			file = &mFiles.Emplace(files_lock, new_file_id, gNormalizePath(mStringPool.AllocateCopy(path)), path_hash, inType, inRefNumber);
 		}
 		else
 		{
@@ -267,14 +275,14 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp)
 {
 	// TODO: not great to access these internals, maybe find a better way?
-	std::unique_lock lock(mDrive.mFilesMutex);
+	std::unique_lock lock(mDrive.mFilesByRefNumberMutex);
 
 	MarkFileDeleted(ioFile, inTimeStamp, lock);
 }
 
 void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std::unique_lock<std::mutex>& inLock)
 {
-	gAssert(inLock.mutex() == &mDrive.mFilesMutex);
+	gAssert(inLock.mutex() == &mDrive.mFilesByRefNumberMutex);
 
 	mDrive.mFilesByRefNumber.erase(ioFile.mRefNumber);
 	ioFile.mRefNumber      = FileRefNumber::cInvalid();
@@ -825,6 +833,16 @@ FileRepo* FileDrive::FindRepoForPath(StringView inFullPath)
 }
 
 
+FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
+{
+	std::lock_guard lock(mFilesByRefNumberMutex);
+
+	auto it = mFilesByRefNumber.find(inRefNumber);
+	if (it != mFilesByRefNumber.end())
+		return it->second;
+
+	return {};
+}
 
 
 void FileSystem::StartMonitoring()
@@ -832,6 +850,7 @@ void FileSystem::StartMonitoring()
 	// Start the directory monitor thread.
 	mMonitorDirThread = std::jthread(std::bind_front(&FileSystem::MonitorDirectoryThread, this));
 }
+
 
 void FileSystem::StopMonitoring()
 {
@@ -857,7 +876,7 @@ FileRepo* FileSystem::FindRepo(StringView inRepoName)
 }
 
 
-FileRepo* FileSystem::FindRepoFromPath(StringView inAbsolutePath)
+FileRepo* FileSystem::FindRepoByPath(StringView inAbsolutePath)
 {
 	for (FileRepo& repo : mRepos)
 		if (gStartsWithNoCase(inAbsolutePath, repo.mRootPath))
@@ -877,17 +896,22 @@ FileDrive* FileSystem::FindDrive(char inLetter)
 }
 
 
-FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
+FileID FileSystem::FindFileIDByPath(StringView inAbsolutePath) const
 {
-	std::lock_guard lock(mFilesMutex);
+	return FindFileIDByPathHash(gHashPath(inAbsolutePath));
+}
 
-	auto it = mFilesByRefNumber.find(inRefNumber);
-	if (it != mFilesByRefNumber.end())
+
+FileID FileSystem::FindFileIDByPathHash(PathHash inPathHash) const
+{
+	std::lock_guard lock(mFilesByPathHashMutex);
+
+	auto it = mFilesByPathHash.find(inPathHash);
+	if (it != mFilesByPathHash.end())
 		return it->second;
 
 	return {};
 }
-
 
 void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 {
@@ -1181,6 +1205,7 @@ void FileSystem::KickMonitorDirectoryThread()
 }
 
 
+// TODO this is doing a bit more than monitoring the filesystem, give it a more general name and move to app?
 void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 {
 	gSetCurrentThreadName(L"Monitor Directory Thread");
@@ -1334,196 +1359,6 @@ void FileSystem::RescanLater(FileID inFileID)
 }
 
 
-// Helper class to write a binary file.
-struct BinaryWriter : NoCopy
-{
-	BinaryWriter()
-	{
-		// Lock once to avoid the overhead of locking many times.
-		// TODO make the mutex a template param to have a dummy one when not needed?
-		mBufferLock = mBuffer.Lock();
-	}
-
-	// Write the internal buffer to this file.
-	bool WriteFile(FILE* ioFile)
-	{
-		// Compress the data with LZ4.
-		// LZ4HC gives a slightly better ratio but is 10 times as slow, so not worth it here.
-		int    uncompressed_size   = (int)mBuffer.SizeRelaxed();
-		int    compressed_size_max = LZ4_compressBound(uncompressed_size);
-		char*  compressed_buffer   = (char*)malloc(compressed_size_max);
-		int    compressed_size     = LZ4_compress_default((const char*)mBuffer.Begin(), compressed_buffer, uncompressed_size, compressed_size_max);
-
-		defer { free(compressed_buffer); };
-
-		// Write the uncompressed size first, we'll need it to decompress.
-		if (fwrite(&uncompressed_size, sizeof(uncompressed_size), 1, ioFile) != 1)
-			return false;
-
-		// Write the compressed data.
-		int written_size = fwrite(compressed_buffer, 1, compressed_size, ioFile);
-		return written_size == compressed_size;
-	}
-
-	template <typename taType>
-	void Write(Span<const taType> inSpan)
-	{
-		static_assert(std::has_unique_object_representations_v<taType>); // Don't write padding into the file.
-
-		size_t size_bytes = inSpan.size_bytes();
-
-		Span dest = mBuffer.EnsureCapacity(size_bytes, mBufferLock);
-		memcpy(dest.data(), inSpan.data(), size_bytes);
-		mBuffer.IncreaseSize(size_bytes, mBufferLock);
-	}
-
-	template <typename taType>
-	void Write(const taType& inValue)
-	{
-		Write(Span(&inValue, 1));
-	}
-
-	void Write(StringView inStr)
-	{
-		Write((uint16)inStr.size());
-		Write(Span(inStr));
-	}
-
-	void WriteLabel(Span<const char> inLabel)
-	{
-		// Don't write the null terminator, we don't need it/don't read it back.
-		Write(inLabel.subspan(0, inLabel.size() - 1));
-	}
-
-	VMemArray<uint8> mBuffer = { 1'000'000'000, 256ull * 1024 };
-	VMemArrayLock    mBufferLock;
-};
-
-
-// Helper class to read a binary file.
-struct BinaryReader : NoCopy
-{
-	BinaryReader()
-	{
-		// Lock once to avoid the overhead of locking many times.
-		// TODO make the mutex a template param to have a dummy one when not needed?
-		mBufferLock = mBuffer.Lock();
-	}
-
-	// Read the entire file into the internal buffer.
-	bool ReadFile(FILE* inFile)
-	{
-		if (fseek(inFile, 0, SEEK_END) != 0)
-			return false;
-
-		int file_size = ftell(inFile);
-		if (file_size == -1)
-			return false;
-
-		if (fseek(inFile, 0, SEEK_SET) != 0)
-			return false;
-
-		// First read the uncompressed size.
-		int uncompressed_size = 0;
-		if (fread(&uncompressed_size, sizeof(uncompressed_size), 1, inFile) != 1)
-			return false;
-
-		// Then read the compressed data.
-		int   compressed_size   = file_size - (int)sizeof(uncompressed_size);
-		char* compressed_buffer = (char*)malloc(compressed_size);
-		defer { free(compressed_buffer); };
-
-		if (fread(compressed_buffer, 1, compressed_size, inFile) != compressed_size)
-			return false;
-
-		Span uncompressed_buffer = mBuffer.EnsureCapacity(uncompressed_size, mBufferLock);
-
-		// Decompress the data.
-		int actual_uncompressed_size = LZ4_decompress_safe(compressed_buffer, (char*)uncompressed_buffer.data(), compressed_size, uncompressed_buffer.size());
-		gAssert(actual_uncompressed_size == uncompressed_size);
-
-		mBuffer.IncreaseSize(uncompressed_size, mBufferLock);
-
-		return true;
-	}
-
-	template <typename taType>
-	void Read(Span<taType> outSpan)
-	{
-		if (mCurrentOffset + outSpan.size_bytes() > mBuffer.SizeRelaxed())
-		{
-			mError = true;
-			return;
-		}
-
-		memcpy(outSpan.data(), mBuffer.Begin() + mCurrentOffset, outSpan.size_bytes());
-		mCurrentOffset += outSpan.size_bytes();
-	}
-
-	template <typename taType>
-	void Read(taType& outValue)
-	{
-		Read(Span(&outValue, 1));
-	}
-
-	template <size_t taSize>
-	void Read(TempString<taSize>& outStr)
-	{
-		uint16 size = 0;
-		Read(size);
-
-		if (size > outStr.cCapacity - 1)
-		{
-			gAssert(false);
-			gApp.LogError("FileReader tried to read a string of size {} in a TempString{}, it does not fit!", size, outStr.cCapacity);
-			mError = true;
-
-			// Skip the string instead of reading it.
-			Skip(size);
-		}
-		else
-		{
-			outStr.mSize = size;
-			outStr.mBuffer[size] = 0;
-			Read(Span(outStr.mBuffer, size));
-		}
-	}
-
-	void Skip(size_t inSizeInBytes)
-	{
-		if (mCurrentOffset + inSizeInBytes > mBuffer.SizeRelaxed())
-		{
-			mError = true;
-			return;
-		}
-
-		mCurrentOffset += inSizeInBytes;
-	}
-
-	template <size_t taSize>
-	bool ExpectLabel(const char (& inLabel)[taSize])
-	{
-		gAssert(inLabel[taSize - 1] == 0);
-		constexpr int cLabelSize = taSize - 1; // Ignore null terminator
-
-		char read_label[16];
-		static_assert(cLabelSize <= gElemCount(read_label));
-		Read(Span(read_label, cLabelSize));
-
-		if (memcmp(inLabel, read_label, cLabelSize) != 0)
-		{
-			// TODO log an error here
-			mError = true;
-		}
-
-		return !mError; // This will return false if there was an error before, even if the label is correct. That's on purpose, we use this to early out.
-	}
-
-	VMemArray<uint8> mBuffer = { 1'000'000'000, 256ull * 1024 };
-	VMemArrayLock    mBufferLock;
-	size_t           mCurrentOffset = 0;
-	bool             mError = false;
-};
 
 
 
@@ -1541,8 +1376,25 @@ struct SerializedFileInfo
 };
 static_assert(sizeof(SerializedFileInfo) == 48);
 
+struct SerializedCommand
+{
+	PathHash mMainInputPathHash    = {};
+	uint64   mLastCookUSN     : 63 = 0;
+	uint64   mLastCookIsError : 1  = 0;
+	FileTime mLastCookTime         = {};
+};
+static_assert(sizeof(SerializedCommand) == 32);
 
-constexpr int        cStateFormatVersion = 1;
+struct SerializedDepFileHeader
+{
+	USN      mLastDepFileRead    = 0;
+	uint32   mDepFileInputCount  = 0;
+	uint32   mDepFileOutputCount = 0;
+};
+static_assert(sizeof(SerializedDepFileHeader) == 16);
+
+
+constexpr int        cStateFormatVersion = 3;
 constexpr StringView cCacheFileName      = "cache.bin";
 
 void FileSystem::LoadCache()
@@ -1636,7 +1488,7 @@ void FileSystem::LoadCache()
 			TempString128 repo_name;
 			bin.Read(repo_name);
 
-			TempString512 repo_path;
+			TempPath repo_path;
 			bin.Read(repo_path);
 
 			FileRepo* repo       = FindRepo(repo_name);
@@ -1737,6 +1589,100 @@ void FileSystem::LoadCache()
 		}
 	}
 
+	// Read the commands.
+	size_t total_commands = 0;
+	uint16 rule_count          = 0;
+	bin.Read(rule_count);
+	for (int rule_index = 0; rule_index < (int)rule_count; ++rule_index)
+	{
+		if (!bin.ExpectLabel("RULE"))
+			break; // Early out if reading is failing.
+
+		TempString128 rule_name;
+		bin.Read(rule_name);
+
+		// This info is also in the CookingRule but we serialize it to be able to
+		// properly skip the serialized data if the rule was changed.
+		bool rule_use_dep_file;
+		bin.Read(rule_use_dep_file);
+
+		uint16 rule_version = 0;
+		bin.Read(rule_version);
+
+		uint32 command_count = 0;
+		bin.Read(command_count);
+
+		const CookingRule* rule       = gCookingSystem.FindRule(rule_name);
+		const bool         rule_valid = (rule != nullptr);
+
+		if (rule_valid)
+			total_commands += command_count;
+
+		for (int command_index = 0; command_index < (int)command_count; ++command_index)
+		{
+			if (!bin.ExpectLabel("CMD"))
+				break; // Early out if reading is failing.
+
+			SerializedCommand serialized_command;
+			bin.Read(serialized_command);
+
+			FileID          main_input = FindFileIDByPathHash(serialized_command.mMainInputPathHash);
+			CookingCommand* command    = nullptr;
+			if (rule_valid && main_input.IsValid())
+			{
+				// Make sure the commands are created for this file.
+				gCookingSystem.CreateCommandsForFile(main_input.GetFile());
+
+				// Find the command. Should be found, unless the rule changed.
+				command = gCookingSystem.FindCommandByMainInput(rule->mID, main_input);
+
+				// TODO also initialize error state (create a cooking log)
+				if (command)
+				{
+					command->mLastCookUSN         = (USN)serialized_command.mLastCookUSN;
+					command->mLastCookTime        = serialized_command.mLastCookTime;
+					command->mLastCookRuleVersion = rule_version;
+				}
+			}
+
+			if (rule_use_dep_file)
+			{
+				SerializedDepFileHeader serialized_dep_file;
+				bin.Read(serialized_dep_file);
+
+				std::vector<FileID> inputs, outputs;
+				inputs.reserve(serialized_dep_file.mDepFileInputCount);
+				inputs.reserve(serialized_dep_file.mDepFileOutputCount);
+
+				for (int input_index = 0; input_index < (int)serialized_dep_file.mDepFileInputCount; ++input_index)
+				{
+					PathHash path_hash;
+					bin.Read(path_hash);
+
+					FileID input_file = FindFileIDByPathHash(path_hash);
+					if (input_file.IsValid())
+						inputs.push_back(input_file);
+				}
+
+				for (int output_index = 0; output_index < (int)serialized_dep_file.mDepFileOutputCount; ++output_index)
+				{
+					PathHash path_hash;
+					bin.Read(path_hash);
+
+					FileID output_file = FindFileIDByPathHash(path_hash);
+					if (output_file.IsValid())
+						outputs.push_back(output_file);
+				}
+
+				if (rule_valid && rule->UseDepFile() && command != nullptr)
+				{
+					command->mLastDepFileRead = serialized_dep_file.mLastDepFileRead;
+					gApplyDepFileContent(*command, inputs, outputs);
+				}
+			}
+		}
+	}
+
 	bin.ExpectLabel("FIN");
 
 	if (bin.mError)
@@ -1747,13 +1693,16 @@ void FileSystem::LoadCache()
 		if (repo.mDrive.mLoadedFromCache)
 			total_files += repo.mFiles.SizeRelaxed();
 
-	gApp.Log("Done. Found {} Files in {:.2f} seconds.", 
-		total_files, gTicksToSeconds(timer.GetTicks()));
+	gApp.Log("Done. Found {} Files and {} Commands in {:.2f} seconds.", 
+		total_files, total_commands, gTicksToSeconds(timer.GetTicks()));
 }
 
-// TODO add command infos to the state: last cook USN, last cook time, dep file content, error state
+
 void FileSystem::SaveCache()
 {
+	gApp.Log("Saving cached state.");
+	Timer timer;
+
 	// Make sure the cache dir exists.
 	CreateDirectoryA(gApp.mCacheDirectory.c_str(), nullptr);
 
@@ -1771,7 +1720,7 @@ void FileSystem::SaveCache()
 	std::vector<StringView> valid_repos;
 	int total_repo_count = 0;
 
-	// Read all drives and repos.
+	// Write all drives and repos.
 	bin.Write((uint16)mDrives.Size());
 	for (const FileDrive& drive : mDrives)
 	{
@@ -1849,10 +1798,85 @@ void FileSystem::SaveCache()
 		}
 	}
 
+	Span rules = gCookingSystem.GetRules();
+
+	// Build the list of commands for each rule.
+	std::vector<SegmentedVector<CookingCommandID>> commands_per_rule;
+	commands_per_rule.resize(rules.size());
+	for (const CookingCommand& command : gCookingSystem.GetCommands())
+	{
+		// Skip cleaned up commands. Their inputs don't exist anymore, we don't need to save anything.
+		if (command.IsCleanedUp())
+			continue;
+
+		// Skip commands that didn't cook since the rule version changed.
+		// They are dirty and not saving them will make them appear dirty when we restart.
+		if (command.mLastCookRuleVersion != command.GetRule().mVersion)
+			continue;
+
+		commands_per_rule[command.mRuleID.mIndex].emplace_back(command.mID);
+	}
+
+	// Write the commands, sorted by rule.
+	bin.Write((uint16)rules.size());
+	for (const CookingRule& rule : rules)
+	{
+		bin.WriteLabel("RULE");
+
+		bin.Write(rule.mName);
+		bin.Write(rule.UseDepFile());
+		bin.Write(rule.mVersion);
+
+		const SegmentedVector<CookingCommandID>& commands = commands_per_rule[rule.mID.mIndex];
+		bin.Write((uint32)commands.size());
+
+		for (CookingCommandID command_id : commands)
+		{
+			bin.WriteLabel("CMD");
+
+			const CookingCommand& command = gCookingSystem.GetCommand(command_id);
+
+			// Write the base command data.
+			SerializedCommand     serialized_command;
+			const FileInfo&       main_input      = command.GetMainInput().GetFile();
+			serialized_command.mMainInputPathHash = gHashPath(TempPath("{}{}", main_input.GetRepo().mRootPath, main_input.mPath));
+			serialized_command.mLastCookUSN       = command.mLastCookUSN;
+			serialized_command.mLastCookIsError   = (command.mDirtyState & CookingCommand::Error) != 0;
+			bin.Write(serialized_command);
+
+			// Write the dep file data, if needed.
+			if (rule.UseDepFile())
+			{
+				SerializedDepFileHeader serialized_dep_file;
+				serialized_dep_file.mLastDepFileRead    = command.mLastDepFileRead;
+				serialized_dep_file.mDepFileInputCount  = (uint32)command.mDepFileInputs.size();
+				serialized_dep_file.mDepFileOutputCount = (uint32)command.mDepFileOutputs.size();
+				bin.Write(serialized_dep_file);
+
+				for (FileID file_id : command.mDepFileInputs)
+				{
+					const FileInfo& file = file_id.GetFile();
+					PathHash path_hash = gHashPath(TempPath("{}{}", file.GetRepo().mRootPath, file.mPath));
+					bin.Write(path_hash);
+				}
+
+				for (FileID file_id : command.mDepFileOutputs)
+				{
+					const FileInfo& file = file_id.GetFile();
+					PathHash path_hash = gHashPath(TempPath("{}{}", file.GetRepo().mRootPath, file.mPath));
+					bin.Write(path_hash);
+				}
+			}
+		}
+	}
+
 	bin.WriteLabel("FIN");
 
 	if (!bin.WriteFile(cache_file))
 		gApp.FatalError(R"(Failed to save cached state ("{}") - {} (0x{:X}))", cache_file_path, strerror(errno), errno);
 
+	size_t file_size = ftell(cache_file);
 	fclose(cache_file);
+
+	gApp.Log("Done. Saved {} ({} compressed) in {:.2f} seconds.", SizeInBytes(bin.mBuffer.SizeRelaxed()), SizeInBytes(file_size), gTicksToSeconds(timer.GetTicks()));
 }
