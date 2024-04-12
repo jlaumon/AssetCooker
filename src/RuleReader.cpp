@@ -74,12 +74,28 @@ void gReadRuleFile(StringView inPath)
 
 				reader.TryReadArray("Extensions",			input_filter.mExtensions);
 				reader.TryReadArray("DirectoryPrefixes",	input_filter.mDirectoryPrefixes);
-				reader.TryReadArray("NamePrefixes",		input_filter.mNamePrefixes);
-				reader.TryReadArray("NameSuffixes",		input_filter.mNameSuffixes);
+				reader.TryReadArray("NamePrefixes",			input_filter.mNamePrefixes);
+				reader.TryReadArray("NameSuffixes",			input_filter.mNameSuffixes);
 			}
 		}
 
-		reader.Read        ("CommandLine",		rule.mCommandLine);
+		// Check the type of command (either command line or a built-in command).
+		{
+			TempString64 cmd_type;
+			reader.TryRead("CommandType", cmd_type);
+			gStringViewToEnum(cmd_type,			rule.mCommandType);
+		}
+
+		if (rule.mCommandType == CommandType::CommandLine)
+		{
+			reader.Read    ("CommandLine",		rule.mCommandLine);
+		}
+		else
+		{
+			reader.NotAllowed("CommandLine", "because CommandType isn't CommandLine");
+			reader.NotAllowed("DepFile",	 "because CommandType isn't CommandLine");
+		}
+
 		reader.TryRead     ("Priority",			rule.mPriority);
 		reader.TryRead     ("Version",			rule.mVersion);
 		reader.TryRead     ("MatchMoreRules",	rule.mMatchMoreRules);
@@ -97,8 +113,11 @@ void gReadRuleFile(StringView inPath)
 			reader.CloseTable();
 
 			// Only read the dep file command line if there is a dep file.
-			// TODO also error if it's provided but there is no dep file?
 			reader.TryRead("DepFileCommandLine", rule.mDepFileCommandLine);
+		}
+		else
+		{
+			reader.NotAllowed("DepFileCommandLine", "because DepFile isn't provided");
 		}
 	}
 

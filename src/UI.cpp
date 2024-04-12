@@ -227,7 +227,7 @@ void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, File
 void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs);
 
 
-TempString256 gFormat(const CookingCommand& inCommand)
+TempPath gFormat(const CookingCommand& inCommand)
 {
 	return { "{}{} {}",
 		inCommand.GetRule().mName,
@@ -236,7 +236,7 @@ TempString256 gFormat(const CookingCommand& inCommand)
 }
 
 
-TempString256 gFormat(const CookingLogEntry& inLogEntry)
+TempPath gFormat(const CookingLogEntry& inLogEntry)
 {
 	const CookingCommand& command    = gCookingSystem.GetCommand(inLogEntry.mCommandID);
 	const CookingRule&    rule       = gCookingSystem.GetRule(command.mRuleID);
@@ -250,7 +250,7 @@ TempString256 gFormat(const CookingLogEntry& inLogEntry)
 }
 
 
-TempString512 gFormat(const FileInfo& inFile)
+TempPath gFormat(const FileInfo& inFile)
 {
 	return { "{}", inFile };
 }
@@ -788,7 +788,9 @@ void gDrawSelectedCookingLogEntry()
 
 	const CookingLogEntry& log_entry = gCookingSystem.GetLogEntry(gSelectedCookingLogEntry);
 
+	ImGui::PushTextWrapPos();
 	ImGui::TextUnformatted(gFormat(log_entry));
+	ImGui::PopTextWrapPos();
 	if (ImGui::Button("Copy Command Line"))
 	{
 		const CookingCommand& command      = gCookingSystem.GetCommand(log_entry.mCommandID);

@@ -9,6 +9,14 @@
 
 bool gReadFile(StringView inPath, VMemArray<uint8>& outFileData)
 {
+	TempPath long_path;
+	if (inPath.size() >= MAX_PATH && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
+	{
+		long_path.Append(R"(\\?\)");
+		long_path.Append(inPath);
+		inPath = long_path.AsStringView();
+	}
+
 	OwnedHandle handle = CreateFileA(inPath.AsCStr(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (handle == INVALID_HANDLE_VALUE)
 		return false;

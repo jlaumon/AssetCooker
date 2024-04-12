@@ -162,6 +162,15 @@ struct TomlReader
 		return true;
 	}
 
+	void NotAllowed(StringView inVarName, StringView inReason)
+	{
+		if (GetNode(inVarName) != nullptr)
+		{
+			gApp.LogError("{} is not allowed, {}", GetPath(inVarName), inReason);
+			mErrorCount++;
+		}
+	}
+
 	TomlReader(const toml::table& inRootTable, StringPool* ioStringPool)
 		: mStringPool(ioStringPool)
 	{

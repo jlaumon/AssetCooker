@@ -85,6 +85,27 @@ constexpr StringView gToStringView(DepFileFormat inVar)
 };
 
 
+enum class CommandType : uint8
+{
+	CommandLine,
+	CopyFile,
+	_Count
+};
+
+
+constexpr StringView gToStringView(CommandType inVar)
+{
+	constexpr StringView cStrings[]
+	{
+		"CommandLine",
+		"CopyFile",
+	};
+	static_assert(gElemCount(cStrings) == (size_t)CommandType::_Count);
+
+	return cStrings[(int)inVar];
+};
+
+
 struct CookingRule : NoCopy
 {
 	static constexpr uint16  cInvalidVersion = UINT16_MAX;
@@ -93,14 +114,15 @@ struct CookingRule : NoCopy
 
 	const CookingRuleID      mID;
 	StringView               mName;
-	std::vector<InputFilter> mInputFilters;
-	StringView               mCommandLine;
 	int16                    mPriority            = 0;
 	uint16                   mVersion             = 0;
+	CommandType              mCommandType         = CommandType::CommandLine;
 	bool                     mMatchMoreRules      = false; // If false, we'll stop matching rules once an input file is matched with this rule. If true, we'll keep looking.
 	DepFileFormat            mDepFileFormat       = DepFileFormat::AssetCooker;
 	StringView               mDepFilePath;        // Optional file containing extra inputs/ouputs for the command.
 	StringView               mDepFileCommandLine; // Optional separate command line used to generate the dep file (in case the main command cannot generate it directly).
+	StringView               mCommandLine;
+	std::vector<InputFilter> mInputFilters;
 	std::vector<StringView>  mInputPaths;
 	std::vector<StringView>  mOutputPaths;
 
@@ -339,7 +361,8 @@ private:
 		std::atomic<CookingLogEntryID> mCurrentLogEntry;
 	};
 	SegmentedVector<CookingThread, 64>       mCookingThreads;
-	bool                                     mCookingPaused          = false;
+	bool                                     mCookingStartPaused     = false;
+	bool                                     mCookingPaused          = true;
 	int                                      mWantedCookingThreadCount = 0;	// Number of threads requested. Actual number of threads created might be lower. 
 
 	friend void                              gDrawCookingLog();

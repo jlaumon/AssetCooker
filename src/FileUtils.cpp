@@ -24,9 +24,31 @@ TempPath gGetAbsolutePath(StringView inPath)
 }
 
 
+// Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
+StringView gConvertToLargePath(StringView inPath, TempPath& ioBuffer)
+{
+	// Note1: > (MAX_PATH - 13) because the doc says actual max for directories is MAX_PATH - 12, and that includes the null terminator (so + 1).
+	// CreateDirectory worked up to MAX_PATH - 2 when I tried, but better stay on the cautious side.
+	// Note2: Can't prepend relative paths, but also can't convert them to absolute if they're too long
+	// with the current implementation of gGetAbsolutePath. So that case will fail if it ever happens.
+	if (inPath.size() > (MAX_PATH - 13) && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
+	{
+		ioBuffer = R"(\\?\)";
+		ioBuffer.Append(inPath);
+		return ioBuffer;
+	}
+
+	return inPath;
+}
+
+
+
 static bool sCreateDirectory(StringView inPath)
 {
 	gAssert(!gEndsWith(inPath, "\\"));
+
+	TempPath buffer;
+	inPath = gConvertToLargePath(inPath, buffer);
 
 	BOOL success = CreateDirectoryA(inPath.AsCStr(), nullptr);
 

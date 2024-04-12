@@ -23,7 +23,7 @@ struct OwnedHandle : NoCopy
 
 // Arbitrary max path size that Asset Cooker decides to support for its files.
 // Some code in the FileSystem monitoring actually supports longer paths, because it might get notifications about files outside repos.
-constexpr size_t cMaxPathSizeUTF8  = 8192ull;
+constexpr size_t cMaxPathSizeUTF8  = 4096ull;
 
 using TempPath = TempString<cMaxPathSizeUTF8>;
 
@@ -38,7 +38,7 @@ bool                    gCreateDirectoryRecursive(StringView inAbsolutePath);
 bool                    gDirectoryExists(StringView inPath);
 bool                    gFileExists(StringView inPath);
 
-
+StringView              gConvertToLargePath(StringView inPath, TempPath& ioBuffer); // Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
 
 constexpr MutStringView gNormalizePath(MutStringView ioPath)
 {

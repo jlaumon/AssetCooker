@@ -6,6 +6,7 @@
 #include "Ticks.h"
 
 #include "subprocess/subprocess.h"
+#include "win32/file.h"
 #include "win32/misc.h"
 
 // Debug toggle to fake cooking failures, to test error handling.
@@ -905,7 +906,7 @@ bool CookingSystem::ValidateRules()
 		FileInfo dummy_file(FileID{ 0, 0 }, "dir\\dummy.txt", Hash128{ 0, 0 }, FileType::File, {});
 
 		// Validate the command line.
-		if (!gFormatCommandString(rule.mCommandLine, dummy_file))
+		if (rule.mCommandType == CommandType::CommandLine && !gFormatCommandString(rule.mCommandLine, dummy_file))
 		{
 			errors++;
 			gApp.LogError(R"(Rule {}: Failed to parse CommandLine "{}")", rule.mName, rule.mCommandLine);
@@ -937,6 +938,13 @@ bool CookingSystem::ValidateRules()
 				gApp.LogError(R"(Rule {}: Failed to parse OutputPaths[{}] "{}")", rule.mName, i, rule.mOutputPaths[i]);
 			}
 		}
+
+		// Validate that there is at least one output.
+		if (rule.mOutputPaths.empty() && (!rule.UseDepFile() || rule.mDepFileFormat == DepFileFormat::Make)) // Make format DepFiles can only add inputs, not outputs.
+		{
+			errors++;
+			gApp.LogError(R"(Rule {}: a rule must have at least one output, or a DepFile that can register outputs.)", rule.mName);
+		}
 	}
 
 	return errors == 0;
@@ -966,6 +974,9 @@ void CookingSystem::StartCooking()
 	// Start the thread updating the time outs.
 	mTimeOutUpdateThread = std::jthread(std::bind_front(&CookingSystem::TimeOutUpdateThread, this));
 
+	// Initialize cooking paused bool.
+	mCookingPaused = mCookingStartPaused;
+
 	// If the cooking isn't paused, queue the dirty commands.
 	if (!IsCookingPaused())
 		QueueDirtyCommands();
@@ -991,6 +1002,14 @@ void CookingSystem::StopCooking()
 
 void CookingSystem::SetCookingPaused(bool inPaused)
 {
+	// If cooking isn't started yet, only change the start paused bool.
+	// Setting mCookingPaused to true before starting the cooking would cause dirty commands to be queued twice.
+	if (!mTimeOutUpdateThread.joinable())
+	{
+		mCookingStartPaused = inPaused;
+		return;
+	}
+
 	if (inPaused == mCookingPaused)
 		return;
 
@@ -1056,6 +1075,8 @@ void CookingSystem::QueueErroredCommands()
 
 static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStringView& ioOutput)
 {
+	ioOutput.AppendFormat("Command Line: {}\n\n", inCommandLine);
+
 	// Create the process for the command line.
 	subprocess_s process;
 	int options = subprocess_option_no_window | subprocess_option_combined_stdout_stderr | subprocess_option_single_string_command_line;
@@ -1117,6 +1138,19 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 }
 
 
+bool sRunCopyFile(const CookingCommand& inCommand, StringPool::ResizableStringView& ioOutput)
+{
+	// Incompatible with DepFile, otherwise mOutputs[0] is the DepFile. This is checked by the RuleReader.
+	gAssert(inCommand.GetRule().UseDepFile() == false);
+
+	ioOutput.AppendFormat("Copying {} to {}\n", inCommand.mInputs[0].GetFile(), inCommand.mOutputs[0].GetFile());
+
+	TempPath input (R"(\\?\{}{})", inCommand.mInputs [0].GetRepo().mRootPath, inCommand.mInputs [0].GetFile().mPath);
+	TempPath output(R"(\\?\{}{})", inCommand.mOutputs[0].GetRepo().mRootPath, inCommand.mOutputs[0].GetFile().mPath);
+	return CopyFileA(input.AsCStr(), output.AsCStr(), FALSE) != 0;
+}
+
+
 void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThread)
 {
 	CookingLogEntry& log_entry = AllocateCookingLogEntry(ioCommand.mID);
@@ -1129,6 +1163,9 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Set the log entry on the command.
 	ioCommand.mLastCookingLog = &log_entry;
+
+	// Allocate a resizable string for the output.
+	StringPool::ResizableStringView output_str = ioThread.mStringPool.CreateResizableString();
 
 	const CookingRule& rule    = ioCommand.GetRule();
 
@@ -1164,31 +1201,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	// Note: use the command main input path as seed to make it consistent accross runs (useful if we want to add loading bars).
 	if (mSlowMode)
 		Sleep(100 + gRand32((uint32)gHash(ioCommand.GetMainInput().GetFile().mPath)) % 5000);
-
-	// Build the command line.
-	Optional<String>   command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
-	if (!command_line)
-	{
-		log_entry.mOutput       = ioThread.mStringPool.AllocateCopy("[error] Failed to format command line.\n");
-		log_entry.mCookingState = CookingState::Error;
-		return;
-	}
-
-	// If there is a dep file command line, build it as well.
-	Optional<String> dep_command_line;
-	if (!rule.mDepFileCommandLine.empty())
-	{
-		dep_command_line = gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
-		if (!dep_command_line)
-		{
-			log_entry.mOutput       = ioThread.mStringPool.AllocateCopy("[error] Failed to format dep file command line.\n");
-			log_entry.mCookingState = CookingState::Error;
-			return;
-		}
-	}
-
-	StringPool::ResizableStringView output_str     = ioThread.mStringPool.CreateResizableString();
-	output_str.AppendFormat("Command Line: {}\n\n", StringView(*command_line));
 
 	// Make sure all inputs exist.
 	{
@@ -1236,20 +1248,62 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	// Fake random failures for debugging.
 	if (gDebugFailCookingRandomly && (gRand32() % 5) == 0)
 	{
-		output_str.Append("Uh oh! This is a fake failure for debug purpose!");
+		output_str.Append("Uh oh! This is a fake failure for debug purpose!\n");
 		log_entry.mOutput       = output_str.AsStringView();
 		log_entry.mCookingState = CookingState::Error;
 		return;
 	}
 
-	// Run the command line.
-	bool success = sRunCommandLine(*command_line, output_str);
+	
+	// If there is a dep file command line, build it.
+	Optional<String> dep_command_line;
+	if (!rule.mDepFileCommandLine.empty())
+	{
+		dep_command_line = gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
+		if (!dep_command_line)
+		{
+			output_str.Append("[error] Failed to format dep file command line.\n");
+			log_entry.mOutput       = output_str.AsStringView();
+			log_entry.mCookingState = CookingState::Error;
+			return;
+		}
+	}
+
+	bool success = false;
+	if (rule.mCommandType == CommandType::CommandLine)
+	{
+		// Build the command line.
+		Optional<String> command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
+		if (!command_line)
+		{
+			output_str.Append("[error] Failed to format command line.\n");
+			log_entry.mOutput       = output_str.AsStringView();
+			log_entry.mCookingState = CookingState::Error;
+			return;
+		}
+
+		// Run the command line.
+		success = sRunCommandLine(*command_line, output_str);
+	}
+	else
+	{
+		// Run the built-in command.
+		switch (rule.mCommandType)
+		{
+		case CommandType::CopyFile:
+			success = sRunCopyFile(ioCommand, output_str);
+			break;
+		default:
+			gAssert(false);
+			success = false;
+			break;
+		}
+	}
 
 	// If there's a dep file command line, run it next.
 	if (success && dep_command_line)
 	{
-		output_str.AppendFormat("\nDep File Command Line: {}\n\n", StringView(*dep_command_line));
-		
+		output_str.Append("\nDep File "); // No end line on purpose, we want to prepend the line added inside the sRunCommandLine.
 		success = sRunCommandLine(*dep_command_line, output_str);
 	}
 
