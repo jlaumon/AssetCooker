@@ -102,7 +102,9 @@ struct TempString : NoCopy // No copy for now, should not be needed on temporary
 	TempString(StringView inString) : TempString() { Set(inString); }
 
 	template <typename... taArgs> void Format(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs);
+	template <typename... taArgs> void AppendFormat(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs);
 	void                               Format(StringView inFmt, fmt::format_args inArgs);
+	void                               AppendFormat(StringView inFmt, fmt::format_args inArgs);
 	void                               Set(StringView inString);
 	void                               Append(StringView inString);
 	TempString&                        operator=(StringView inString) { Set(inString); return *this; }
@@ -286,11 +288,28 @@ template <typename... taArgs> void TempString<taSize>::Format(fmt::format_string
 
 
 template <size_t taSize>
+template <typename... taArgs> void TempString<taSize>::AppendFormat(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+{
+	StringView str_view = gFormat(Span(mBuffer).subspan(mSize), inFmt, std::forward<taArgs>(inArgs)...);
+	mSize               += str_view.size();
+}
+
+
+template <size_t taSize>
 void TempString<taSize>::Format(StringView inFmt, fmt::format_args inArgs)
 {
 	StringView str_view = gFormatV(mBuffer, inFmt, inArgs);
 	mSize               = str_view.size();
 }
+
+
+template <size_t taSize>
+void TempString<taSize>::AppendFormat(StringView inFmt, fmt::format_args inArgs)
+{
+	StringView str_view = gFormatV(Span(mBuffer).subspan(mSize), inFmt, inArgs);
+	mSize               += str_view.size();
+}
+
 
 template <size_t taSize>
 void TempString<taSize>::Set(StringView inString)

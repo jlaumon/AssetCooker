@@ -17,17 +17,12 @@ void gReadUserPreferencesFile(StringView inPath)
 	gApp.Log(R"(Reading User Preferences file "{}".)", inPath);
 
 	// Parse the toml file.
-	toml::parse_result prefs_toml = toml::parse_file(inPath);
-	if (!prefs_toml)
+	TomlReader reader;
+	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.LogError(R"(Failed to parse User Preferences file "{}".)", inPath);
-		gApp.LogError("{}", prefs_toml.error());
 		gApp.SetInitError(TempString512(R"(Failed to parse User Preferences file "{}". See log for details.)", inPath).AsStringView());
 		return;
 	}
-
-	// Initialize a reader on the root table.
-	TomlReader reader(prefs_toml.table(), nullptr);
 
 	defer
 	{

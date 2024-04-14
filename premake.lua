@@ -23,6 +23,7 @@ solution "AssetCooker"
             "_CRT_SECURE_NO_WARNINGS",
 			"IMGUI_USER_CONFIG=<ImGuiConfig.h>",
 			"TOML_COMPILER_HAS_EXCEPTIONS=0", -- Not strictly necessart since toml++ detects if exceptions are off, but Intellisense is confused otherwise
+			"YAML_CPP_STATIC_DEFINE",
         }
 
         filter { "toolset:msc*" }
@@ -82,6 +83,9 @@ solution "AssetCooker"
 			"thirdparty/fmt/src/format.cc",
 			"thirdparty/lz4/lib/lz4.h",
 			"thirdparty/lz4/lib/lz4.c",
+			"thirdparty/yaml-cpp/src/**.cpp",
+			"thirdparty/yaml-cpp/src/**.h",
+			"thirdparty/yaml-cpp/include/**.h",
 			"data/**.rc",
 			"data/**.h",
         }
@@ -99,6 +103,7 @@ solution "AssetCooker"
 			"thirdparty/tomlplusplus/include",
 			"thirdparty/fmt/include",
 			"thirdparty/lz4/lib",
+			"thirdparty/yaml-cpp/include",
         }
         
         links

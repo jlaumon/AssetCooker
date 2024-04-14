@@ -6,16 +6,6 @@
 #include <toml++/toml.hpp>
 
 
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-///
-///
-/// This code is pretty terrible, but it's not the important part. Avert your eyes if you can.
-///
-///
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 // Formatter for toml errors.
 template <> struct fmt::formatter<toml::parse_error> : fmt::formatter<fmt::string_view>
 {
@@ -171,10 +161,21 @@ struct TomlReader
 		}
 	}
 
-	TomlReader(const toml::table& inRootTable, StringPool* ioStringPool)
-		: mStringPool(ioStringPool)
+	bool Init(StringView inPath, StringPool* ioStringPool)
 	{
-		mStack.push_back({ &inRootTable });
+		// Parse the toml file.
+		mParsedFile = toml::parse_file(inPath);
+		if (!mParsedFile)
+		{
+			gApp.LogError(R"(Failed to parse TOML file "{}".)", inPath);
+			gApp.LogError("{}", mParsedFile.error());
+			return false;
+		}
+
+		mStringPool = ioStringPool;
+		mStack.clear();
+		mStack.push_back({ &mParsedFile.table() });
+		return true;
 	}
 
 	bool TryOpenTable(StringView inVarName)
@@ -313,6 +314,7 @@ struct TomlReader
 	toml::path           mPath;
 	StringPool*          mStringPool = nullptr;
 	int                  mErrorCount = 0;
+	toml::parse_result   mParsedFile;
 };
 
 

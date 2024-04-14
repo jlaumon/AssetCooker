@@ -2,24 +2,21 @@
 #include "CookingSystem.h"
 #include "App.h"
 #include "TomlReader.h"
+#include "YamlReader.h"
 
 
-void gReadRuleFile(StringView inPath)
+template <typename taReaderType>
+static void sReadRuleFile(StringView inPath)
 {
 	gApp.Log(R"(Reading Rule file "{}".)", inPath);
 
-	// Parse the toml file.
-	toml::parse_result rules_toml = toml::parse_file(inPath);
-	if (!rules_toml)
+	// Parse the file.
+	taReaderType reader;
+	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.LogError(R"(Failed to parse Rule file "{}".)", inPath);
-		gApp.LogError("{}", rules_toml.error());
 		gApp.SetInitError(TempString512(R"(Failed to parse Rule file "{}". See log for details.)", inPath).AsStringView());
 		return;
 	}
-
-	// Initialize a reader on the root table.
-	TomlReader reader(rules_toml.table(), &gCookingSystem.GetStringPool());
 
 	defer
 	{
@@ -124,4 +121,15 @@ void gReadRuleFile(StringView inPath)
 	// Validate the rules.
 	if (!gCookingSystem.ValidateRules())
 		gApp.SetInitError("Rules validation failed. See log for details.");
+}
+
+
+void gReadRuleFile(StringView inPath)
+{
+	if (gEndsWithNoCase(inPath, ".yaml"))
+		sReadRuleFile<YamlReader>(inPath);
+	else if (gEndsWithNoCase(inPath, ".toml"))
+		sReadRuleFile<TomlReader>(inPath);
+	else
+		gApp.SetInitError("Rule file is an unknown format (recognized extensions are .yaml and .toml).");
 }
