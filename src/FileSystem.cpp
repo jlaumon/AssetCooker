@@ -1469,6 +1469,9 @@ void FileSystem::LoadCache()
 			if (drive->mFirstUSN > next_usn)
 			{
 				gApp.LogError(R"(Drive {}:\ cached state is too old, ignoring cache.)", drive_letter);
+				if (drive_letter == 'C')
+					gApp.LogError(R"(Consider using a different drive. Windows writes to a lot of temporary files and can quickly fill the USN journal.)");
+
 				drive_valid = false;
 			}
 		}
