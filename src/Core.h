@@ -246,6 +246,10 @@ struct MemoryHasher
     }
 };
 
+inline uint64 gHash(uint64 inValue) { return ankerl::unordered_dense::detail::wyhash::hash(inValue); }
+inline uint64 gHashCombine(uint64 inA, uint64 inB) { return ankerl::unordered_dense::detail::wyhash::mix(inA, inB); }
+
+
 // Forward declaration from Ticks.h
 int64  gGetTickCount();
 
