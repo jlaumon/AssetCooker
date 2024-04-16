@@ -3,7 +3,7 @@
 #include "StringPool.h"
 #include "CookingSystemIDs.h"
 #include "Queue.h"
-#include "Signal.h"
+#include "SyncSignal.h"
 #include "FileUtils.h"
 #include "FileTime.h"
 
@@ -369,7 +369,7 @@ private:
 	SegmentedHashSet<FileID>   mChangedFiles;
 
 	std::jthread               mMonitorDirThread;
-	Signal                     mMonitorDirThreadSignal;
+	SyncSignal                 mMonitorDirThreadSignal;
 	std::atomic<bool>          mIsMonitorDirThreadIdle = true;
 
 	struct FileToRescan

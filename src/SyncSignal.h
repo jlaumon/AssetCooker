@@ -7,7 +7,7 @@
 #include <mutex>
 
 
-struct Signal : NoCopy
+struct SyncSignal : NoCopy
 {
 	enum class WaitResult : uint8
 	{
@@ -29,7 +29,7 @@ private:
 };
 
 
-void Signal::Set()
+void SyncSignal::Set()
 {
 	{
 		std::unique_lock lock(mMutex);
@@ -46,14 +46,14 @@ void Signal::Set()
 }
 
 
-void Signal::Clear()
+void SyncSignal::Clear()
 {
 	std::unique_lock lock(mMutex);
 	mIsSet = false;
 }
 
 
-void Signal::Wait()
+void SyncSignal::Wait()
 {
 	std::unique_lock lock(mMutex);
 
@@ -67,7 +67,7 @@ void Signal::Wait()
 }
 
 
-Signal::WaitResult Signal::WaitFor(int64 inTicks)
+SyncSignal::WaitResult SyncSignal::WaitFor(int64 inTicks)
 {
 	std::unique_lock lock(mMutex);
 
