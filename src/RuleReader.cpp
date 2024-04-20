@@ -3,6 +3,7 @@
 #include "App.h"
 #include "TomlReader.h"
 #include "YamlReader.h"
+#include "LuaReader.h"
 
 
 template <typename taReaderType>
@@ -126,10 +127,12 @@ static void sReadRuleFile(StringView inPath)
 
 void gReadRuleFile(StringView inPath)
 {
-	if (gEndsWithNoCase(inPath, ".yaml"))
+	if (gEndsWithNoCase(inPath, ".yaml") || gEndsWithNoCase(inPath, ".yml"))
 		sReadRuleFile<YamlReader>(inPath);
 	else if (gEndsWithNoCase(inPath, ".toml"))
 		sReadRuleFile<TomlReader>(inPath);
+	else if (gEndsWithNoCase(inPath, ".lua"))
+		sReadRuleFile<LuaReader>(inPath);
 	else
-		gApp.SetInitError("Rule file is an unknown format (recognized extensions are .yaml and .toml).");
+		gApp.SetInitError("Rule file is an unknown format (recognized extensions are .yaml, .yml, .toml and .lua).");
 }
