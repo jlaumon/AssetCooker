@@ -24,6 +24,7 @@ solution "AssetCooker"
 			"IMGUI_USER_CONFIG=<ImGuiConfig.h>",
 			"TOML_COMPILER_HAS_EXCEPTIONS=0", -- Not strictly necessart since toml++ detects if exceptions are off, but Intellisense is confused otherwise
 			"YAML_CPP_STATIC_DEFINE",
+			"LUA_USE_LONGJMP", -- Otherwise Lua uses exceptions for error handling (because we're compiling it as c++)
         }
 
         filter { "toolset:msc*" }
@@ -86,6 +87,7 @@ solution "AssetCooker"
 			"thirdparty/yaml-cpp/src/**.cpp",
 			"thirdparty/yaml-cpp/src/**.h",
 			"thirdparty/yaml-cpp/include/**.h",
+			"thirdparty/minilua/*.h",
 			"data/**.rc",
 			"data/**.h",
         }
@@ -104,6 +106,7 @@ solution "AssetCooker"
 			"thirdparty/fmt/include",
 			"thirdparty/lz4/lib",
 			"thirdparty/yaml-cpp/include",
+			"thirdparty/minilua",
         }
         
         links
