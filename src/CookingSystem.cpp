@@ -248,6 +248,18 @@ bool gNoneOf(taContainer& inContainer, taPredicate inPredicate)
 
 
 
+template <typename taContainer, typename taPredicate>
+bool gAllOf(taContainer& inContainer, taPredicate inPredicate)
+{
+	for (auto& element : inContainer)
+		if (!inPredicate(element))
+			return false;
+	return true;
+}
+
+
+
+
 bool InputFilter::Pass(const FileInfo& inFile) const
 {
 	if (mRepoIndex != inFile.mID.mRepoIndex)
@@ -330,7 +342,6 @@ void CookingCommand::UpdateDirtyState()
 			last_cook = gMin(last_cook, file_id.GetFile().mLastChangeUSN);
 	}
 
-	bool all_input_missing = true;
 	for (FileID file_id : GetAllInputs())
 	{
 		const FileInfo& file = file_id.GetFile();
@@ -341,15 +352,13 @@ void CookingCommand::UpdateDirtyState()
 		}
 		else
 		{
-			all_input_missing = false;
-
 			if (file.mLastChangeUSN > last_cook)
 				dirty_state |= InputChanged;
 		}
 	}
-	
-	if (all_input_missing)
-		dirty_state |= AllInputsMissing;
+
+	if (gAllOf(mInputs, [](FileID inFileID) { return inFileID.GetFile().IsDeleted(); }))
+		dirty_state |= AllStaticInputsMissing;
 
 	bool all_output_written = true;
 	bool all_output_missing = true;
@@ -1375,11 +1384,11 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 	{
 		if (gFileSystem.DeleteFile(output_id))
 		{
-			output_str.AppendFormat("Deleted {}{}", output_id.GetRepo().mRootPath, output_id.GetFile().mPath);
+			output_str.AppendFormat("Deleted {}\n", output_id.GetFile());
 		}
 		else
 		{
-			output_str.AppendFormat("[error] Failed to delete {}{}", output_id.GetRepo().mRootPath, output_id.GetFile().mPath);
+			output_str.AppendFormat("[error] Failed to delete {}{}\n", output_id.GetRepo().mRootPath, output_id.GetFile().mPath);
 			error = true;
 		}
 	}
@@ -1570,7 +1579,7 @@ void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_tok
 		if (command_id.IsValid())
 		{
 			auto& command = GetCommand(command_id);
-			if (command.mDirtyState & CookingCommand::AllInputsMissing)
+			if (command.mDirtyState & CookingCommand::AllStaticInputsMissing)
 				CleanupCommand(command, *ioThread);
 			else
 				CookCommand(command, *ioThread);

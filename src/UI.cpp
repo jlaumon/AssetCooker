@@ -724,7 +724,7 @@ void gDrawCookingLog()
 
 			ImGui::TableNextColumn();
 			{
-				ImGui::TextUnformatted(TempString512("{}", command.GetMainInput().GetFile()));
+				ImGui::TextUnformatted(TempString512("{}{}", log_entry.mIsCleanup ? "(Cleanup) " : "" ,command.GetMainInput().GetFile()));
 			}
 
 			ImGui::TableNextColumn();

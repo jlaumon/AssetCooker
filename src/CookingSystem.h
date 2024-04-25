@@ -174,21 +174,21 @@ struct CookingCommand : NoCopy
 {
 	CookingCommandID    mID;
 	CookingRuleID       mRuleID;
-	std::vector<FileID> mInputs;
-	std::vector<FileID> mOutputs;
+	std::vector<FileID> mInputs;         // Static inputs.
+	std::vector<FileID> mOutputs;        // Static outputs.
 	std::vector<FileID> mDepFileInputs;  // Dynamic inputs specified by the dep file.
 	std::vector<FileID> mDepFileOutputs; // Dynamic outputs specified by the dep file.
 
 	enum DirtyState : uint8
 	{
-		NotDirty          = 0,
-		InputMissing      = 0b0000001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
-		InputChanged      = 0b0000010,
-		OutputMissing     = 0b0000100,
-		AllInputsMissing  = 0b0001000, // Command needs to be cleaned up.
-		AllOutputsMissing = 0b0010000,
-		Error             = 0b0100000, // Last cook errored.
-		VersionMismatch   = 0b1000000, // Rule version changed.
+		NotDirty               = 0,
+		InputMissing           = 0b0000001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
+		InputChanged           = 0b0000010,
+		OutputMissing          = 0b0000100,
+		AllStaticInputsMissing = 0b0001000, // Command needs to be cleaned up.
+		AllOutputsMissing      = 0b0010000,
+		Error                  = 0b0100000, // Last cook errored.
+		VersionMismatch        = 0b1000000, // Rule version changed.
 	};
 
 	// TODO should also store last cook time here, so we can save it in the cached state (currently it's only in the log entries)
@@ -202,8 +202,8 @@ struct CookingCommand : NoCopy
 
 	void                            UpdateDirtyState();
 	bool                            IsDirty() const { return mDirtyState != NotDirty && !IsCleanedUp(); }
-	bool                            NeedsCleanup() const { return (mDirtyState & AllInputsMissing) && !IsCleanedUp(); }
-	bool                            IsCleanedUp() const { return (mDirtyState & (AllInputsMissing | AllOutputsMissing)) == (AllInputsMissing | AllOutputsMissing); }
+	bool                            NeedsCleanup() const { return (mDirtyState & AllStaticInputsMissing) && !IsCleanedUp(); }
+	bool                            IsCleanedUp() const { return (mDirtyState & (AllStaticInputsMissing | AllOutputsMissing)) == (AllStaticInputsMissing | AllOutputsMissing); }
 
 	CookingState                    GetCookingState() const { return mLastCookingLog ? mLastCookingLog->mCookingState.load() : CookingState::Unknown; }
 
