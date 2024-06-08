@@ -1088,7 +1088,7 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 
 	// Create the process for the command line.
 	subprocess_s process;
-	int options = subprocess_option_no_window | subprocess_option_combined_stdout_stderr | subprocess_option_single_string_command_line;
+	int options = subprocess_option_no_window | subprocess_option_combined_stdout_stderr | subprocess_option_single_string_command_line | subprocess_option_enable_async;
 
 	// Not strictly needed but some launched processes fail to read files if not used (access rights issues? unclear).
 	options |= subprocess_option_inherit_environment;
@@ -1100,19 +1100,13 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 		return false;
 	}
 
-	// Wait for the process to finish.
-	int exit_code = 0;
-	bool got_exit_code = subprocess_join(&process, &exit_code) == 0;
-
 	// Get the output.
-	// TODO: use the async API to get the output before the process is finished? but may need an extra thread to read stderr
 	// TODO: optionally skip getting the output?
 	{
-		FILE* p_stdout = subprocess_stdout(&process);
-		char  buffer[16384];
+		char  buffer[1024];
 		while (true)
 		{
-			size_t bytes_read  = fread(buffer, 1, sizeof(buffer) - 1, p_stdout);
+			size_t bytes_read  = subprocess_read_stdout(&process, buffer, sizeof(buffer) - 1);
 			buffer[bytes_read] = 0;
 
 			if (bytes_read == 0)
@@ -1121,6 +1115,10 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 			ioOutput.Append({ buffer, bytes_read });
 		}
 	}
+
+	// Wait for the process to finish.
+	int exit_code = 0;
+	bool got_exit_code = subprocess_join(&process, &exit_code) == 0;
 
 	bool success = true;
 
