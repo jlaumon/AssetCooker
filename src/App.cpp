@@ -87,7 +87,6 @@ void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 		// TODO this popup is not showing when the main window is open - fix it!
 		MessageBoxA(mMainWindowHwnd, TempString512(inFmt, inArgs).AsCStr(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
 
-	// TODO: will need to do a proper exit and save the database at some point... (do we actually need to save the DB here? probably not)
 	LogError("Fatal error, exiting now.");
 	exit(1);
 }
