@@ -2,7 +2,6 @@
 #include "CookingSystem.h"
 #include "App.h"
 #include "TomlReader.h"
-#include "YamlReader.h"
 #include "LuaReader.h"
 
 
@@ -127,9 +126,7 @@ static void sReadRuleFile(StringView inPath)
 
 void gReadRuleFile(StringView inPath)
 {
-	if (gEndsWithNoCase(inPath, ".yaml") || gEndsWithNoCase(inPath, ".yml"))
-		sReadRuleFile<YamlReader>(inPath);
-	else if (gEndsWithNoCase(inPath, ".toml"))
+	if (gEndsWithNoCase(inPath, ".toml"))
 		sReadRuleFile<TomlReader>(inPath);
 	else if (gEndsWithNoCase(inPath, ".lua"))
 		sReadRuleFile<LuaReader>(inPath);

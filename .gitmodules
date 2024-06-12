@@ -22,9 +22,6 @@
 [submodule "thirdparty/lz4"]
 	path = thirdparty/lz4
 	url = https://github.com/lz4/lz4.git
-[submodule "thirdparty/yaml-cpp"]
-	path = thirdparty/yaml-cpp
-	url = https://github.com/jbeder/yaml-cpp.git
 [submodule "thirdparty/minilua"]
 	path = thirdparty/minilua
 	url = https://github.com/edubart/minilua.git
