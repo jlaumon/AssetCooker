@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core.h"
+#include "FileUtils.h"
 #include "Log.h"
 #include "Notifications.h"
 
@@ -71,6 +72,8 @@ struct App
 	NotifEnabled                    mEnableNotifOnCookingFinish = NotifEnabled::WhenMinimized; // Show a notification when cooking finishes.
 	NotifEnabled                    mEnableNotifOnCookingError  = NotifEnabled::Always; // Show a notification when a cooking error occurs (even if cooking isn't finished yet).
 	NotifEnabled                    mEnableNotifSound           = NotifEnabled::Always; // Play a sound when a notification is shown.
+
+	OwnedHandle                     mSingleInstanceMutex; // Inter-process mutex making sure we can't run multiple instances of AssetCooker at the same time
 };
 
 inline App gApp;

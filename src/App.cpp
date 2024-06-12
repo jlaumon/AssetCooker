@@ -12,6 +12,7 @@
 #include "win32/file.h"
 #include "win32/window.h"
 #include "win32/io.h"
+#include "win32/threads.h"
 
 #include <algorithm> // for std::sort
 
@@ -33,6 +34,13 @@ void App::Init()
 
 	// Open the log file after reading the config since it can change the log directory.
 	OpenLogFile();
+
+	// Lock a system-wide mutex to prevent multiple instances of the app from running at the same time.
+	// The name of the mutex is what matters, so make sure it's unique by including a UUID
+	// and the configurable window title (to allow multiple instances if they are cooking different projects).
+	mSingleInstanceMutex = CreateMutexA(nullptr, FALSE, TempString256("Asset Cooker eb835e40-e91e-4cfb-8e71-a68d3367bb7e {}", mMainWindowTitle).AsCStr());
+	if (GetLastError() == ERROR_ALREADY_EXISTS)
+		FatalError("An instance of Asset Cooker is already running. Too many Cooks!");
 
 	// Read the rule file.
 	if (!HasInitError())
@@ -85,7 +93,7 @@ void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 		breakpoint;
 	else
 		// TODO this popup is not showing when the main window is open - fix it!
-		MessageBoxA(mMainWindowHwnd, TempString512(inFmt, inArgs).AsCStr(), "Fatal Error", MB_OK | MB_ICONERROR | MB_APPLMODAL);
+		MessageBoxA(mMainWindowHwnd, TempString512(inFmt, inArgs).AsCStr(), TempString512("{} - Fatal Error!", mMainWindowTitle).AsCStr(), MB_OK | MB_ICONERROR | MB_APPLMODAL);
 
 	LogError("Fatal error, exiting now.");
 	exit(1);
