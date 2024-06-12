@@ -69,10 +69,7 @@ static void sReadRuleFile(StringView inPath)
 					}
 				}
 
-				reader.TryReadArray("Extensions",			input_filter.mExtensions);
-				reader.TryReadArray("DirectoryPrefixes",	input_filter.mDirectoryPrefixes);
-				reader.TryReadArray("NamePrefixes",			input_filter.mNamePrefixes);
-				reader.TryReadArray("NameSuffixes",			input_filter.mNameSuffixes);
+				reader.Read("PathPattern",		input_filter.mPathPattern);
 			}
 		}
 

@@ -258,6 +258,119 @@ bool gAllOf(taContainer& inContainer, taPredicate inPredicate)
 }
 
 
+// Test a string against a pattern. Return true if the string matches the pattern.
+// Pattern supports wild cards '*' (any number of characters) and '?' (single character).
+constexpr bool gMatchString(StringView inString, StringView inPattern)
+{
+	gAssert(!inPattern.empty());
+
+	StringView str     = inString;
+	StringView pattern = inPattern;
+	bool       pending_star = false;
+
+	while (true)
+	{
+		// Find the next wild card in the pattern.
+		size_t next_wildcard_index = pattern.find_first_of("?*");
+
+		// If the next char isn't a wild card and we have a pending '*', process it now.
+		// This case happens when we encounter '*?'. More explanations where pending_star is set to true below.
+		if (next_wildcard_index != 0 && pending_star)
+		{
+			pending_star = false;
+
+			// If the pattern ends with '*', it's an automatic match.
+			if (pattern.empty())
+				return true;
+
+			// Find where the string starts matching the pattern again.
+			size_t next_match = str.find(pattern[0]);
+
+			// Never? Then it's a fail.
+			if (next_match == StringView::npos)
+				return false;
+
+			// Skip to where it matches again.
+			str.remove_prefix(next_match);
+		}
+
+		// Strings should be equal until there (or until end of the string).
+		if (str.substr(0, next_wildcard_index) != pattern.substr(0, next_wildcard_index))
+			return false;
+
+		// If there was no wild card, we're done! Strings match.
+		if (next_wildcard_index == StringView::npos)
+			return true;
+
+		// Skip the parts that match.
+		str.remove_prefix(next_wildcard_index);
+		pattern.remove_prefix(next_wildcard_index);
+
+		// Also skip the wild card, but keep a copy.
+		char wild_card = pattern[0];
+		pattern.remove_prefix(1);
+
+		if (wild_card == '?')
+		{
+			// If there is no character left, it's a fail.
+			if (str.length() < 1)
+				return false;
+
+			// Skip one character.
+			str.remove_prefix(1);
+		}
+		else
+		{
+			gAssert(wild_card == '*');
+
+			// If the pattern ends with '*', it's an automatic match.
+			if (pattern.empty())
+				return true;
+
+			// If the * is followed by another '*', continue to process the next wild card directly, '**' is equivalent to '*'.
+			if (pattern[0] == '*')
+				continue;
+
+			// If the '*' is followed by '?', it is THE annoying case.
+			// '*?' is equivalent to '?*', so continue to process the '?', but remember we have a pending '*'.
+			// This way both '*???' and '*?*?*?' will just be interpreted as '???*'.
+			if (pattern[0] == '?')
+			{
+				pending_star = true;
+				continue;
+			}
+
+			// Clear the pending '*' if we encounter another one.
+			pending_star = false;
+
+			// Find where the string starts matching the pattern again.
+			size_t next_match = str.find(pattern[0]);
+
+			// Never? Then it's a fail.
+			if (next_match == StringView::npos)
+				return false;
+
+			// Skip to where it matches again.
+			str.remove_prefix(next_match);
+		}
+	}
+}
+
+
+#if 0 // TODO: add proper tests
+static_assert(gMatchString("yoyo.txt", "yoyo.txt"));
+static_assert(gMatchString("yoyo.txt", "*.txt"));
+static_assert(gMatchString("yoyo.txt", "y?yo.txt"));
+static_assert(gMatchString("yoyo.txt", "????????"));
+static_assert(gMatchString("yoyo.txt", "*"));
+static_assert(gMatchString("yoyo.txt", "?*"));
+static_assert(gMatchString("yoyo.txt", "**"));
+static_assert(gMatchString("yoyo.txt", "*?"));
+static_assert(gMatchString("yoyo.txt", "*?oyo.txt"));
+static_assert(gMatchString("yoyo.txt", "*????.txt"));
+static_assert(gMatchString("yoyo.txt", "*?*?*?o.txt"));
+static_assert(!gMatchString("yoyo.txt", "yoyo.txt*?"));
+#endif
 
 
 bool InputFilter::Pass(const FileInfo& inFile) const
@@ -265,19 +378,7 @@ bool InputFilter::Pass(const FileInfo& inFile) const
 	if (mRepoIndex != inFile.mID.mRepoIndex)
 		return false;
 
-	if (!mExtensions.empty() && gNoneOf(mExtensions, [&](StringView inExtension) { return gIsEqualNoCase(inFile.GetExtension(), inExtension); }))
-		return false;
-
-	if (!mDirectoryPrefixes.empty() && gNoneOf(mDirectoryPrefixes, [&](StringView inDirectoryPrefix) { return gStartsWithNoCase(inFile.GetDirectory(), inDirectoryPrefix); }))
-		return false;
-
-	if (!mNamePrefixes.empty() && gNoneOf(mNamePrefixes, [&](StringView inNamePrefix) { return gStartsWithNoCase(inFile.GetNameNoExt(), inNamePrefix); }))
-		return false;
-
-	if (!mNameSuffixes.empty() && gNoneOf(mNameSuffixes, [&](StringView inNameSuffix) { return gEndsWithNoCase(inFile.GetNameNoExt(), inNameSuffix); }))
-		return false;
-
-	return true;
+	return gMatchString(inFile.mPath, mPathPattern);
 }
 
 
@@ -900,23 +1001,10 @@ bool CookingSystem::ValidateRules()
 			const InputFilter& filter = rule.mInputFilters[i];
 
 			// Make sure there's at least one way to filter.
-			if (filter.mExtensions.empty() && 
-				filter.mDirectoryPrefixes.empty() && 
-				filter.mNamePrefixes.empty() && 
-				filter.mNameSuffixes.empty())
+			if (filter.mPathPattern.empty())
 			{
 				errors++;
-				gApp.LogError(R"(Rule {}, InputFilter[{}] needs at least one way of filtering the inputs (by extension, etc.).)", rule.mName, i);
-			}
-
-			if (!filter.mExtensions.empty())
-			{
-				for (StringView extension : filter.mExtensions)
-					if (!gStartsWith(extension, "."))
-					{
-						errors++;
-						gApp.LogError(R"(Rule {}, InputFilter[{}]: Extension "{}" must start with a ".")", rule.mName, i, extension);
-					}
+				gApp.LogError(R"(Rule {}, InputFilter[{}].PathPattern cannot be empty.)", rule.mName, i);
 			}
 		}
 

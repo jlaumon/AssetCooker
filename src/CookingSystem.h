@@ -55,10 +55,7 @@ FileID                         gGetOrAddFileFromFormat(StringView inFormatStr, c
 struct InputFilter
 {
 	uint32                  mRepoIndex = FileID::cInvalid().mRepoIndex;
-	std::vector<StringView> mExtensions;
-	std::vector<StringView> mDirectoryPrefixes;
-	std::vector<StringView> mNamePrefixes;
-	std::vector<StringView> mNameSuffixes;
+	StringView              mPathPattern;
 
 	bool                    Pass(const FileInfo& inFile) const;
 };
