@@ -858,6 +858,15 @@ bool CookingSystem::ValidateRules()
 	int                 errors = 0;
 	Span                rules  = GetRules();
 
+	// TODO: This is a temporary limitation because the current code compares USN numbers from multiple drives (and that doesn't work).
+	//		 Solution are to either store one USN per drive involved in commands, etc. (but storing variable number of USN seems annoying/inefficent),
+	//		 or hash files and compare hashes (which is more work but looks like the way to go for other reasons, like implementing a shared cache).
+	if (gFileSystem.GetDriveCount() > 1)
+	{
+		gApp.LogError(R"(Having FileRepos on multiple Drives is not supported (yet).)");
+		errors++;
+	}
+
 	for (size_t rule_index = 0; rule_index < rules.size(); ++rule_index)
 	{
 		const CookingRule& rule = rules[rule_index];
