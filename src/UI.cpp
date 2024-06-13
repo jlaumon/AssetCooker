@@ -1291,7 +1291,7 @@ void gDrawMain()
 {
 	gCurrentTimeInTicks = gGetTickCount() - gProcessStartTicks;
 
-	ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton);
+	ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoWindowMenuButton);
 	do_once
 	{
 		ImGui::DockBuilderRemoveNode(dockspace_id); // Clear out existing layout
