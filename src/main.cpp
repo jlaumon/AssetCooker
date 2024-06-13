@@ -274,8 +274,8 @@ int WinMain(
 	ImGui_ImplWin32_Init(hwnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
-	FrameTimer fame_timer;
-	fame_timer.Init();
+	FrameTimer frame_timer;
+	frame_timer.Init();
 
 	// TODO imgui tooltips are hard to deal with, maybe keep drawing for a fixed time longer than tooltip delay? (instead of frames)
 	constexpr int cIdleFramesDelay = 30; // TODO should ideally be zero, but needs some fixes, check the other todos
@@ -308,7 +308,7 @@ int WinMain(
 			idle_frames = 0;
 		}
 
-		fame_timer.StartFrame();
+		frame_timer.StartFrame();
 
 		// Poll and handle messages (inputs, window resize, etc.)
 		// See the WndProc() function below for our to dispatch events to the Win32 backend.
@@ -329,7 +329,7 @@ int WinMain(
 		if (gApp.mMainWindowIsMinimized)
 		{
 			// We're not going to call EndFrame, so reset the timer.
-			fame_timer.Reset();
+			frame_timer.Reset();
 			continue;
 		}
 
@@ -365,10 +365,10 @@ int WinMain(
 			ImGui::RenderPlatformWindowsDefault();
 		}
 #endif
-		fame_timer.EndFrame();
+		frame_timer.EndFrame();
 
-		gUILastFrameStats.mCPUMilliseconds = fame_timer.GetCPUAverageMilliseconds();
-		gUILastFrameStats.mGPUMilliseconds = fame_timer.GetGPUAverageMilliseconds();
+		gUILastFrameStats.mCPUMilliseconds = frame_timer.GetCPUAverageMilliseconds();
+		gUILastFrameStats.mGPUMilliseconds = frame_timer.GetGPUAverageMilliseconds();
 
 		g_pSwapChain->Present(1, 0); // Present with vsync
 	}
@@ -377,7 +377,7 @@ int WinMain(
 	gNotifExit();
 
 	// Cleanup
-	fame_timer.Shutdown();
+	frame_timer.Shutdown();
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
