@@ -92,11 +92,10 @@ void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 	if (gIsDebuggerAttached())
 		breakpoint;
 	else
-		// TODO this popup is not showing when the main window is open - fix it!
-		MessageBoxA(mMainWindowHwnd, TempString512(inFmt, inArgs).AsCStr(), TempString512("{} - Fatal Error!", mMainWindowTitle).AsCStr(), MB_OK | MB_ICONERROR | MB_APPLMODAL);
+		MessageBoxA(nullptr, TempString512(inFmt, inArgs).AsCStr(), TempString512("{} - Fatal Error!", mMainWindowTitle).AsCStr(), MB_OK | MB_ICONERROR | MB_APPLMODAL);
 
 	LogError("Fatal error, exiting now.");
-	exit(1);
+	quick_exit(1);
 }
 
 
