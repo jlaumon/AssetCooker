@@ -377,6 +377,8 @@ private:
 	std::jthread                             mTimeOutUpdateThread;
 	std::condition_variable                  mTimeOutAddedSignal;
 	std::binary_semaphore                    mTimeOutTimerSignal = std::binary_semaphore(0);
+
+	OwnedHandle                              mJobObject; // JobObject used to make sure child processes are killed if this process ends.
 };
 
 

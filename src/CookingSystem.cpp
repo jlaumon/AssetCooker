@@ -8,6 +8,7 @@
 #include "subprocess/subprocess.h"
 #include "win32/file.h"
 #include "win32/misc.h"
+#include "win32/process.h"
 
 // Debug toggle to fake cooking failures, to test error handling.
 bool gDebugFailCookingRandomly = false;
@@ -1057,6 +1058,23 @@ bool CookingSystem::ValidateRules()
 }
 
 
+static OwnedHandle sCreateJobObject()
+{
+	// Create a job object.
+	OwnedHandle job_object = CreateJobObjectA(nullptr, nullptr);
+	if (job_object == nullptr)
+		gApp.FatalError("CreateJobObjectA failed - {}", GetLastErrorString());
+
+	// Configure it so that child processes get killed with the parent.
+	JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit_info = {};
+	limit_info.BasicLimitInformation.LimitFlags     = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+	if (SetInformationJobObject(job_object, JobObjectExtendedLimitInformation, &limit_info, sizeof(limit_info)) == FALSE)
+		gApp.FatalError("SetInformationJobObject failed - {}", GetLastErrorString());
+
+	return job_object;
+}
+
+
 void CookingSystem::StartCooking()
 {
 	// Zero/negative means no limit on thread count.
@@ -1065,6 +1083,9 @@ void CookingSystem::StartCooking()
 	// Number of threads is at least one, and is capped by number of CPU cores minus one,
 	// because we want to leave one core for the file system monitoring thread (and main thread).
 	thread_count = gClamp(thread_count, 1, (int)std::thread::hardware_concurrency() - 1);
+
+	// Create the job object that will make sure child processes are killed if this process is killed.
+	mJobObject = sCreateJobObject();
 
 	gApp.Log("Starting {} Cooking Threads.", thread_count);
 
@@ -1098,6 +1119,8 @@ void CookingSystem::StopCooking()
 
 	for (auto& thread : mCookingThreads)
 		thread.mThread.join();
+
+	mJobObject = {};
 
 	mTimeOutUpdateThread.request_stop();
 	mTimeOutAddedSignal.notify_one();
@@ -1179,7 +1202,7 @@ void CookingSystem::QueueErroredCommands()
 }
 
 
-static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStringView& ioOutput)
+static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStringView& ioOutput, HANDLE inJobObject)
 {
 	ioOutput.AppendFormat("Command Line: {}\n\n", inCommandLine);
 
@@ -1197,8 +1220,13 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 		return false;
 	}
 
+	// Assign the job object to the process, to make sure it is killed if the Asset Cooker process ends.
+	if (AssignProcessToJobObject(inJobObject, process.hProcess) == FALSE)
+		gApp.FatalError("AssignProcessToJobObject failed - {}", GetLastErrorString());
+
 	// Get the output.
 	// TODO: optionally skip getting the output?
+	// TODO: periodically check if we want to exit, and terminate the process (not possible with subprocess_read_stdout, there's no timeout option)
 	{
 		char  buffer[1024];
 		while (true)
@@ -1406,7 +1434,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		}
 
 		// Run the command line.
-		success = sRunCommandLine(*command_line, output_str);
+		success = sRunCommandLine(*command_line, output_str, mJobObject);
 	}
 	else
 	{
@@ -1427,7 +1455,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	if (success && dep_command_line)
 	{
 		output_str.Append("\nDep File "); // No end line on purpose, we want to prepend the line added inside the sRunCommandLine.
-		success = sRunCommandLine(*dep_command_line, output_str);
+		success = sRunCommandLine(*dep_command_line, output_str, mJobObject);
 	}
 
 	// Set the end time and add the duration at the end of the log.
