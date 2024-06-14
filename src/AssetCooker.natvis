@@ -66,4 +66,12 @@ More information at: https://docs.microsoft.com/en-us/visualstudio/debugger/crea
   </Expand>
 </Type>
 
+<Type Name="CookingRuleID">
+  <DisplayString Condition="mIndex == -1">Invalid</DisplayString>
+  <DisplayString Condition="mIndex != -1">[{ mIndex }] { gCookingSystem.mRules[mIndex].mName, s8b}</DisplayString>
+  <Expand>
+    <ExpandedItem Condition="mIndex != -1">gCookingSystem.mRules[mIndex]</ExpandedItem>
+  </Expand>
+</Type>
+
 </AutoVisualizer>
