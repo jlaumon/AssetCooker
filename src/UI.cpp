@@ -9,6 +9,7 @@
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
 #include "Ticks.h"
+#include "Tests.h"
 
 #include "win32/misc.h"
 #include "win32/window.h"
@@ -213,6 +214,13 @@ void gDrawMainMenuBar()
 			ImGui::MenuItem("Debug Window", nullptr, &gOpenDebugWindow);
 
 			ImGui::MenuItem("Make Cooking Slower", nullptr, &gCookingSystem.mSlowMode);
+
+#ifdef TESTS_ENABLED
+			if (ImGui::MenuItem("Run Tests", nullptr, nullptr))
+			{
+				gRunTests();
+			}
+#endif
 
 			ImGui::EndMenu();
 		}

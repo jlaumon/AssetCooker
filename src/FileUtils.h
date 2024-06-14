@@ -32,6 +32,7 @@ constexpr MutStringView gNormalizePath(MutStringView ioPath); // Replace / by \.
 constexpr bool          gIsNormalized(StringView inPath);     // Return true if path only contains backslashes.
 TempPath                gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
 constexpr bool          gIsAbsolute(StringView inPath);       // Return true if the path is absolute and canonical.
+constexpr StringView    gGetFileNamePart(StringView inPath);  // Get the filename part of a path.
 
 bool                    gCreateDirectoryRecursive(StringView inAbsolutePath);
 
@@ -67,4 +68,14 @@ constexpr bool gIsAbsolute(StringView inPath)
 	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath[1] == ':' && (inPath[2] == '\\' || inPath[2] == '/')
 		&& !inPath.Contains(".\\")	// Not canonical if it contains "./" or ".\"
 		&& !inPath.Contains("./");  // Note: This also catches "../"
+}
+
+
+constexpr StringView gGetFileNamePart(StringView inPath)
+{
+	size_t file_start = inPath.find_last_of("\\/");
+	if (file_start == StringView::npos)
+		return inPath;
+
+	return inPath.substr(file_start + 1);
 }

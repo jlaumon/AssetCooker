@@ -1,5 +1,7 @@
 #include "Strings.h"
 
+#include "Tests.h"
+
 #include <string.h>
 #include <mbstring.h>
 
@@ -98,3 +100,23 @@ OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 
 	return WStringView{ ioBuffer.data(), (size_t)written_wchars };
 }
+
+
+REGISTER_TEST("Strings")
+{
+	TempString32 str("test");
+	TEST_TRUE(str.AsStringView() == "test");
+
+	str.Append("test");
+	TEST_TRUE(str.AsStringView() == "testtest");
+
+	str.Set("oooo");
+	TEST_TRUE(str.AsStringView() == "oooo");
+
+	str.AppendFormat("{}", "zest");
+	TEST_TRUE(str.AsStringView() == "oooozest");
+
+	str.Format("{}", "best");
+	TEST_TRUE(str.AsStringView() == "best");
+};
+

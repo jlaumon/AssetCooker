@@ -1,14 +1,7 @@
 #pragma once
 
-// Break to the debugger (or crash if no debugger is attached).
-#define breakpoint __debugbreak()
-
 // Assert macro.
-#ifdef ASSERTS_ENABLED
-#define gAssert(condition) do { if (!(condition)) breakpoint; } while(0)
-#else
-#define gAssert(condition) do { (void)sizeof(!(condition)); } while(0)
-#endif
+#include "Asserts.h"
 
 // Preprocessor utilities.
 #define TOKEN_PASTE1(x, y) x ## y

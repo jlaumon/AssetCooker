@@ -19,6 +19,7 @@
 #include "CookingSystem.h"
 #include "Ticks.h"
 #include "Notifications.h"
+#include "Tests.h"
 
 
 // Data
@@ -187,6 +188,12 @@ int WinMain(
   int       nShowCmd
 )
 {
+	// Check if we only want to run the tests.
+	if (StringView(lpCmdLine).Contains("-test"))
+	{
+		return gRunTests() ? 0 : 1;
+	}
+
 	gSetCurrentThreadName(L"Main Thread");
 
 	ImGui_ImplWin32_EnableDpiAwareness();

@@ -5,6 +5,7 @@
 #include "RuleReader.h"
 #include "Debug.h"
 #include "CookingSystem.h"
+#include "Tests.h"
 #include "UI.h"
 
 #include "win32/dbghelp.h"
@@ -92,7 +93,12 @@ void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 	if (gIsDebuggerAttached())
 		breakpoint;
 	else
-		MessageBoxA(nullptr, TempString512(inFmt, inArgs).AsCStr(), TempString512("{} - Fatal Error!", mMainWindowTitle).AsCStr(), MB_OK | MB_ICONERROR | MB_APPLMODAL);
+	{
+		// Don't make popups when running tests.
+		// TODO: also if running in command line mode/no UI mode
+		if (!gIsRunningTest())
+			MessageBoxA(nullptr, TempString512(inFmt, inArgs).AsCStr(), TempString512("{} - Fatal Error!", mMainWindowTitle).AsCStr(), MB_OK | MB_ICONERROR | MB_APPLMODAL);
+	}
 
 	LogError("Fatal error, exiting now.");
 	quick_exit(1);
@@ -103,6 +109,13 @@ void App::LogV(StringView inFmt, fmt::format_args inArgs, LogType inType)
 {
 	// Add to the in-memory log.
 	StringView formatted_str = mLog.Add(inType, inFmt, inArgs);
+
+	// If running tests, print to stdout (otherwise we don't care).
+	// TODO: also if running in command line mode/no UI mode
+	if (gIsRunningTest())
+	{
+		fwrite(formatted_str.data(), 1, formatted_str.size(), stdout);
+	}
 
 	// Convert to wide char to write to the debug output.
 	wchar_t message_buffer[4096];
