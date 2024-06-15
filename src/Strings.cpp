@@ -111,7 +111,7 @@ REGISTER_TEST("Strings")
 	TEST_TRUE(str.AsStringView() == "testtest");
 
 	str.Set("oooo");
-	TEST_FALSE(str.AsStringView() == "oooo");
+	TEST_TRUE(str.AsStringView() == "oooo");
 
 	str.AppendFormat("{}", "zest");
 	TEST_TRUE(str.AsStringView() == "oooozest");
