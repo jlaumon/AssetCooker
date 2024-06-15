@@ -47,5 +47,5 @@ jobs:
 
     - name: Run Tests
       shell: cmd
-      run: ./bin/x64/${{env.BUILD_CONFIGURATION}}/AssetCooker${{env.BUILD_CONFIGURATION}}.exe -test
+      run: .\bin\x64\${{env.BUILD_CONFIGURATION}}\AssetCooker${{env.BUILD_CONFIGURATION}}.exe -test
 
