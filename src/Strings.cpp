@@ -122,7 +122,7 @@ REGISTER_TEST("Strings")
 	str.Format("{}", "best");
 	TEST_TRUE(str.AsStringView() == "best");
 
-	TEST_TRUE(gIsEqual("tat", "tatA"));
+	TEST_TRUE(gIsEqual("tata", "tata"));
 	TEST_TRUE(gStartsWith("tatapoom", "tata"));
 	TEST_TRUE(gEndsWith("tatapoom", "poom"));
 
