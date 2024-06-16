@@ -259,9 +259,9 @@ bool gAllOf(taContainer& inContainer, taPredicate inPredicate)
 }
 
 
-// Test a string against a pattern. Return true if the string matches the pattern.
+// Test a string against a pattern. Return true if the string matches the pattern (case-insensitive).
 // Pattern supports wild cards '*' (any number of characters) and '?' (single character).
-constexpr bool gMatchString(StringView inString, StringView inPattern)
+constexpr bool gMatchStringNoCase(StringView inString, StringView inPattern)
 {
 	gAssert(!inPattern.empty());
 
@@ -296,7 +296,7 @@ constexpr bool gMatchString(StringView inString, StringView inPattern)
 		}
 
 		// Strings should be equal until there (or until end of the string).
-		if (str.substr(0, next_wildcard_index) != pattern.substr(0, next_wildcard_index))
+		if (!gIsEqualNoCase(str.substr(0, next_wildcard_index), pattern.substr(0, next_wildcard_index)))
 			return false;
 
 		// If there was no wild card, we're done! Strings match.
@@ -379,7 +379,7 @@ bool InputFilter::Pass(const FileInfo& inFile) const
 	if (mRepoIndex != inFile.mID.mRepoIndex)
 		return false;
 
-	return gMatchString(inFile.mPath, mPathPattern);
+	return gMatchStringNoCase(inFile.mPath, mPathPattern);
 }
 
 
