@@ -20,6 +20,7 @@ struct LuaReader
 			|| std::is_same_v<taType, TempString128>
 			|| std::is_same_v<taType, TempString256>
 			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
 			return "string";
 		else if constexpr (std::is_same_v<taType, bool>)
@@ -135,7 +136,8 @@ struct LuaReader
 			|| std::is_same_v<taType, TempString64>
 			|| std::is_same_v<taType, TempString128>
 			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>)
+			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, TempPath>)
 			is_right_type = (node_type == LuaType::String);
 		else if constexpr (std::is_same_v<taType, bool>)
 			is_right_type = (node_type == LuaType::Boolean);
@@ -161,6 +163,7 @@ struct LuaReader
 			|| std::is_same_v<taType, TempString128>
 			|| std::is_same_v<taType, TempString256>
 			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
 		{
 			// For TempStrings and String, just copy into it.

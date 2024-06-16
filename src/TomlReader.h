@@ -50,6 +50,7 @@ struct TomlReader
 			|| std::is_same_v<taType, TempString128>
 			|| std::is_same_v<taType, TempString256>
 			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
 			return "string";
 		else if constexpr (std::is_same_v<taType, bool>)
@@ -99,7 +100,8 @@ struct TomlReader
 			|| std::is_same_v<taType, TempString64>
 			|| std::is_same_v<taType, TempString128>
 			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>)
+			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, TempPath>)
 			is_right_type = node->is_string();
 		else if constexpr (std::is_same_v<taType, bool>)
 			is_right_type = node->is_boolean();
@@ -125,6 +127,7 @@ struct TomlReader
 			|| std::is_same_v<taType, TempString128>
 			|| std::is_same_v<taType, TempString256>
 			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
 			// For TempStrings and String, just copy into it.
 			outVar = StringView(*node->value<std::string_view>());
