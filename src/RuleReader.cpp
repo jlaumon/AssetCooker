@@ -69,7 +69,14 @@ static void sReadRuleFile(StringView inPath)
 					}
 				}
 
-				reader.Read("PathPattern",		input_filter.mPathPattern);
+				TempPath path_pattern;
+				if (reader.Read("PathPattern", path_pattern))
+				{
+					// Normalize the path to get rid of any forward slash.
+					gNormalizePath(path_pattern.AsSpan());
+
+					input_filter.mPathPattern = reader.mStringPool->AllocateCopy(path_pattern);
+				}
 			}
 		}
 
