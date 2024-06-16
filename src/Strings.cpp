@@ -1,8 +1,6 @@
 #include "Strings.h"
-
 #include "Tests.h"
 
-#include <string.h>
 #include <mbstring.h>
 
 #include "win32/misc.h"

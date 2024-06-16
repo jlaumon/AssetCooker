@@ -4,7 +4,6 @@
 
 #include <vector>
 
-
 struct Test
 {
 	StringView   mName;

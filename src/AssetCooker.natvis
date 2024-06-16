@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-.natvis file for Visual Studio debugger.
-Purpose: provide nicer views on data types used by Dear ImGui.
 
-To enable:
-* include file in your VS project (most recommended: not intrusive and always kept up to date!)
-* or copy in %USERPROFILE%\Documents\Visual Studio XXXX\Visualizers (current user)
-* or copy in %VsInstallDirectory%\Common7\Packages\Debugger\Visualizers (all users)
-
-More information at: https://docs.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects?view=vs-2019
--->
 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
 

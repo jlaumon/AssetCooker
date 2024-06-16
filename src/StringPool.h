@@ -1,8 +1,6 @@
 #pragma once
 #include "Strings.h"
 #include "VMemArray.h"
-#include <vector>
-#include <memory>
 
 
 // Simple linear allocator for strings.
