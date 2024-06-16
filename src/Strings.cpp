@@ -118,5 +118,17 @@ REGISTER_TEST("Strings")
 
 	str.Format("{}", "best");
 	TEST_TRUE(str.AsStringView() == "best");
+
+	TEST_TRUE(gIsEqual("tat", "tatA"));
+	TEST_TRUE(gStartsWith("tatapoom", "tata"));
+	TEST_TRUE(gEndsWith("tatapoom", "poom"));
+
+	TEST_TRUE(gIsEqualNoCase("taTa", "TatA"));
+	TEST_TRUE(gStartsWithNoCase("taTaPOOM", "TatA"));
+	TEST_TRUE(gEndsWithNoCase("taTaPOOM", "pOom"));
+
+	TEST_FALSE(gIsEqual("taTa", "TatA"));
+	TEST_FALSE(gStartsWith("taTaPOOM", "TatA"));
+	TEST_FALSE(gEndsWith("taTaPOOM", "pOom"));
 };
 
