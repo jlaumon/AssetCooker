@@ -95,7 +95,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 	}
 
 
-	if (ImGui::ButtonGrad("Clear"))
+	if (ImGui::Button("Clear"))
 		Clear();
 
 	std::lock_guard lock(mMutex);

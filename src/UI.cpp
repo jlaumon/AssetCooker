@@ -364,7 +364,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 
 		// TODO make it clearer when we're looking at a deleted file
 
-		if (ImGui::ButtonGrad("Show in Explorer"))
+		if (ImGui::Button("Show in Explorer"))
 		{
 			if (inFile.IsDeleted())
 				// Open the parent dir.
@@ -375,7 +375,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		}
 
 		ImGui::SameLine();
-		if (ImGui::ButtonGrad("Copy Path"))
+		if (ImGui::Button("Copy Path"))
 		{
 			ImGui::LogToClipboard();
 			ImGui::LogText(inFile.GetRepo().mRootPath.AsCStr());
@@ -448,7 +448,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
 
-	if (!inCommand.IsCleanedUp() && ImGui::ButtonGrad("Cook Now"))
+	if (!inCommand.IsCleanedUp() && ImGui::Button("Cook Now"))
 		gCookingSystem.ForceCook(inCommand.mID);
 
 	// TODO add a Cleanup button
@@ -456,7 +456,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 	if (inCommand.mLastCookingLog)
 	{
 		ImGui::SameLine();
-		if (ImGui::ButtonGrad("Select last Log"))
+		if (ImGui::Button("Select last Log"))
 		{
 			gSelectCookingLogEntry(inCommand.mLastCookingLog->mID, true);
 		}
@@ -611,7 +611,7 @@ void gDrawCookingQueue()
 	}
 
 	bool paused = gCookingSystem.IsCookingPaused();
-	if (ImGui::ButtonGrad(paused ? ICON_FK_PLAY " Start Cooking" : ICON_FK_STOP " Stop Cooking"))
+	if (ImGui::Button(paused ? ICON_FK_PLAY " Start Cooking" : ICON_FK_STOP " Stop Cooking"))
 		gCookingSystem.SetCookingPaused(!paused);
 
 	ImGui::SameLine();
@@ -1030,7 +1030,7 @@ void gDrawDebugWindow()
 		return;
 	}
 
-	if (ImGui::ButtonGrad("Cook 100"))
+	if (ImGui::Button("Cook 100"))
 	{
 		int num_commands  = gCookingSystem.mCommands.Size();
 		int first_command = gRand32() % num_commands;
@@ -1042,7 +1042,7 @@ void gDrawDebugWindow()
 	}
 
 	ImGui::SameLine();
-	if (ImGui::ButtonGrad("Cook 1000"))
+	if (ImGui::Button("Cook 1000"))
 	{
 		int num_commands  = gCookingSystem.mCommands.Size();
 		int first_command = gRand32() % num_commands;
