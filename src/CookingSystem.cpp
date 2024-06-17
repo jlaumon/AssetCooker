@@ -9,6 +9,7 @@
 #include "DepFile.h"
 #include "Notifications.h"
 #include "Ticks.h"
+#include "Tests.h"
 
 #include "subprocess/subprocess.h"
 #include "win32/file.h"
@@ -264,14 +265,21 @@ bool gAllOf(taContainer& inContainer, taPredicate inPredicate)
 }
 
 
-// Test a string against a pattern. Return true if the string matches the pattern (case-insensitive).
+// Test a path against a pattern. Return true if the path matches the pattern (case-insensitive).
 // Pattern supports wild cards '*' (any number of characters) and '?' (single character).
-constexpr bool gMatchStringNoCase(StringView inString, StringView inPattern)
+bool gMatchPath(StringView inPath, StringView inPattern)
 {
 	gAssert(!inPattern.empty());
+	gAssert(gIsNormalized(inPath) && gIsNormalized(inPattern));
 
-	StringView str     = inString;
-	StringView pattern = inPattern;
+	// Convert the path and pattern to lowercase to make sure the search is case-insensitive.
+	TempPath path_lowercase = inPath;
+	gToLowercase(path_lowercase.AsSpan());
+	TempPath pattern_lowercase = inPattern;
+	gToLowercase(pattern_lowercase.AsSpan());
+
+	StringView str          = path_lowercase;
+	StringView pattern      = pattern_lowercase;
 	bool       pending_star = false;
 
 	while (true)
@@ -290,7 +298,7 @@ constexpr bool gMatchStringNoCase(StringView inString, StringView inPattern)
 				return true;
 
 			// Find where the string starts matching the pattern again.
-			size_t next_match = str.find(pattern[0]);
+			size_t next_match = str.find(pattern);
 
 			// Never? Then it's a fail.
 			if (next_match == StringView::npos)
@@ -301,7 +309,7 @@ constexpr bool gMatchStringNoCase(StringView inString, StringView inPattern)
 		}
 
 		// Strings should be equal until there (or until end of the string).
-		if (!gIsEqualNoCase(str.substr(0, next_wildcard_index), pattern.substr(0, next_wildcard_index)))
+		if (str.substr(0, next_wildcard_index) != pattern.substr(0, next_wildcard_index))
 			return false;
 
 		// If there was no wild card, we're done! Strings match.
@@ -350,7 +358,7 @@ constexpr bool gMatchStringNoCase(StringView inString, StringView inPattern)
 			pending_star = false;
 
 			// Find where the string starts matching the pattern again.
-			size_t next_match = str.find(pattern[0]);
+			size_t next_match = str.find(pattern);
 
 			// Never? Then it's a fail.
 			if (next_match == StringView::npos)
@@ -363,20 +371,21 @@ constexpr bool gMatchStringNoCase(StringView inString, StringView inPattern)
 }
 
 
-#if 0 // TODO: add proper tests
-static_assert(gMatchString("yoyo.txt", "yoyo.txt"));
-static_assert(gMatchString("yoyo.txt", "*.txt"));
-static_assert(gMatchString("yoyo.txt", "y?yo.txt"));
-static_assert(gMatchString("yoyo.txt", "????????"));
-static_assert(gMatchString("yoyo.txt", "*"));
-static_assert(gMatchString("yoyo.txt", "?*"));
-static_assert(gMatchString("yoyo.txt", "**"));
-static_assert(gMatchString("yoyo.txt", "*?"));
-static_assert(gMatchString("yoyo.txt", "*?oyo.txt"));
-static_assert(gMatchString("yoyo.txt", "*????.txt"));
-static_assert(gMatchString("yoyo.txt", "*?*?*?o.txt"));
-static_assert(!gMatchString("yoyo.txt", "yoyo.txt*?"));
-#endif
+REGISTER_TEST("MatchPath")
+{
+	TEST_TRUE(gMatchPath ("YOYO.txt", "yoyo.txt"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "*.txt"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "y?yo.txt"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "????????"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "*"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "?*"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "**"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "*?"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "*?oyo.txt"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "*????.txt"));
+	TEST_TRUE(gMatchPath ("YOYO.txt", "y*?*?*?.txt"));
+	TEST_FALSE(gMatchPath("YOYO.txt", "yoyo.txt*?"));
+};
 
 
 bool InputFilter::Pass(const FileInfo& inFile) const
@@ -384,7 +393,7 @@ bool InputFilter::Pass(const FileInfo& inFile) const
 	if (mRepoIndex != inFile.mID.mRepoIndex)
 		return false;
 
-	return gMatchStringNoCase(inFile.mPath, mPathPattern);
+	return gMatchPath(inFile.mPath, mPathPattern);
 }
 
 

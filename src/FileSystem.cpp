@@ -50,6 +50,7 @@ PathHash gHashPath(StringView inAbsolutePath)
 	if (!wpath)
 		gApp.FatalError("Failed to convert path {} to WideChar", inAbsolutePath);
 
+	// TODO use gToLowerCase instead?
 	// Convert it to uppercase.
 	// Note: LCMapStringA does not seem to work with UTF8 (or at least not with LOCALE_INVARIANT) so we are forced to use wchars here.
 	PathBufferUTF16 uppercase_buffer;

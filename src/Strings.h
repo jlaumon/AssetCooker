@@ -173,6 +173,10 @@ constexpr const char* gEndPtr(StringView inString)
 }
 
 
+// Transform the string to lower case in place.
+void gToLowercase(MutStringView ioString);
+
+
 // TODO: rename to gStringCopy? gAppend is misleading since it writes at the beginning, not the end
 // Copy a string into a potentially larger one, and return a MutStringView for what remains.
 // eg. next = gAppend(buffer, "hello") will write "hello" into buffer, and next will point after "hello".

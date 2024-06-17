@@ -38,6 +38,13 @@ bool gEndsWithNoCase(StringView inString, StringView inEnd)
 }
 
 
+// Transform the string to lower case in place.
+void gToLowercase(MutStringView ioString)
+{
+	_mbslwr_s((unsigned char*)ioString.data(), ioString.size());
+}
+
+
 // Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
 OptionalStringView gWideCharToUtf8(WStringView inWString, MutStringView ioBuffer)
 {
