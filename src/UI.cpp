@@ -573,6 +573,97 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 }
 
 
+void gDrawCookingRulePopup(const CookingRule& inRule)
+{
+	if (!ImGui::IsPopupOpen("Popup"))
+		return;
+
+	if (!ImGui::BeginPopupWithTitle("Popup", TempString128(ICON_FK_COG " {} ({} Commands)",
+		inRule.mName,
+		inRule.mCommandCount.load())))
+		return;
+
+	defer { ImGui::EndPopup(); };
+
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
+
+	if (ImGui::BeginTable("Details", 2))
+	{
+		ImGui::TableNextRow();
+
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("Priority");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString32("{}", inRule.mPriority));
+
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("Version");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString32("{}", inRule.mVersion));
+
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("CommandType");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(gToStringView(inRule.mCommandType));
+
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("MatchMoreRules");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString32("{}", inRule.mMatchMoreRules));
+
+		ImGui::TableNextColumn(); ImGui::TextUnformatted("CommandLine");
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(inRule.mCommandLine);
+
+		if (inRule.UseDepFile())
+		{
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("DepFileFormat");
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(gToStringView(inRule.mDepFileFormat));
+
+			ImGui::TableNextColumn(); ImGui::TextUnformatted("DepFilePath");
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(inRule.mDepFilePath);
+
+			if (!inRule.mDepFileCommandLine.empty())
+			{
+				ImGui::TableNextColumn(); ImGui::TextUnformatted("DepFileCommandLine");
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(inRule.mDepFileCommandLine);
+			}
+		}
+
+		ImGui::EndTable();
+	}
+
+	ImGui::SeparatorText(TempString64("Input Filters ({} items)", inRule.mInputFilters.size()));
+
+	for (const InputFilter& input_filter : inRule.mInputFilters)
+		ImGui::TextUnformatted(TempPath(R"({}: {})", gFileSystem.GetRepo(FileID{ input_filter.mRepoIndex, 0 }).mName, input_filter.mPathPattern));
+
+	if (!inRule.mInputPaths.empty())
+	{
+		ImGui::SeparatorText(TempString64("Input Paths ({} items)", inRule.mInputPaths.size()));
+
+		for (StringView path : inRule.mInputPaths)
+			ImGui::TextUnformatted(path);
+	}
+
+	if (!inRule.mOutputPaths.empty())
+	{
+		ImGui::SeparatorText(TempString64("Output Paths ({} items)", inRule.mOutputPaths.size()));
+
+		for (StringView path : inRule.mOutputPaths)
+			ImGui::TextUnformatted(path);
+	}
+
+	ImGui::PopStyleVar();
+}
+
+
+void gDrawCookingRule(const CookingRule& inRule)
+{
+	ImGui::PushID(inRule.mName);
+	defer { ImGui::PopID(); };
+
+	bool clicked = ImGui::Selectable(TempString256("{} ({} Commands)##{}", inRule.mName, inRule.mCommandCount.load(), inRule.mName), 
+		false, ImGuiSelectableFlags_DontClosePopups);
+	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
+
+	if (open)
+		ImGui::OpenPopup("Popup");
+
+	gDrawCookingRulePopup(inRule);
+}
+
 
 void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, FileContext inContext)
 {
@@ -1069,11 +1160,7 @@ void gDrawDebugWindow()
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-			{
-				const CookingRule& rule = rules[i];
-				ImGui::TextUnformatted(rule.mName);
-				// TODO add a gDrawCookingRule
-			}
+				gDrawCookingRule(rules[i]);
 		}
 		clipper.End();
 	}

@@ -128,6 +128,8 @@ struct CookingRule : NoCopy
 	std::vector<StringView>  mInputPaths;
 	std::vector<StringView>  mOutputPaths;
 
+	mutable std::atomic<int> mCommandCount = 0;
+
 	bool                     UseDepFile() const { return !mDepFilePath.empty(); }
 };
 

@@ -919,6 +919,9 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 				command.mInputs         = std::move(inputs);
 				command.mOutputs        = std::move(outputs);
 			}
+
+			// Update stats.
+			rule.mCommandCount++;
 		}
 
 		// Let all the input and ouputs know that they are referenced by this command.
@@ -1841,3 +1844,4 @@ void CookingSystem::UpdateNotifications()
 		}
 	}
 }
+
