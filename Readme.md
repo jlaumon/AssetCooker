@@ -1,5 +1,8 @@
 # Asset Cooker
 
+
+![Asset Cooker](data/icons/chef-hat-heart/chef-hat-heart.png)
+
 Asset Cooker is a build system aimed at game assets, for custom engines. It leverages Windows' USN journals to robustly track which files change, and only cook what needs to be cooked.
 
 ## Motivation 
@@ -28,6 +31,27 @@ It's simple to use, define rules for cooking assets in TOML or LUA and look at i
 This file contains a few settings and the list of Repos, which are the root folders watched by Asset Cooker. The file must be named config.toml and be placed in the current directory (the directory from which Asset Cooker is launched).
 
 ```toml
+# Path to the rule file (optional)
+# Extension can be toml or lua.
+RuleFile = "rules.toml" 
+
+# Path to the log directory (optional)
+LogDirectory = "Logs"
+
+# Path to the cache directory (optional)
+CacheDirectory = "Cache"
+
+# Window title (optional)
+WindowTitle = "Asset Cooker" 
+
+# Repo (array, mandatory)
+[[Repo]]
+Name = "Source" # Name of the Repo (mandatory). Must be unique.
+Path = 'data/source' # Path to the repo (mandatory). Can be absolute or relative to current directory.
+
+[[Repo]]
+Name = "Bin"
+Path = 'data/bin'
 
 ```
 
