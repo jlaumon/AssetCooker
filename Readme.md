@@ -1,11 +1,12 @@
+# Asset Cooker
+
 Asset Cooker is a build system aimed at game assets, for custom engines. It leverages Windows' USN journals to robustly track which files change, and only cook what needs to be cooked.
 
 ## Motivation 
 
 Game engines generally want their data in a different format from the one used by authoring tools (eg. .dds rather than .psd for textures) but while there are some tools and libraries to do that conversion, there isn't really an efficient, engine agnostic and open source build system for running these conversion commands. 
 
-> Let's use CMake for game assets
->
+> Let's use CMake for game assets<BR>
 >  \- sickos
 
 Builds systems meant for code can somewhat be used for this but usually fall short for several reasons:
