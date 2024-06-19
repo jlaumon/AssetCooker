@@ -18,7 +18,7 @@ enum class CommandVariables : uint8
 	File,
 	Dir,
 	Dir_NoTrailingSlash,
-	FullPath,
+	Path,
 	Repo,
 	_Count
 };
@@ -31,7 +31,7 @@ constexpr StringView gToStringView(CommandVariables inVar)
 		"File",
 		"Dir",
 		"Dir_NoTrailingSlash",
-		"FullPath",
+		"Path",
 		"Repo",
 	};
 	static_assert(gElemCount(cNames) == (size_t)CommandVariables::_Count);
@@ -40,7 +40,7 @@ constexpr StringView gToStringView(CommandVariables inVar)
 };
 
 // Check for CommandVariables and replace them by the corresponding part of inFile.
-// Eg. "copy.exe {Repo:Source}{FullPath} {Repo:Bin}" will turn into "copy.exe D:/src/file.txt D:/bin/"
+// Eg. "copy.exe {Repo:Source}{Path} {Repo:Bin}" will turn into "copy.exe D:/src/file.txt D:/bin/"
 Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile);
 
 struct RepoAndFilePath
