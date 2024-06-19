@@ -20,11 +20,13 @@ In addition, game assets often need a bit more flexibility, hackability and debu
 
 ## Enters Asset Cooker
 
-Leave it running in the background and it will cook assets as soon as files change. Close it, and it will know if files changed when it starts again, thanks to the USN journals. 
+Leave it running in the background and it will cook assets as soon as files change. Close it, and it will know if files have changed when it starts again, thanks to the USN journals. 
 
 It's got a nice UI with many buttons. It lists all the files, all the commands, which ones are dirty, their output, their dependencies, etc.
 
 It's simple to use, define rules for cooking assets in TOML or LUA and look at it go. Single exe, no dependencies.
+
+It is fast. 
 
 ### Config File
 
