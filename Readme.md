@@ -28,7 +28,9 @@ It's simple to use, define rules for cooking assets in TOML or LUA and look at i
 
 ## Config File
 
-This file contains a few settings and the list of Repos, which are the root folders watched by Asset Cooker. The file must be named config.toml and be placed in the current directory (the directory from which Asset Cooker is launched).
+This file must be named `config.toml` and be placed in the current directory (the directory from which Asset Cooker is launched).
+
+It contains a few settings and the list of Repos, which are the root folders watched by Asset Cooker.
 
 ```toml
 # Path to the rule file (optional)
@@ -52,19 +54,33 @@ Path = 'data/source' # Path to the repo (mandatory). Can be absolute or relative
 [[Repo]]
 Name = "Bin"
 Path = 'data/bin'
-
 ```
+
+There is no limit on the number of Repos, so it's generally good to have several to separate directories that are dedicated to inputs from those dedicated to outputs (or intermediate files).
 
 ## Rule File
 
-By default Asset Cooker will look for rule.toml in the current directory, but this is configurable in config.toml. The file can be in toml (simpler) or lua (more powerful if you have many rules). 
+By default Asset Cooker will look for `rule.toml` in the current directory, but this is configurable in `config.toml`. The file can be in toml (simpler) or lua (more powerful if you have many rules). 
 
-The rules format closely follow the structs and variable naming of the C++ (except for the m prefixes on member variables).
+The rules format closely follow the structs and variable naming of the C++ (the only notable difference being that the C++ member variables start with an extra `m`).
 
+Before going into details, here is one example of rule to convert any PNG/TGA file ending with `_albedo` to a BC1 DDS, using [TexConv](https://github.com/microsoft/DirectXTex/wiki/Texconv). 
 ```toml
-
+[[Rule]]
+Name = "Texture BC1"
+InputFilters = [ 
+    { Repo = "Source", PathPattern = "*_albedo.png" },
+    { Repo = "Source", PathPattern = "*_albedo.tga" },
+]
+CommandLine = '{ Repo:Tools }texconv.exe -y -nologo -sepalpha -dx10 -m 8 -f BC1_UNORM -o "{ Repo:Bin }{ Dir_NoTrailingSlash }" "{ Repo:Source }{ Path }"'
+OutputPaths = [ '{ Repo:Bin }{ Dir }{ File }.dds' ]
 ```
 
+The `InputFilters` is what determines which files will be considered by the rule. Here it's only files in the `Source` Repo. Note the `*` wildcard in the `PathPattern` which can match any sequence of characters (`?` is also supported for matching a single character). `InputFilter` is an array, so you can have as many as you want for one rule (instead of using complicated regexes).
+
+The `CommandLine` is what will be run for every matching file. It's a format string which supports a small set of extra arguments (full list below). For example here `{ Repo:Tools }` will be replaced by the path of the Repo named "Tools", and `{ Path }` will be replaced by the path of the matched input file (relative to its Repo).
+
+The `OutputPaths` is the expected output of that command. It's an array in case there are several, but here there's a single one.
 
 ## Contributing 
 Open an issue before doing a pull request. It's a hobby project, please be nice. 
