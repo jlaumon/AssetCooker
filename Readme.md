@@ -81,7 +81,7 @@ OutputPaths = [ '{ Repo:Bin }{ Dir }{ File }.dds' ]
 
 The `InputFilters` is what determines which files will be considered by the rule. Here it's only files in the `Source` Repo. Note the `*` wildcard in the `PathPattern` which can match any sequence of characters (`?` is also supported for matching a single character). `InputFilter` is an array, so you can have as many as you want for one rule (instead of using complicated regexes).
 
-The `CommandLine` is what will be run for every matching file. It's a format string which supports a small set of extra arguments (full list below). For example here `{ Repo:Tools }` will be replaced by the path of the Repo named "Tools", and `{ Path }` will be replaced by the path of the matched input file (relative to its Repo).
+The `CommandLine` is what will be run for every matching file. It's a format string which supports a small set of extra arguments (the Command Variables, full list below). For example here `{ Repo:Tools }` will be replaced by the path of the Repo named "Tools", and `{ Path }` will be replaced by the path of the matched input file (relative to its Repo).
 
 The `OutputPaths` is the expected output of that command. It's an array in case there are several, but here there's a single one.
 
@@ -101,12 +101,40 @@ Rule = {
 }
 ```
 
-#### Rule Details
+#### Rule Reference
+
+| Variable           | Type              | Default Value | Description                                                                                                                                                                  |
+|--------------------|-------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Name               | string            |               | Name used to identify the rule int the UI.                                                                                                                                   |
+| Priority           | int               | 0             | Specifies the order in which commands are executed. Lower numbers first.                                                                                                     |
+| Version            | int               | 0             | Change this value to force all commands to run again.                                                                                                                        |
+| MatchMoreRules     | bool              | false         | If true, files matched by this rule will also be tested against other rules. Rules are tested in declaration order.                                                          |
+| CommandType        | string            | "CommandLine" | The type of command to run.<br>`"CommandLine"`: The user-provided command line is run (see CommandLine).<br>`"CopyFile"`: The matched input file is copied to OutputPath[0]. |
+| CommandLine        | string            |               | The command line to run (if CommandType is `"CommandLine"`).                                                                                                                 |
+| InputFilters       | InputFilter array |               | The filters used to match input files. Must contain at least one InputFilter.                                                                                                |
+| InputPaths         | string array      | empty         | Extra inputs for the command. Supports Command Variables.                                                                                                                    |
+| OutputPaths        | string array      | empty         | Outputs of the command. Supports Command Variables.                                                                                                                          |
+| DepFilePath        | string            | ""            | The path of the Dep File, if there is one. Supports Command Variables.                                                                                                       |
+| DepFileFormat      | string            | "AssetCooker" | The fromat of Dep File to expect.<br>`"AssetCooker"`: The AssetCooker custom Dep File format.<br>`"Make"`: The standard make .d file format (supported by many compilers).   |
+| DepFileCommandLine | string            | ""            | An optional command line to generate the DepFile (if the main CommandLine cannot generate it directly). Supports Command Variables.                                          |
+
+#### InputFilter Reference
+
+| Variable    | Type   | Description                                                                                                               |
+|-------------|--------|---------------------------------------------------------------------------------------------------------------------------|
+| Repo        | string | Name of the Repo the file must be from.                                                                                   |
+| PathPattern | string | A pattern to match the file path against. Supports wildcards `*` (any sequence of characters) and `?` (single character). |
+
+### Command Variables Reference
 
 ```toml
-
+	Ext,
+	File,
+	Dir,
+	Dir_NoTrailingSlash,
+	Path,
+	Repo,
 ```
-
 
 
 ## Contributing 
