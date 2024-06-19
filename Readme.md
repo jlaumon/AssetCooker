@@ -73,7 +73,7 @@ InputFilters = [
     { Repo = "Source", PathPattern = "*_albedo.png" },
     { Repo = "Source", PathPattern = "*_albedo.tga" },
 ]
-CommandLine = '{ Repo:Tools }texconv.exe -y -nologo -sepalpha -dx10 -m 8 -f BC1_UNORM -o "{ Repo:Bin }{ Dir }" "{ Repo:Source }{ Path }"'
+CommandLine = '{ Repo:Tools }texconv.exe -y -nologo -sepalpha -dx10 -m 8 -f BC1_UNORM_SRGB -o "{ Repo:Bin }{ Dir }" "{ Repo:Source }{ Path }"'
 OutputPaths = [ '{ Repo:Bin }{ Dir }{ File }.dds' ]
 ```
 
@@ -93,7 +93,7 @@ Rule = {
             { Repo = "Source", PathPattern = "*_albedo.png" },
             { Repo = "Source", PathPattern = "*_albedo.tga" },
         },
-        CommandLine = '{ Repo:Tools }texconv.exe -y -nologo -sepalpha -dx10 -m 8 -f BC1_UNORM -o "{ Repo:Bin }{ Dir }" "{ Repo:Source }{ Path }"'
+        CommandLine = '{ Repo:Tools }texconv.exe -y -nologo -sepalpha -dx10 -m 8 -f BC1_UNORM_SRGB -o "{ Repo:Bin }{ Dir }" "{ Repo:Source }{ Path }"',
         OutputPaths = { '{ Repo:Bin }{ Dir }{ File }.dds' },
     }
 }
