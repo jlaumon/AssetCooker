@@ -28,7 +28,19 @@ It's simple to use, define rules for cooking assets in TOML or LUA and look at i
 
 It is fast. 
 
-### Config File
+## Getting Started
+
+### Building
+
+Run `premake.bat` to generate AssetCooke.sln, the use Visual Studio to compile it.
+
+### Running
+
+You will need two to create two files before Asset Cooker can do anything: a config file and a rules file. 
+
+A minimal example is provided in the example/ directory. You can copy AssetCooker.exe there to play with it. Read on for the explanations.
+
+#### The Config File
 
 This file must be named `config.toml` and be placed in the current directory (the directory from which Asset Cooker is launched).
 
@@ -58,15 +70,15 @@ Name = "Bin"
 Path = 'data/bin'
 ```
 
-There is no limit on the number of Repos, so it's generally good to have several and separate directories dedicated to inputs from those dedicated to outputs (or intermediate files).
+It is generally a good idea to have at least one Repo for inputs and one for outputs (and perhaps also one for intermediate files).
 
-### Rule File
+### The Rules File
 
-By default Asset Cooker will look for `rule.toml` in the current directory, but this is configurable in `config.toml`. The file can be in toml (simpler) or lua (more powerful if you have many rules). 
+By default Asset Cooker will look for `rules.toml` in the current directory, but this is configurable in `config.toml`. The file can be in toml (simpler) or lua (more powerful if you have many rules).
 
-The rules format closely follow the structs and variable naming of the C++ (the only notable difference being that the C++ member variables start with an extra `m`).
+There can be any number of rules defined in the rules file. Each rule defines which kind of files it is interested in and how they are processed. When new file is detected by Asset Cooker, it is checked against the rules' input filters, and if one matches, a Command is created. That Command usually runs a command line, and generates at least one output file.
 
-Before going into details, here is one example of rule to convert any PNG/TGA file ending with `_albedo` to a BC1 DDS, using [TexConv](https://github.com/microsoft/DirectXTex/wiki/Texconv).
+Here is one example of rule to convert any PNG/TGA file ending with `_albedo` to a BC1 DDS, using [TexConv](https://github.com/microsoft/DirectXTex/wiki/Texconv).
 
 ```toml
 [[Rule]]
@@ -85,7 +97,7 @@ The `CommandLine` is what will be run for every matching file. It's a format str
 
 The `OutputPaths` is the expected output of that command. It's an array in case there are several, but here there's a single one.
 
-Here's the same example in `lua` (although it is not taking advantage of its programmability):
+Here's the same example in `lua` (without taking any advantage of lua's programmability):
 
 ```lua
 Rule = {
