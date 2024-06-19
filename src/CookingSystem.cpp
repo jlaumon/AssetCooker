@@ -126,6 +126,7 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 }
 
 
+// TODO add an output error string to help understand why it fails
 Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
 {
 	if (inFormatStr.empty())
@@ -143,11 +144,13 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 			break;
 		case CommandVariables::Dir:
 			if (!inFile.GetDirectory().empty())
-			{
 				outStr.append(inFile.GetDirectory());
 
-				// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
-				// Add a second backslash to avoid that.
+			// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
+			// Add a second backslash to avoid that.
+			// Note: we also do it if the first backslash wasn't added by the Dir itself (if Dir is empty) as it's often preceded by a Repo (which also ends with a '\').
+			if (!outStr.empty() && outStr.back() == '\\')
+			{
 				if (!inRemainingFormatStr.empty() && inRemainingFormatStr[0] == '"')
 					outStr.append("\\");
 			}
@@ -168,6 +171,11 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 					return false;
 
 				outStr.append(repo->mRootPath);
+
+				// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
+				// Add a second backslash to avoid that.
+				if (!inRemainingFormatStr.empty() && inRemainingFormatStr[0] == '"')
+					outStr.append("\\");
 			}
 			break;
 		default:
