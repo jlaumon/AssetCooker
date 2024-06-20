@@ -13,7 +13,7 @@ Game engines generally want their data in a different format than the one used b
 >  \- sickos
 
 Builds systems meant for code can somewhat be used for this but usually fall short for several reasons:
-- They need to check the state of the entire base every time they run, which can be prohibitively slow (and frustrating, especially when there's not actually anything to do)
+- They need to check the state of the entire base every time they run, which can be prohibitively slow (and frustrating, especially when there is actually nothing to do)
 - They use file times to check what needs to be built, which is not very reliable in non-code file workflows (eg. copy pasting files from explorer copies the timestamps)
 
 In addition, game assets often need a bit more flexibility, hackability and debuggability than eg. building many cpp files.
