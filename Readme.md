@@ -159,9 +159,17 @@ In the texture compression example above, consider a setup where the Repo `Sourc
 So the OutputPath described as `'{ Repo:Bin }{ Dir }{ File }.dds' ]'` will become `D:\bin\textures\brick_albedo.dds`.
 
 ## Contributing 
-Open an issue before doing a pull request. It's a hobby project, please be nice. 
+Open an issue before doing a pull request. It's a hobby project, please be nice.
 
+## FAQ
 
+> Is support for other platforms planned?
+
+At this point, no. USN Journals are a Windows' only feature, so adding a new platform is a lot of work.
+
+> Is UTF-8 supported?
+
+Not really. Most of the code is UTF-8 aware, but not all of it. It would also be hard to properly support because NTFS case-insensitivity is rather opaque, and Asset Cooker would need to get that really right.
 
 
 
