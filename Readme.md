@@ -74,11 +74,13 @@ It is generally a good idea to have at least one Repo for inputs and one for out
 
 ### The Rules File
 
+The rules file contains all the rules that tell Asset Cooker what to do with the files in its Repos.
+
 By default Asset Cooker will look for `rules.toml` in the current directory, but this is configurable in `config.toml`. The file can be in toml (simpler) or lua (more powerful if you have many rules).
 
-There can be any number of rules defined in the rules file. Each rule defines which kind of files it is interested in and how they are processed. When new file is detected by Asset Cooker, it is checked against the rules' input filters, and if one matches, a Command is created. That Command usually runs a command line, and generates at least one output file.
+Each rule defines which kind of files it is interested in, and how they are processed. When a file is created, it is checked against the input filters of each rule, and when one matches, a Command is created. That Command usually runs a command line, and generates at least one output file. Any time the input file is modified, the Command runs again. 
 
-Here is one example of rule to convert any PNG/TGA file ending with `_albedo` to a BC1 DDS, using [TexConv](https://github.com/microsoft/DirectXTex/wiki/Texconv).
+Here is an example of rule to convert any PNG/TGA file ending with `_albedo` to a BC1 DDS, using [TexConv](https://github.com/microsoft/DirectXTex/wiki/Texconv).
 
 ```toml
 [[Rule]]
