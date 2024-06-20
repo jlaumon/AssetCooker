@@ -74,11 +74,9 @@ It is generally a good idea to have at least one Repo for inputs and one for out
 
 ### The Rules File
 
-The rules file contains all the rules that tell Asset Cooker what to do with the files in its Repos.
+The rules file contains the rules that tell Asset Cooker what to do with the files in its Repos.
 
 By default Asset Cooker will look for `rules.toml` in the current directory, but this is configurable in `config.toml`. The file can be in toml (simpler) or lua (more powerful if you have many rules).
-
-Each rule defines which kind of files it is interested in, and how they are processed. When a file is created, it is checked against the input filters of each rule, and when one matches, a Command is created. That Command usually runs a command line, and generates at least one output file. Any time the input file is modified, the Command runs again. 
 
 Here is an example of rule to convert any PNG/TGA file ending with `_albedo` to a BC1 DDS, using [TexConv](https://github.com/microsoft/DirectXTex/wiki/Texconv).
 
@@ -95,7 +93,7 @@ OutputPaths = [ '{ Repo:Bin }{ Dir }{ File }.dds' ]
 
 The `InputFilters` is what determines which files will be considered by the rule. Here it's only files in the `Source` Repo. Note the `*` wildcard in the `PathPattern` which can match any sequence of characters (`?` is also supported for matching a single character). `InputFilter` is an array, so you can have as many as you want for one rule (instead of using complicated regexes).
 
-The `CommandLine` is what will be run for every matching file. It's a format string which supports a small set of extra arguments (the Command Variables, full list below). For example here `{ Repo:Tools }` will be replaced by the path of the Repo named "Tools", and `{ Path }` will be replaced by the path of the matched input file (relative to its Repo).
+The `CommandLine` is what will be run for every matching file. It's a format string which supports a small set of extra arguments (the Command Variables, [full list below](#command-variables-reference). For example here `{ Repo:Tools }` will be replaced by the path of the Repo named "Tools", and `{ Path }` will be replaced by the path of the matched input file (relative to its Repo).
 
 The `OutputPaths` is the expected output of that command. It's an array in case there are several, but here there's a single one.
 
@@ -117,6 +115,8 @@ Rule = {
 
 #### Rule Reference
 
+Here is the full list of variables supported by Rules.
+
 | Variable           | Type              | Default Value | Description                                                                                                                                                                  |
 |--------------------|-------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Name               | string            |               | Name used to identify the rule int the UI.                                                                                                                                   |
@@ -124,7 +124,7 @@ Rule = {
 | Version            | int               | 0             | Change this value to force all commands to run again.                                                                                                                        |
 | MatchMoreRules     | bool              | false         | If true, files matched by this rule will also be tested against other rules. Rules are tested in declaration order.                                                          |
 | CommandType        | string            | "CommandLine" | The type of command to run.<br>`"CommandLine"`: The user-provided command line is run (see CommandLine).<br>`"CopyFile"`: The matched input file is copied to OutputPath[0]. |
-| CommandLine        | string            |               | The command line to run (if CommandType is `"CommandLine"`).                                                                                                                 |
+| CommandLine        | string            |               | The command line to run (if CommandType is `"CommandLine"`). Supports Command Variables.                                                                                     |
 | InputFilters       | InputFilter array |               | The filters used to match input files. Must contain at least one InputFilter.                                                                                                |
 | InputPaths         | string array      | empty         | Extra inputs for the command. Supports Command Variables.                                                                                                                    |
 | OutputPaths        | string array      | empty         | Outputs of the command. Supports Command Variables.                                                                                                                          |
@@ -134,6 +134,8 @@ Rule = {
 
 #### InputFilter Reference
 
+Here is the full list of variables supported by InputFilters.
+
 | Variable    | Type   | Description                                                                                                               |
 |-------------|--------|---------------------------------------------------------------------------------------------------------------------------|
 | Repo        | string | Name of the Repo the file must be from.                                                                                   |
@@ -141,15 +143,20 @@ Rule = {
 
 ### Command Variables Reference
 
-```toml
-	Ext,
-	File,
-	Dir,
-	Dir_NoTrailingSlash,
-	Path,
-	Repo,
-```
+Here is the full list of Command Variables supported paths and command lines in Rules.
 
+In the texture compression example above, consider a setup where the Repo `Source` is pointing to `D:\bin` and the matched file is `D:\source\textures\brick_albedo.png`.
+
+| Variable                  | Will be replaced by                                                | Example                     |
+|---------------------------|--------------------------------------------------------------------|-----------------------------|
+| `{ Ext }`                 | The extension of the input file.                                   | `.png`                      |
+| `{ File }`                | The name of the input file (without extension).                    | `brick_albedo`              |
+| `{ Dir }`                 | The directory part of the input file path.                         | `textures\`                 |
+| `{ Dir_NoTrailingSlash }` | The directory part of the input file path, without trailing slash. | `textures`                  |
+| `{ Path }`                | The path of the input file.                                        | `textures\brick_albedo.png` |
+| `{ Repo:Bin }`            | The path of the Repo named "Source".                               | `D:\bin`                    |
+
+So the OutputPath described as `'{ Repo:Bin }{ Dir }{ File }.dds' ]'` will become `D:\bin\textures\brick_albedo.dds`.
 
 ## Contributing 
 Open an issue before doing a pull request. It's a hobby project, please be nice. 
