@@ -7,7 +7,7 @@ Asset Cooker is a build system aimed at game assets, for custom engines. It leve
 
 ## Motivation 
 
-Game engines generally want their data in a different format from the one used by authoring tools (eg. .dds rather than .psd for textures) but while there are some tools and libraries to do that conversion, there isn't really an efficient, engine agnostic and open source build system for running these conversion commands. 
+Game engines generally want their data in a different format than the one used by authoring tools (eg. .dds rather than .psd for textures) but while there are some tools and libraries to do that conversion, there isn't really an efficient, engine agnostic and open source build system for running these conversion commands. 
 
 > Let's use CMake for game assets<BR>
 >  \- sickos
