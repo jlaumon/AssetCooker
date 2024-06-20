@@ -42,7 +42,7 @@ A minimal example is provided in the example/ directory. You can copy AssetCooke
 
 #### The Config File
 
-This file must be named `config.toml` and be placed in the current directory (the directory from which Asset Cooker is launched).
+The config file must be named `config.toml` and be placed in the current directory (the directory from which Asset Cooker is launched).
 
 It contains a few settings and the list of Repos, which are the root folders watched by Asset Cooker.
 
