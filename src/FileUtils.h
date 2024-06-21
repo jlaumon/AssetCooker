@@ -38,6 +38,7 @@ constexpr bool          gIsNormalized(StringView inPath);     // Return true if 
 TempPath                gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
 constexpr bool          gIsAbsolute(StringView inPath);       // Return true if the path is absolute and canonical.
 constexpr StringView    gGetFileNamePart(StringView inPath);  // Get the filename part of a path.
+constexpr StringView    gNoTrailingSlash(StringView inPath);  // Remove the trailing slash if there is one.
 
 bool                    gCreateDirectoryRecursive(StringView inAbsolutePath);
 
@@ -83,4 +84,13 @@ constexpr StringView gGetFileNamePart(StringView inPath)
 		return inPath;
 
 	return inPath.substr(file_start + 1);
+}
+
+
+constexpr StringView gNoTrailingSlash(StringView inPath)
+{
+	if (inPath.back() == '\\' || inPath.back() == '/')
+		inPath.remove_suffix(1);
+
+	return inPath;
 }

@@ -304,9 +304,11 @@ void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std
 
 StringView FileRepo::RemoveRootPath(StringView inFullPath)
 {
-	gAssert(gStartsWith(inFullPath, mRootPath));
+	// inFullPath might be the root path without trailing slash, so ignore the trailing slash.
+	gAssert(gStartsWithNoCase(inFullPath, gNoTrailingSlash(mRootPath)));
 
-	return inFullPath.substr(mRootPath.size());
+	// Use gMin also in case inFullPath is the root path without trailing slash.
+	return inFullPath.substr(gMin(mRootPath.size(), inFullPath.size()));
 }
 
 
@@ -732,7 +734,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 
 					for (FileInfo& file : repo.mFiles)
 					{
-						if (file.mID != deleted_file.mID && gStartsWith(file.mPath, dir_path))
+						if (file.mID != deleted_file.mID && gStartsWithNoCase(file.mPath, dir_path))
 						{
 							repo.MarkFileDeleted(file, timestamp);
 
@@ -832,7 +834,8 @@ FileRepo* FileDrive::FindRepoForPath(StringView inFullPath)
 
 	for (FileRepo* repo : mRepos)
 	{
-		if (gStartsWith(inFullPath, repo->mRootPath))
+		// inFullPath might the root path without trailing slash, so ignore that trailing slash.
+		if (gStartsWithNoCase(inFullPath, gNoTrailingSlash(repo->mRootPath)))
 			return repo;
 	}
 
@@ -1511,7 +1514,7 @@ void FileSystem::LoadCache()
 			}
 			else
 			{
-				if (!gIsEqual(repo->mRootPath, repo_path))
+				if (!gIsEqualNoCase(repo->mRootPath, repo_path))
 				{
 					gApp.LogError(R"(Repo "{}" root path changed, ignoring cache.)", repo_name);
 					repo_valid = false;
