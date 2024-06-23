@@ -5,6 +5,8 @@
 
 Asset Cooker is a build system aimed at game assets, for custom engines. It leverages Windows' USN journals to robustly track which files change, and only cook what needs to be cooked.
 
+[![Asset Cooker - Release Trailer](https://img.youtube.com/vi/hvbVC4m6BOo/0.jpg)](https://www.youtube.com/watch?v=hvbVC4m6BOo)
+
 ## Motivation 
 
 Game engines generally want their data in a different format than the one used by authoring tools (eg. .dds rather than .psd for textures) but while there are some tools and libraries to do that conversion, there isn't really an efficient, engine agnostic and open source build system for running these conversion commands. 
