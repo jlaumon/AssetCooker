@@ -32,7 +32,9 @@ It is fast.
 
 ### Building
 
-Run `premake.bat` to generate AssetCooke.sln, the use Visual Studio to compile it.
+Clone and **init the submodules**.
+
+Then run `premake.bat` to generate AssetCooke.sln, and use Visual Studio to compile it.
 
 ### Running
 
