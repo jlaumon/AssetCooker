@@ -1125,8 +1125,8 @@ void gDrawDebugWindow()
 		return;
 	}
 
-	bool no_rules_found = gCookingSystem.mCommands.Size() == 0;
-	ImGui::BeginDisabled(no_rules_found);
+	bool no_command_found = gCookingSystem.mCommands.Size() == 0;
+	ImGui::BeginDisabled(no_command_found);
 	if (ImGui::Button("Cook 100"))
 	{
 		int num_commands  = gCookingSystem.mCommands.Size();
@@ -1149,11 +1149,11 @@ void gDrawDebugWindow()
 			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
 		}
 	}
-	if (no_rules_found)
+	if (no_command_found)
 	{
 		ImGui::SameLine();
 		ImGui::AlignTextToFramePadding();
-		ImGui::Text("No rules found");
+		ImGui::Text("No commands found");
 	}
 	ImGui::EndDisabled();
 
