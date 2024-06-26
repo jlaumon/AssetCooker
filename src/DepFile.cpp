@@ -56,37 +56,37 @@ static bool sIsSpace(char inChar)
 
 // glslang and GNU make expects a series of paths on a single line.
 // Spaces in paths are escaped with backslashes.
-static StringView sExtractFirstPath(StringView line)
+static StringView sExtractFirstPath(StringView inLine)
 {
-	bool escapingNextCharacter = false;
+	bool escaping_next_character = false;
 	// Trim spaces before processing.
-	while (!line.empty() && sIsSpace(line[0]))
+	while (!inLine.empty() && sIsSpace(inLine[0]))
 	{
-		line = line.substr(1);
+		inLine.remove_prefix(1);
 	}
-	while (!line.empty() && sIsSpace(line[line.size() - 1]))
+	while (!inLine.empty() && sIsSpace(inLine[inLine.size() - 1]))
 	{
-		line = line.substr(0, line.size() - 1);
+		inLine.remove_suffix(1);
 	}
 
-	StringView remaining = line;
+	StringView remaining = inLine;
 	while (!remaining.empty())
 	{
 		char c = remaining[0];
-		if (escapingNextCharacter)
+		if (escaping_next_character)
 		{
-			escapingNextCharacter = false;
+			escaping_next_character = false;
 		}
 		else if (c == '\\')
 		{
-			escapingNextCharacter = true;
+			escaping_next_character = true;
 		}
 		else if(sIsSpace(c))
-			return line.substr(0, remaining.data() - line.data());
+			return inLine.substr(0, remaining.data() - inLine.data());
 
 		remaining = remaining.substr(1);
 	}
-	return line;
+	return inLine;
 }
 
 REGISTER_TEST("ExtractFirstPath")
@@ -120,7 +120,7 @@ static TempPath sCleanupPath(StringView line)
 	return cleaned_path;
 }
 
-// Probably a very shitty parser. Just good enough for parsing dep files from DXC.
+// Barebones GNU Make-like dependency file parser. 
 static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, std::vector<FileID>& outInputs)
 {
 	StringView dep_file_content = inDepFileContent;
