@@ -8,6 +8,7 @@
 #include "App.h"
 #include "Debug.h"
 #include "FileSystem.h"
+#include "Tests.h"
 
 #include "win32/file.h"
 #include "win32/io.h"
@@ -53,6 +54,71 @@ static bool sIsSpace(char inChar)
 	return inChar == ' ' || inChar == '\t';
 }
 
+// glslang and GNU make expects a series of paths on a single line.
+// Spaces in paths are escaped with backslashes.
+static StringView sExtractFirstPath(StringView line)
+{
+	bool escapingNextCharacter = false;
+	// Trim spaces before processing.
+	while (!line.empty() && sIsSpace(line[0]))
+	{
+		line = line.substr(1);
+	}
+	while (!line.empty() && sIsSpace(line[line.size() - 1]))
+	{
+		line = line.substr(0, line.size() - 1);
+	}
+
+	StringView remaining = line;
+	while (!remaining.empty())
+	{
+		char c = remaining[0];
+		if (escapingNextCharacter)
+		{
+			escapingNextCharacter = false;
+		}
+		else if (c == '\\')
+		{
+			escapingNextCharacter = true;
+		}
+		else if(sIsSpace(c))
+			return line.substr(0, remaining.data() - line.data());
+
+		remaining = remaining.substr(1);
+	}
+	return line;
+}
+
+REGISTER_TEST("ExtractFirstPath")
+{
+	TEST_TRUE(sExtractFirstPath("file.txt") == "file.txt");
+	TEST_TRUE(sExtractFirstPath("file.txt other.bat") == "file.txt");
+	TEST_TRUE(sExtractFirstPath("file with spaces.txt") == "file");
+	TEST_TRUE(sExtractFirstPath("file\\ with\\ spaces.txt") == "file\\ with\\ spaces.txt");
+	TEST_TRUE(sExtractFirstPath(" \ttrim_me.png \t ") == "trim_me.png");
+};
+
+// Some make rule generators tend to produce absolute paths with all special characters escaped.
+// Some example of such path: C\:\\Bogus\\Path\ \\with\\too_many\\Backsla.sh
+static TempPath sCleanupPath(StringView line)
+{ 
+	TempPath cleaned_path;
+	bool last_character_escape = false;
+	for (char c : line)
+	{
+		if (c == '\\' && !last_character_escape)
+		{
+			last_character_escape = true;
+			continue;
+		}
+		if (last_character_escape)
+		{
+			last_character_escape = false;
+		}
+		cleaned_path.Append({ &c, 1 });
+	}
+	return cleaned_path;
+}
 
 // Probably a very shitty parser. Just good enough for parsing dep files from DXC.
 static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, std::vector<FileID>& outInputs)
@@ -69,7 +135,7 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 	}
 
 	dep_file_content = dep_file_content.substr(deps_start + cDepStartMarker.size());
-
+	
 	while (!dep_file_content.empty())
 	{
 		// Skip white space before the path.
@@ -77,43 +143,63 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 			dep_file_content = dep_file_content.substr(1);
 
 		// Lines generally end with space + backslash + linefeed.
+		constexpr StringView cWindowsLineEnd  = " \\\r\n";
 		constexpr StringView cLineEnd  = " \\\n";
-		size_t path_end  = dep_file_content.find(cLineEnd);
-		size_t next_path = path_end + cLineEnd.size();
+		size_t path_end  = dep_file_content.find(cWindowsLineEnd);
+		size_t next_path = path_end + cWindowsLineEnd.size();
+
+		// Match first on Windows' CRLF before matching on LF.
+		if (path_end == StringView::npos)
+		{
+			path_end  = dep_file_content.find(cLineEnd);
+			next_path = path_end + cLineEnd.size();
+		}
 		if (path_end == StringView::npos)
 		{
 			// Last line might also end with a linefeed (or nothing).
-			constexpr StringView cLastLineEnd = "\n";
-			path_end  = dep_file_content.find(cLastLineEnd);
+			constexpr StringView cLastLineEnd = "\n\r";
+			path_end = dep_file_content.find_first_of(cLastLineEnd);
 			next_path = path_end + cLastLineEnd.size();
 
 			if (path_end == StringView::npos)
 				next_path = dep_file_content.size();
 		}
 
-		// Make a copy because we need a null terminated string.
-		TempPath path = StringView(dep_file_content.substr(0, path_end));
+		if (path_end == StringView::npos)
+			next_path = dep_file_content.size();
 
-		// Get a proper absolute path, in case some relative parts are involved (might happen when doing #include "../something.h").
-		TempPath abs_path = gGetAbsolutePath(path);
+		StringView current_line = StringView(dep_file_content.substr(0, path_end));
 
-		// Find the repo.
-		FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
-		if (repo == nullptr)
+		while (!current_line.empty())
 		{
-			gApp.LogError(R"(Failed to parse Dep File {}, path doesn't belong in any Repo ("{}"))", inDepFileID.GetFile(), abs_path);
-			return false;
+			StringView dep_file_path = sExtractFirstPath(current_line);
+
+			current_line = current_line.substr(dep_file_path.data() + dep_file_path.size() - current_line.data());
+
+			// Make a copy because we need a null terminated string.
+			TempPath  path = sCleanupPath(dep_file_path);
+
+			// Get a proper absolute path, in case some relative parts are involved (might happen when doing #include "../something.h").
+			TempPath  abs_path = gGetAbsolutePath(path);
+
+			// Find the repo.
+			FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
+			if (repo == nullptr)
+			{
+				gApp.LogError(R"(Failed to parse Dep File {}, path doesn't belong in any Repo ("{}"))", inDepFileID.GetFile(), abs_path);
+				return false;
+			}
+
+			// Skip the repo path to get the file part.
+			StringView file_path = abs_path.AsStringView().substr(repo->mRootPath.size());
+
+			// Find or add the file.
+			// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).
+			FileID     file_id = repo->GetOrAddFile(file_path, FileType::File, {}).mID;
+
+			// Add it to the input list, while making sure there are no duplicates.
+			gEmplaceSorted(outInputs, file_id);
 		}
-
-		// Skip the repo path to get the file part.
-		StringView file_path = abs_path.AsStringView().substr(repo->mRootPath.size());
-
-		// Find or add the file.
-		// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).
-		FileID file_id = repo->GetOrAddFile(file_path, FileType::File, {}).mID;
-
-		// Add it to the input list, while making sure there are no duplicates.
-		gEmplaceSorted(outInputs, file_id);
 
 		// Continue to the next path.
 		dep_file_content.remove_prefix(next_path);
