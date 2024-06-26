@@ -120,6 +120,16 @@ static TempPath sCleanupPath(StringView line)
 	return cleaned_path;
 }
 
+REGISTER_TEST("CleanupPath")
+{
+	TEST_TRUE(sCleanupPath("./file.txt").AsStringView() == "./file.txt");
+	// glslang escape special characters in paths.
+	TEST_TRUE(sCleanupPath(R"(C\:\\some\\escaped\\path)").AsStringView() == R"(C:\some\escaped\path)");
+	TEST_TRUE(sCleanupPath(R"(C:\\path\ with\ space\\should\ work.txt)").AsStringView() == R"(C:\path with space\should work.txt)");
+	// but handling those shouldn't break standard paths.
+	TEST_TRUE(sCleanupPath(R"(C:\Windows\path32\command.com)").AsStringView() == R"(C:\Windows\path32\command.com)");
+};
+
 // Barebones GNU Make-like dependency file parser. 
 static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, std::vector<FileID>& outInputs)
 {
