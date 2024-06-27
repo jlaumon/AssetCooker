@@ -54,6 +54,16 @@ static bool sIsSpace(char inChar)
 	return inChar == ' ' || inChar == '\t';
 }
 
+static bool sMakeEscapedWithBackslash(char inChar)
+{
+	return inChar == ' ' || inChar == '\\' || inChar == ':' || inChar == '[' || inChar == ']' || inChar == '#';
+}
+
+static bool sMakeEscapedWithDollar(char inChar)
+{
+	return inChar == '$';
+}
+
 // glslang and GNU make expects a series of paths on a single line.
 // Spaces in paths are escaped with backslashes.
 static StringView sExtractFirstPath(StringView inLine)
@@ -103,18 +113,18 @@ REGISTER_TEST("ExtractFirstPath")
 static TempPath sCleanupPath(StringView line)
 { 
 	TempPath cleaned_path;
-	bool last_character_escape = false;
-	for (char c : line)
+	for (auto it = line.begin(); it != line.end(); ++it)
 	{
-		if (c == '\\' && !last_character_escape)
+		auto next_character = it + 1;
+		if (*it == '\\' && next_character != line.end() && sMakeEscapedWithBackslash(*next_character))
 		{
-			last_character_escape = true;
 			continue;
 		}
-		if (last_character_escape)
+		if (*it == '$' && next_character != line.end() && sMakeEscapedWithDollar(*next_character))
 		{
-			last_character_escape = false;
+			continue;
 		}
+		char c = *it;
 		cleaned_path.Append({ &c, 1 });
 	}
 	return cleaned_path;
@@ -123,11 +133,40 @@ static TempPath sCleanupPath(StringView line)
 REGISTER_TEST("CleanupPath")
 {
 	TEST_TRUE(sCleanupPath("./file.txt").AsStringView() == "./file.txt");
-	// glslang escape special characters in paths.
+
+	// Handling proper Windows-style path escaping.
 	TEST_TRUE(sCleanupPath(R"(C\:\\some\\escaped\\path)").AsStringView() == R"(C:\some\escaped\path)");
-	TEST_TRUE(sCleanupPath(R"(C:\\path\ with\ space\\should\ work.txt)").AsStringView() == R"(C:\path with space\should work.txt)");
-	// but handling those shouldn't break standard paths.
+	TEST_TRUE(sCleanupPath(R"(C:\\path\ with\ spaces\\should\ work.txt)").AsStringView() == R"(C:\path with spaces\should work.txt)");
+	// but handling those shouldn't break perfectly valid paths.
 	TEST_TRUE(sCleanupPath(R"(C:\Windows\path32\command.com)").AsStringView() == R"(C:\Windows\path32\command.com)");
+	TEST_TRUE(sCleanupPath(R"(C:\Windows\)").AsStringView() == R"(C:\Windows\)");
+
+
+
+	// GNU Make escape characters induced from the documentation
+	
+	// Mentioned in https://www.gnu.org/software/make/manual/make.html#What-Makefiles-Contain
+	TEST_TRUE(sCleanupPath(R"(\#sharp.glsl)").AsStringView() == R"(#sharp.glsl)");
+
+	// See also https://www.gnu.org/software/make/manual/make.html#Rule-Syntax-1 for an explicit mention of having
+	// to escape $ to avoid variable expansion.
+	// Also, https://www.gnu.org/software/make/manual/make.html#Splitting-Long-Lines shows a corner case where $
+	// can be used to remove the space resulting of scaffolding the newline.
+	TEST_TRUE(sCleanupPath(R"($$currency.glsl)").AsStringView() == R"($currency.glsl)");
+
+	// Given make's $() evaluation syntax, one might consider escaping parentheses but they don't have to be.
+	TEST_TRUE(sCleanupPath(R"=((parens).glsl)=").AsStringView() == R"=((parens).glsl)=");
+
+	// https://www.gnu.org/software/make/manual/make.html#Using-Wildcard-Characters-in-File-Names
+	// mentions that wildcard characters can be escaped in order to use them verbatim.
+	TEST_TRUE(sCleanupPath(R"(\[brackets\].glsl)").AsStringView() == R"([brackets].glsl)");
+
+	// No explicit mention of having to escape spaces but given that prerequisites are split by spaces,
+	// it sounds logical to escape them to inhibit that mechanism.
+	TEST_TRUE(sCleanupPath(R"(space\ file.glsl)").AsStringView() == R"(space file.glsl)");
+
+	// Given the role of % in Makefiles, one might consider escaping them but it doesn't happen.
+	TEST_TRUE(sCleanupPath(R"(%percent%.glsl)").AsStringView() == R"(%percent%.glsl)");
 };
 
 // Barebones GNU Make-like dependency file parser. 
