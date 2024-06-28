@@ -208,7 +208,7 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 			// Last line might also end with a linefeed (or nothing).
 			constexpr StringView cLastLineEnd = "\n\r";
 			path_end = dep_file_content.find_first_of(cLastLineEnd);
-			next_path = path_end + cLastLineEnd.size();
+			next_path = path_end + 1;
 
 			if (path_end == StringView::npos)
 				next_path = dep_file_content.size();
