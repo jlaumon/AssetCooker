@@ -8,6 +8,7 @@
 #include "App.h"
 #include "Debug.h"
 #include "FileSystem.h"
+#include "Tests.h"
 
 #include "win32/file.h"
 #include "win32/io.h"
@@ -53,8 +54,122 @@ static bool sIsSpace(char inChar)
 	return inChar == ' ' || inChar == '\t';
 }
 
+static bool sMakeEscapedWithBackslash(char inChar)
+{
+	return inChar == ' ' || inChar == '\\' || inChar == ':' || inChar == '[' || inChar == ']' || inChar == '#';
+}
 
-// Probably a very shitty parser. Just good enough for parsing dep files from DXC.
+static bool sMakeEscapedWithDollar(char inChar)
+{
+	return inChar == '$';
+}
+
+// glslang and GNU make expects a series of paths on a single line.
+// Spaces in paths are escaped with backslashes.
+static StringView sExtractFirstPath(StringView inLine)
+{
+	bool escaping_next_character = false;
+	// Trim spaces before processing.
+	while (!inLine.empty() && sIsSpace(inLine[0]))
+	{
+		inLine.remove_prefix(1);
+	}
+	while (!inLine.empty() && sIsSpace(inLine[inLine.size() - 1]))
+	{
+		inLine.remove_suffix(1);
+	}
+
+	StringView remaining = inLine;
+	while (!remaining.empty())
+	{
+		char c = remaining[0];
+		if (escaping_next_character)
+		{
+			escaping_next_character = false;
+		}
+		else if (c == '\\')
+		{
+			escaping_next_character = true;
+		}
+		else if(sIsSpace(c))
+			return inLine.substr(0, remaining.data() - inLine.data());
+
+		remaining = remaining.substr(1);
+	}
+	return inLine;
+}
+
+REGISTER_TEST("ExtractFirstPath")
+{
+	TEST_TRUE(sExtractFirstPath("file.txt") == "file.txt");
+	TEST_TRUE(sExtractFirstPath("file.txt other.bat") == "file.txt");
+	TEST_TRUE(sExtractFirstPath("file with spaces.txt") == "file");
+	TEST_TRUE(sExtractFirstPath("file\\ with\\ spaces.txt") == "file\\ with\\ spaces.txt");
+	TEST_TRUE(sExtractFirstPath(" \ttrim_me.png \t ") == "trim_me.png");
+};
+
+// Some make rule generators tend to produce absolute paths with all special characters escaped.
+// Some example of such path: C\:\\Bogus\\Path\ \\with\\too_many\\Backsla.sh
+static TempPath sCleanupPath(StringView line)
+{ 
+	TempPath cleaned_path;
+	for (auto it = line.begin(); it != line.end(); ++it)
+	{
+		auto next_character = it + 1;
+		if (*it == '\\' && next_character != line.end() && sMakeEscapedWithBackslash(*next_character))
+		{
+			continue;
+		}
+		if (*it == '$' && next_character != line.end() && sMakeEscapedWithDollar(*next_character))
+		{
+			continue;
+		}
+		char c = *it;
+		cleaned_path.Append({ &c, 1 });
+	}
+	return cleaned_path;
+}
+
+REGISTER_TEST("CleanupPath")
+{
+	TEST_TRUE(sCleanupPath("./file.txt").AsStringView() == "./file.txt");
+
+	// Handling proper Windows-style path escaping.
+	TEST_TRUE(sCleanupPath(R"(C\:\\some\\escaped\\path)").AsStringView() == R"(C:\some\escaped\path)");
+	TEST_TRUE(sCleanupPath(R"(C:\\path\ with\ spaces\\should\ work.txt)").AsStringView() == R"(C:\path with spaces\should work.txt)");
+	// but handling those shouldn't break perfectly valid paths.
+	TEST_TRUE(sCleanupPath(R"(C:\Windows\path32\command.com)").AsStringView() == R"(C:\Windows\path32\command.com)");
+	TEST_TRUE(sCleanupPath(R"(C:\Windows\)").AsStringView() == R"(C:\Windows\)");
+
+
+
+	// GNU Make escape characters induced from the documentation
+	
+	// Mentioned in https://www.gnu.org/software/make/manual/make.html#What-Makefiles-Contain
+	TEST_TRUE(sCleanupPath(R"(\#sharp.glsl)").AsStringView() == R"(#sharp.glsl)");
+
+	// See also https://www.gnu.org/software/make/manual/make.html#Rule-Syntax-1 for an explicit mention of having
+	// to escape $ to avoid variable expansion.
+	// Also, https://www.gnu.org/software/make/manual/make.html#Splitting-Long-Lines shows a corner case where $
+	// can be used to remove the space resulting of scaffolding the newline.
+	TEST_TRUE(sCleanupPath(R"($$currency.glsl)").AsStringView() == R"($currency.glsl)");
+
+	// Given make's $() evaluation syntax, one might consider escaping parentheses but they don't have to be.
+	TEST_TRUE(sCleanupPath(R"=((parens).glsl)=").AsStringView() == R"=((parens).glsl)=");
+
+	// https://www.gnu.org/software/make/manual/make.html#Using-Wildcard-Characters-in-File-Names
+	// mentions that wildcard characters can be escaped in order to use them verbatim.
+	TEST_TRUE(sCleanupPath(R"(\[brackets\].glsl)").AsStringView() == R"([brackets].glsl)");
+
+	// No explicit mention of having to escape spaces but given that prerequisites are split by spaces,
+	// it sounds logical to escape them to inhibit that mechanism.
+	TEST_TRUE(sCleanupPath(R"(space\ file.glsl)").AsStringView() == R"(space file.glsl)");
+
+	// Given the role of % in Makefiles, one might consider escaping them but it doesn't happen.
+	TEST_TRUE(sCleanupPath(R"(%percent%.glsl)").AsStringView() == R"(%percent%.glsl)");
+};
+
+// Barebones GNU Make-like dependency file parser. 
 static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, std::vector<FileID>& outInputs)
 {
 	StringView dep_file_content = inDepFileContent;
@@ -69,7 +184,7 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 	}
 
 	dep_file_content = dep_file_content.substr(deps_start + cDepStartMarker.size());
-
+	
 	while (!dep_file_content.empty())
 	{
 		// Skip white space before the path.
@@ -77,43 +192,63 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 			dep_file_content = dep_file_content.substr(1);
 
 		// Lines generally end with space + backslash + linefeed.
+		constexpr StringView cWindowsLineEnd  = " \\\r\n";
 		constexpr StringView cLineEnd  = " \\\n";
-		size_t path_end  = dep_file_content.find(cLineEnd);
-		size_t next_path = path_end + cLineEnd.size();
+		size_t path_end  = dep_file_content.find(cWindowsLineEnd);
+		size_t next_path = path_end + cWindowsLineEnd.size();
+
+		// Match first on Windows' CRLF before matching on LF.
+		if (path_end == StringView::npos)
+		{
+			path_end  = dep_file_content.find(cLineEnd);
+			next_path = path_end + cLineEnd.size();
+		}
 		if (path_end == StringView::npos)
 		{
 			// Last line might also end with a linefeed (or nothing).
-			constexpr StringView cLastLineEnd = "\n";
-			path_end  = dep_file_content.find(cLastLineEnd);
-			next_path = path_end + cLastLineEnd.size();
+			constexpr StringView cLastLineEnd = "\n\r";
+			path_end = dep_file_content.find_first_of(cLastLineEnd);
+			next_path = path_end + 1;
 
 			if (path_end == StringView::npos)
 				next_path = dep_file_content.size();
 		}
 
-		// Make a copy because we need a null terminated string.
-		TempPath path = StringView(dep_file_content.substr(0, path_end));
+		if (path_end == StringView::npos)
+			next_path = dep_file_content.size();
 
-		// Get a proper absolute path, in case some relative parts are involved (might happen when doing #include "../something.h").
-		TempPath abs_path = gGetAbsolutePath(path);
+		StringView current_line = StringView(dep_file_content.substr(0, path_end));
 
-		// Find the repo.
-		FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
-		if (repo == nullptr)
+		while (!current_line.empty())
 		{
-			gApp.LogError(R"(Failed to parse Dep File {}, path doesn't belong in any Repo ("{}"))", inDepFileID.GetFile(), abs_path);
-			return false;
+			StringView dep_file_path = sExtractFirstPath(current_line);
+
+			current_line = current_line.substr(dep_file_path.data() + dep_file_path.size() - current_line.data());
+
+			// Make a copy because we need a null terminated string.
+			TempPath  path = sCleanupPath(dep_file_path);
+
+			// Get a proper absolute path, in case some relative parts are involved (might happen when doing #include "../something.h").
+			TempPath  abs_path = gGetAbsolutePath(path);
+
+			// Find the repo.
+			FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
+			if (repo == nullptr)
+			{
+				gApp.LogError(R"(Failed to parse Dep File {}, path doesn't belong in any Repo ("{}"))", inDepFileID.GetFile(), abs_path);
+				return false;
+			}
+
+			// Skip the repo path to get the file part.
+			StringView file_path = abs_path.AsStringView().substr(repo->mRootPath.size());
+
+			// Find or add the file.
+			// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).
+			FileID     file_id = repo->GetOrAddFile(file_path, FileType::File, {}).mID;
+
+			// Add it to the input list, while making sure there are no duplicates.
+			gEmplaceSorted(outInputs, file_id);
 		}
-
-		// Skip the repo path to get the file part.
-		StringView file_path = abs_path.AsStringView().substr(repo->mRootPath.size());
-
-		// Find or add the file.
-		// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).
-		FileID file_id = repo->GetOrAddFile(file_path, FileType::File, {}).mID;
-
-		// Add it to the input list, while making sure there are no duplicates.
-		gEmplaceSorted(outInputs, file_id);
 
 		// Continue to the next path.
 		dep_file_content.remove_prefix(next_path);
