@@ -128,13 +128,11 @@ Here is the full list of variables supported by Rules.
 | Version            | int               | 0             | Change this value to force all commands to run again.                                                                                                                        |
 | MatchMoreRules     | bool              | false         | If true, files matched by this rule will also be tested against other rules. Rules are tested in declaration order.                                                          |
 | CommandType        | string            | "CommandLine" | The type of command to run.<br>`"CommandLine"`: The user-provided command line is run (see CommandLine).<br>`"CopyFile"`: The matched input file is copied to OutputPath[0]. |
-| CommandLine        | string            |               | The command line to run (if CommandType is `"CommandLine"`). Supports Command Variables.                                                                                     |
-| InputFilters       | InputFilter array |               | The filters used to match input files. Must contain at least one InputFilter.                                                                                                |
-| InputPaths         | string array      | empty         | Extra inputs for the command. Supports Command Variables.                                                                                                                    |
-| OutputPaths        | string array      | empty         | Outputs of the command. Supports Command Variables.                                                                                                                          |
-| DepFilePath        | string            | ""            | The path of the Dep File, if there is one. Supports Command Variables.                                                                                                       |
-| DepFileFormat      | string            | "AssetCooker" | The fromat of Dep File to expect.<br>`"AssetCooker"`: The AssetCooker custom Dep File format.<br>`"Make"`: The standard make .d file format (supported by many compilers).   |
-| DepFileCommandLine | string            | ""            | An optional command line to generate the DepFile (if the main CommandLine cannot generate it directly). Supports Command Variables.                                          |
+| CommandLine        | string            |               | The command line to run (if CommandType is `"CommandLine"`). Supports [Command Variables](#command-variables-reference).                                                     |
+| InputFilters       | InputFilter array |               | The filters used to match input files. See [InputFilter](#inputfilter-reference). Must contain at least one InputFilter.                                                     |
+| InputPaths         | string array      | empty         | Extra inputs for the command. Supports [Command Variables](#command-variables-reference).                                                                                    |
+| OutputPaths        | string array      | empty         | Outputs of the command. Supports [Command Variables](#command-variables-reference).                                                                                          |
+| DepFile            | DepFile           | empty         | The DepFile description, if a dep file should be used. See [DepFile](#depfile-reference).                                                                                    |
 
 #### InputFilter Reference
 
@@ -144,6 +142,16 @@ Here is the full list of variables supported by InputFilters.
 |-------------|--------|---------------------------------------------------------------------------------------------------------------------------|
 | Repo        | string | Name of the Repo the file must be from.                                                                                   |
 | PathPattern | string | A pattern to match the file path against. Supports wildcards `*` (any sequence of characters) and `?` (single character). |
+
+#### DepFile Reference
+
+Here is the full list of variables supported by DepFiles.
+
+| Variable    | Type              | Default Value | Description                                                                                                                                                                  |
+|-------------|-------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Path        | string            |               | The path of the Dep File. Supports [Command Variables](#command-variables-reference).                                                                                        |
+| Format      | string            | "AssetCooker" | The format of Dep File to expect.<br>`"AssetCooker"`: The AssetCooker custom Dep File format.<br>`"Make"`: The standard make .d file format (supported by many compilers).   |
+| CommandLine | string            | ""            | An optional command line to generate the DepFile (if the main CommandLine cannot generate it directly). Supports [Command Variable](#command-variables-references).          |
 
 ### Command Variables Reference
 
