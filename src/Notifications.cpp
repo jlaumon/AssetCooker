@@ -26,6 +26,14 @@ void gNotifInit(void* inHwnd)
 	gStringCopy(nid.szTip, gApp.mMainWindowTitle);
 
 	bool ret = Shell_NotifyIconA(NIM_ADD, &nid);
+	// If the program is killed without letting it clean up its icon, the next launch's add will fail.
+	// Deleting that "zombie" icon first before recreating it allows to "refresh" the icon ourselves.
+	if (!ret)
+	{
+		ret = Shell_NotifyIconA(NIM_DELETE, &nid);
+		gAssert(ret);
+		ret = Shell_NotifyIconA(NIM_ADD, &nid);
+	}
 	gAssert(ret);
 
 	// NOTIFYICON_VERSION_4 is prefered
