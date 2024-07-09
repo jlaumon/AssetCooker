@@ -629,6 +629,73 @@ USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
 	}
 }
 
+enum class USNReasons : uint32
+{
+	DATA_OVERWRITE					= 0x00000001,
+	DATA_EXTEND						= 0x00000002,
+	DATA_TRUNCATION					= 0x00000004,
+	NAMED_DATA_OVERWRITE			= 0x00000010,
+	NAMED_DATA_EXTEND				= 0x00000020,
+	NAMED_DATA_TRUNCATION			= 0x00000040,
+	FILE_CREATE						= 0x00000100,
+	FILE_DELETE						= 0x00000200,
+	EA_CHANGE						= 0x00000400,
+	SECURITY_CHANGE					= 0x00000800,
+	RENAME_OLD_NAME					= 0x00001000,
+	RENAME_NEW_NAME					= 0x00002000,
+	INDEXABLE_CHANGE				= 0x00004000,
+	BASIC_INFO_CHANGE				= 0x00008000,
+	HARD_LINK_CHANGE				= 0x00010000,
+	COMPRESSION_CHANGE				= 0x00020000,
+	ENCRYPTION_CHANGE				= 0x00040000,
+	OBJECT_ID_CHANGE				= 0x00080000,
+	REPARSE_POINT_CHANGE			= 0x00100000,
+	STREAM_CHANGE					= 0x00200000,
+	TRANSACTED_CHANGE				= 0x00400000,
+	INTEGRITY_CHANGE				= 0x00800000,
+	DESIRED_STORAGE_CLASS_CHANGE	= 0x01000000,
+	CLOSE							= 0x80000000,
+};
+
+constexpr uint32 operator|(USNReasons inA, USNReasons inB) { return (uint32)inA | (uint32)inB; }
+constexpr uint32 operator|(uint32 inA, USNReasons inB) { return inA | (uint32)inB; }
+constexpr uint32 operator&(USNReasons inA, USNReasons inB) { return (uint32)inA & (uint32)inB; }
+constexpr uint32 operator&(uint32 inA, USNReasons inB) { return inA & (uint32)inB; }
+constexpr uint32 operator&(USNReasons inA, uint32 inB) { return (uint32)inA & inB; }
+
+TempString512 gToString(USNReasons inReasons)
+{
+	TempString512 str;
+
+	if (inReasons & USNReasons::DATA_OVERWRITE				) str.Append(" DATA_OVERWRITE");
+	if (inReasons & USNReasons::DATA_EXTEND					) str.Append(" DATA_EXTEND");
+	if (inReasons & USNReasons::DATA_TRUNCATION				) str.Append(" DATA_TRUNCATION");
+	if (inReasons & USNReasons::NAMED_DATA_OVERWRITE		) str.Append(" NAMED_DATA_OVERWRITE");
+	if (inReasons & USNReasons::NAMED_DATA_EXTEND			) str.Append(" NAMED_DATA_EXTEND");
+	if (inReasons & USNReasons::NAMED_DATA_TRUNCATION		) str.Append(" NAMED_DATA_TRUNCATION");
+	if (inReasons & USNReasons::FILE_CREATE					) str.Append(" FILE_CREATE");
+	if (inReasons & USNReasons::FILE_DELETE					) str.Append(" FILE_DELETE");
+	if (inReasons & USNReasons::EA_CHANGE					) str.Append(" EA_CHANGE");
+	if (inReasons & USNReasons::SECURITY_CHANGE				) str.Append(" SECURITY_CHANGE");
+	if (inReasons & USNReasons::RENAME_OLD_NAME				) str.Append(" RENAME_OLD_NAME");
+	if (inReasons & USNReasons::RENAME_NEW_NAME				) str.Append(" RENAME_NEW_NAME");
+	if (inReasons & USNReasons::INDEXABLE_CHANGE			) str.Append(" INDEXABLE_CHANGE");
+	if (inReasons & USNReasons::BASIC_INFO_CHANGE			) str.Append(" BASIC_INFO_CHANGE");
+	if (inReasons & USNReasons::HARD_LINK_CHANGE			) str.Append(" HARD_LINK_CHANGE");
+	if (inReasons & USNReasons::COMPRESSION_CHANGE			) str.Append(" COMPRESSION_CHANGE");
+	if (inReasons & USNReasons::ENCRYPTION_CHANGE			) str.Append(" ENCRYPTION_CHANGE");
+	if (inReasons & USNReasons::OBJECT_ID_CHANGE			) str.Append(" OBJECT_ID_CHANGE");
+	if (inReasons & USNReasons::REPARSE_POINT_CHANGE		) str.Append(" REPARSE_POINT_CHANGE");
+	if (inReasons & USNReasons::STREAM_CHANGE				) str.Append(" STREAM_CHANGE");
+	if (inReasons & USNReasons::TRANSACTED_CHANGE			) str.Append(" TRANSACTED_CHANGE");
+	if (inReasons & USNReasons::INTEGRITY_CHANGE			) str.Append(" INTEGRITY_CHANGE");
+	if (inReasons & USNReasons::DESIRED_STORAGE_CLASS_CHANGE) str.Append(" DESIRED_STORAGE_CLASS_CHANGE");
+	if (inReasons & USNReasons::CLOSE						) str.Append(" CLOSE");
+
+	return str;
+}
+
+
 template <typename taFunctionType>
 USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionType inRecordCallback) const
 {
@@ -636,17 +703,17 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 
 	while (true)
 	{
-		constexpr uint32 cInterestingReasons =	USN_REASON_FILE_CREATE |		// File was created.
-												USN_REASON_FILE_DELETE |		// File was deleted.
-												USN_REASON_DATA_OVERWRITE |		// File was modified.
-												USN_REASON_DATA_EXTEND |		// File was modified.
-												USN_REASON_DATA_TRUNCATION |	// File was modified.
-												USN_REASON_RENAME_NEW_NAME;		// File was renamed or moved (possibly to the recyle bin). That's essentially a delete and a create.
+		constexpr uint32 cInterestingReasons = USNReasons::FILE_CREATE |     // File was created.
+											   USNReasons::FILE_DELETE |     // File was deleted.
+											   USNReasons::DATA_OVERWRITE |  // File was modified.
+											   USNReasons::DATA_EXTEND |     // File was modified.
+											   USNReasons::DATA_TRUNCATION | // File was modified.
+											   USNReasons::RENAME_NEW_NAME;  // File was renamed or moved (possibly to the recyle bin). That's essentially a delete and a create.
 
 		READ_USN_JOURNAL_DATA_V1 journal_data;
 		journal_data.StartUsn          = start_usn;
-		journal_data.ReasonMask        = cInterestingReasons | USN_REASON_CLOSE; 
-		journal_data.ReturnOnlyOnClose = true;			// Only get events when the file is closed (ie. USN_REASON_CLOSE is present). We don't care about earlier events.
+		journal_data.ReasonMask        = cInterestingReasons | USNReasons::CLOSE; 
+		journal_data.ReturnOnlyOnClose = true;          // Only get events when the file is closed (ie. USN_REASON_CLOSE is present). We don't care about earlier events.
 		journal_data.Timeout           = 0;				// Never wait.
 		journal_data.BytesToWaitFor    = 0;				// Never wait.
 		journal_data.UsnJournalID      = mUSNJournalID;	// The journal we're querying.
@@ -689,7 +756,7 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 			// If the file is created and deleted in the same record, ignore it. We can't get any info about the file because it's already gone.
 			// I think that can happen because of ReturnOnlyOnClose but unsure (ie. a file is created then deleted before its last handle was closed).
 			// Happens a lot when monitoring C:/
-			if ((record->Reason & (USN_REASON_FILE_DELETE | USN_REASON_FILE_CREATE)) == (USN_REASON_FILE_DELETE | USN_REASON_FILE_CREATE))
+			if ((record->Reason & (USNReasons::FILE_DELETE | USNReasons::FILE_CREATE)) == (USNReasons::FILE_DELETE | USNReasons::FILE_CREATE))
 				continue;
 
 			inRecordCallback(*record);
@@ -706,7 +773,9 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 	{
 		bool is_directory = (inRecord.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
-		if (inRecord.Reason & (USN_REASON_FILE_DELETE | USN_REASON_RENAME_NEW_NAME))
+		USNReasons reason = (USNReasons)inRecord.Reason;
+
+		if (reason & (USNReasons::FILE_DELETE | USNReasons::RENAME_NEW_NAME))
 		{
 			// If the file is in a repo, mark it as deleted.
 			FileID deleted_file_id = FindFileID(inRecord.FileReferenceNumber);
@@ -747,7 +816,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 
 		}
 
-		if (inRecord.Reason & (USN_REASON_FILE_CREATE | USN_REASON_RENAME_NEW_NAME))
+		if (reason & (USNReasons::FILE_CREATE | USNReasons::RENAME_NEW_NAME))
 		{
 			// Get a handle to the file.
 			HandleOrError file_handle = OpenFileByRefNumber(inRecord.FileReferenceNumber, OpenFileAccess::AttributesOnly, FileID::cInvalid());
