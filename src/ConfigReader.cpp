@@ -4,11 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #include "ConfigReader.h"
-#include "FileSystem.h"
-#include "CookingSystem.h"
 #include "App.h"
+#include "CookingSystem.h"
+#include "FileSystem.h"
 #include "TomlReader.h"
-
 
 void gReadConfigFile(StringView inPath)
 {
@@ -94,7 +93,7 @@ void gReadConfigFile(StringView inPath)
 				cache_dir.mBuffer[cache_dir.mSize] = 0;
 			}
 
-			gApp.mLogDirectory = cache_dir.AsStringView();
+			gApp.mCacheDirectory = cache_dir.AsStringView();
 		}
 	}
 
