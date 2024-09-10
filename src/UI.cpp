@@ -382,8 +382,8 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		if (ImGui::Button("Copy Path"))
 		{
 			ImGui::LogToClipboard();
-			ImGui::LogText(inFile.GetRepo().mRootPath.AsCStr());
-			ImGui::LogText(inFile.mPath.AsCStr());
+			ImGui::LogText("%s", inFile.GetRepo().mRootPath.AsCStr());
+			ImGui::LogText("%s", inFile.mPath.AsCStr());
 			ImGui::LogFinish();
 		}
 
@@ -904,7 +904,7 @@ void gDrawSelectedCookingLogEntry()
 		if (command_line)
 		{
 			ImGui::LogToClipboard();
-			ImGui::LogText(command_line->c_str());
+			ImGui::LogText("%s", command_line->c_str());
 			ImGui::LogFinish();
 		}
 	}
