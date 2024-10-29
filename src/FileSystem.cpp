@@ -570,6 +570,7 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 		else if (error == ERROR_ACCESS_DENIED)
 			return OpenFileError::AccessDenied;
 		else if (error == ERROR_INVALID_PARAMETER	// Yes, invalid parameter means file does not exist (anymore).
+			|| error == ERROR_FILE_NOT_FOUND		// This one can also happens sometimes (when the directory is deleted?).
 			|| error == ERROR_CANT_ACCESS_FILE)		// Unsure what this means but I've seen it happen for an unknown file on C:/ once.
 			return OpenFileError::FileNotFound;
 
