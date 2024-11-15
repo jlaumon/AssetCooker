@@ -25,3 +25,6 @@
 [submodule "thirdparty/minilua"]
 	path = thirdparty/minilua
 	url = https://github.com/edubart/minilua.git
+[submodule "thirdparty/Bedrock"]
+	path = thirdparty/Bedrock
+	url = https://github.com/jlaumon/Bedrock.git
