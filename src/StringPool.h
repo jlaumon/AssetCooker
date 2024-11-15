@@ -43,7 +43,7 @@ struct StringPool
 
 	MutStringView AllocateCopy(StringView inString, const OptionalRef<const VMemArrayLock>& inLock = {})
 	{
-		auto storage = Allocate(inString.size(), inLock);
+		auto storage = Allocate(inString.Size(), inLock);
 
 		gAppend(storage, inString);
 
@@ -58,10 +58,11 @@ struct StringPool
 
 	struct ResizableStringView
 	{
-		using value_type = char;
+		using value_type          = char;
+		using ValueType           = char;
 
 		char*           mData     = nullptr;
-		size_t          mSize     = 0;
+		int				mSize     = 0;
 		StringPool&     mPool;
 		VMemArrayLock   mPoolLock;	// Pool is locked while we have one resizable string being used.
 
@@ -75,7 +76,7 @@ struct StringPool
 			// Though that should always be the case since we have locked the pool.
 			gAssert(mPool.mBuffer.End() == mData + mSize);
 
-			size_t additional_size = inStr.size();
+			int additional_size = inStr.Size();
 			(void)mPool.mBuffer.EnsureCapacity(additional_size, mPoolLock);
 
 			// Append the new part.
@@ -98,7 +99,7 @@ struct StringPool
 
 		void AppendFormatV(StringView inFmt, fmt::format_args inArgs)
 		{
-			fmt::vformat_to(std::back_inserter(*this), inFmt, inArgs);
+			fmt::vformat_to(std::back_inserter(*this), fmt::string_view(inFmt.Data(), inFmt.Size()), inArgs);
 		}
 
 		void push_back(char inChar)
@@ -112,7 +113,7 @@ struct StringPool
 	{
 		// Allocate an empty string (actually allocates a null terminator).
 		auto str = Allocate(0);
-		return { str.data(), str.size(), *this, this->mBuffer.Lock() };
+		return { str.data(), str.Size(), *this, this->mBuffer.Lock() };
 	}
 
 };
