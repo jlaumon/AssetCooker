@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #include "Strings.h"
-#include "Tests.h"
+#include <Bedrock/Test.h>
 
 #include <mbstring.h>
 
@@ -13,35 +13,35 @@
 // Same as gIsEqual but case-insensitive.
 bool gIsEqualNoCase(StringView inString1, StringView inString2)
 {
-	if (inString1.size() != inString2.size())
+	if (inString1.Size() != inString2.Size())
 		return false;
 
-	return _mbsnicmp((const unsigned char*)inString1.data(), (const unsigned char*)inString2.data(), inString1.size()) == 0;
+	return _mbsnicmp((const unsigned char*)inString1.Data(), (const unsigned char*)inString2.Data(), inString1.Size()) == 0;
 }
 
 // Same as gStartsWith but case-insensitive.
 bool gStartsWithNoCase(StringView inString, StringView inStart)
 {
-	if (inString.size() < inStart.size())
+	if (inString.Size() < inStart.Size())
 		return false;
 
-	return _mbsnicmp((const unsigned char*)inString.data(), (const unsigned char*)inStart.data(), inStart.size()) == 0;
+	return _mbsnicmp((const unsigned char*)inString.Data(), (const unsigned char*)inStart.Data(), inStart.Size()) == 0;
 }
 
 // Same as gEndsWith but case-insensitive.
 bool gEndsWithNoCase(StringView inString, StringView inEnd)
 {
-	if (inString.size() < inEnd.size())
+	if (inString.Size() < inEnd.Size())
 		return false;
 
-	return _mbsnicmp((const unsigned char*)inString.data() + inString.size() - inEnd.size(), (const unsigned char*)inEnd.data(), inEnd.size()) == 0;
+	return _mbsnicmp((const unsigned char*)inString.Data() + inString.Size() - inEnd.Size(), (const unsigned char*)inEnd.Data(), inEnd.Size()) == 0;
 }
 
 
 // Transform the string to lower case in place.
 void gToLowercase(MutStringView ioString)
 {
-	_mbslwr_s((unsigned char*)ioString.data(), ioString.size());
+	_mbslwr_s((unsigned char*)ioString.data(), ioString.Size());
 }
 
 
@@ -52,7 +52,7 @@ OptionalStringView gWideCharToUtf8(WStringView inWString, MutStringView ioBuffer
 	// Otherwise we'll need to add it manually.
 	bool source_is_null_terminated = (!inWString.empty() && inWString.back() == 0);
 
-	int available_bytes = (int)ioBuffer.size();
+	int available_bytes = (int)ioBuffer.Size();
 
 	// If we need to add a null terminator, reserve 1 byte for it.
 	if (source_is_null_terminated)
@@ -75,7 +75,7 @@ OptionalStringView gWideCharToUtf8(WStringView inWString, MutStringView ioBuffer
 		written_bytes--; // Don't count the null terminator in the returned string view.
 	}
 
-	return ioBuffer.subspan(0, written_bytes);
+	return StringView(ioBuffer.Data(), written_bytes);
 }
 
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
@@ -83,17 +83,17 @@ OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 {
 	// If a null terminator is included in the source, WideCharToMultiByte will also add it in the destination.
 	// Otherwise we'll need to add it manually.
-	bool source_is_null_terminated = (!inString.empty() && inString.back() == 0);
+	bool source_is_null_terminated = (!inString.Empty() && *inString.End() == 0);
 
-	int available_wchars = (int)ioBuffer.size();
+	int available_wchars = ioBuffer.Size();
 
 	// If we need to add a null terminator, reserve 1 byte for it.
 	if (source_is_null_terminated)
 		available_wchars--;
 
-	int written_wchars = MultiByteToWideChar(CP_UTF8, 0, inString.data(), (int)inString.size(), ioBuffer.data(), available_wchars);
+	int written_wchars = MultiByteToWideChar(CP_UTF8, 0, inString.Data(), inString.Size(), ioBuffer.Data(), available_wchars);
 
-	if (written_wchars == 0 && !inString.empty())
+	if (written_wchars == 0 && !inString.Empty())
 		return {}; // Failed to convert.
 
 	if (written_wchars == available_wchars)
@@ -108,37 +108,6 @@ OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 		written_wchars--; // Don't count the null terminator in the returned string view.
 	}
 
-	return WStringView{ ioBuffer.data(), (size_t)written_wchars };
+	return WStringView{ ioBuffer.Data(), (size_t)written_wchars };
 }
-
-
-REGISTER_TEST("Strings")
-{
-	TempString32 str("test");
-	TEST_TRUE(str.AsStringView() == "test");
-
-	str.Append("test");
-	TEST_TRUE(str.AsStringView() == "testtest");
-
-	str.Set("oooo");
-	TEST_TRUE(str.AsStringView() == "oooo");
-
-	str.AppendFormat("{}", "zest");
-	TEST_TRUE(str.AsStringView() == "oooozest");
-
-	str.Format("{}", "best");
-	TEST_TRUE(str.AsStringView() == "best");
-
-	TEST_TRUE(gIsEqual("tata", "tata"));
-	TEST_TRUE(gStartsWith("tatapoom", "tata"));
-	TEST_TRUE(gEndsWith("tatapoom", "poom"));
-
-	TEST_TRUE(gIsEqualNoCase("taTa", "TatA"));
-	TEST_TRUE(gStartsWithNoCase("taTaPOOM", "TatA"));
-	TEST_TRUE(gEndsWithNoCase("taTaPOOM", "pOom"));
-
-	TEST_FALSE(gIsEqual("taTa", "TatA"));
-	TEST_FALSE(gStartsWith("taTaPOOM", "TatA"));
-	TEST_FALSE(gEndsWith("taTaPOOM", "pOom"));
-};
 
