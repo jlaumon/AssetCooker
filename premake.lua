@@ -11,6 +11,7 @@ solution "AssetCooker"
         dpiawareness "HighPerMonitor"
 		cppdialect "C++20"
 		exceptionhandling "Off"
+		rtti "Off"
 		staticruntime "On" -- Makes the exe a bit bigger but don't need to install the vcredist to work
 		flags 
 		{
@@ -23,7 +24,6 @@ solution "AssetCooker"
             "_CRT_SECURE_NO_WARNINGS",
 			"IMGUI_USER_CONFIG=<ImGuiConfig.h>",
 			"TOML_COMPILER_HAS_EXCEPTIONS=0", -- Not strictly necessart since toml++ detects if exceptions are off, but Intellisense is confused otherwise
-			"YAML_CPP_STATIC_DEFINE",
 			"LUA_USE_LONGJMP", -- Otherwise Lua uses exceptions for error handling (because we're compiling it as c++)
         }
 
@@ -48,8 +48,8 @@ solution "AssetCooker"
 			targetsuffix "DebugASAN"
             defines "ASSERTS_ENABLED"
 			optimize "Debug"
-			editandcontinue "Off"     -- incompatble with ASAN
-			flags "NoIncrementalLink" -- incompatble with ASAN
+			editandcontinue "Off"     -- incompatible with ASAN
+			flags "NoIncrementalLink" -- incompatible with ASAN
 			sanitize "Address"
 			
 		filter { "configurations:DebugOpt" }
@@ -70,6 +70,9 @@ solution "AssetCooker"
 			"src/**.h",
             "src/**.cpp",
             "src/**.natvis",
+			"thirdparty/Bedrock/Bedrock/*.h",
+            "thirdparty/Bedrock/Bedrock/*.cpp",
+            "thirdparty/Bedrock/Bedrock/*.natvis",
             "thirdparty/imgui/*.h",
             "thirdparty/imgui/*.cpp",
             "thirdparty/imgui/**.natvis",
@@ -101,6 +104,7 @@ solution "AssetCooker"
 			".",
             "src",
             "thirdparty",
+            "thirdparty/Bedrock",
             "thirdparty/imgui",
             "thirdparty/imgui/backends",
             "thirdparty/unordered_dense/include",
