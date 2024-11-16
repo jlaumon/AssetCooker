@@ -122,6 +122,7 @@ FileInfo::FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType 
 	, mPath(inPath)
 	, mPathHash(inPathHash)
 	, mIsDirectory(inType == FileType::Directory)
+	, mIsDepFile(false)
 	, mCommandsCreated(false)
 	, mRefNumber(inRefNumber)
 {
