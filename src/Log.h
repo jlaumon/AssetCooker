@@ -41,7 +41,7 @@ struct Log
 		const char* mData = nullptr;
 		int         mSize = 0;
 		LogType     mType = LogType::Normal;
-		StringView  AsStringView() const { return { mData, (size_t)mSize }; }
+		StringView  AsStringView() const { return { mData, mSize }; }
 	};
 	
 	SegmentedVector<Line>   mLines;

@@ -7,7 +7,6 @@
 
 #include "FileSystem.h"
 #include "imgui.h"
-#include "Ticks.h"
 
 
 StringPool::ResizableStringView Log::StartLine(LogType inType)
@@ -41,7 +40,7 @@ void Log::FinishLine(LogType inType, StringPool::ResizableStringView& inLine)
 	// TODO: check inLine for extra end of lines and split it (?), otherwise can't use imgui clipper
 	gAssert(gIsNullTerminated(inLine.AsStringView()));
 
-	mLines.emplace_back(line.data(), (int)line.size(), inType);
+	mLines.emplace_back(line.Data(), line.Size(), inType);
 }
 
 
@@ -91,7 +90,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 		std::lock_guard lock(mMutex);
 
 		ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-		TempString32 title("{}", inName);
+		FixedString32 title("{}", inName);
 		if (!ImGui::Begin(title.AsCStr(), ioOpen))
 		{
 			ImGui::End();
