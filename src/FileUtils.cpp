@@ -36,7 +36,7 @@ StringView gConvertToLargePath(StringView inPath, TempPath& ioBuffer)
 	// CreateDirectory worked up to MAX_PATH - 2 when I tried, but better stay on the cautious side.
 	// Note2: Can't prepend relative paths, but also can't convert them to absolute if they're too long
 	// with the current implementation of gGetAbsolutePath. So that case will fail if it ever happens.
-	if (inPath.size() > (MAX_PATH - 13) && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
+	if (inPath.Size() > (MAX_PATH - 13) && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
 	{
 		ioBuffer = R"(\\?\)";
 		ioBuffer.Append(inPath);
@@ -61,19 +61,19 @@ static bool sCreateDirectory(StringView inPath)
 }
 
 
-static bool sCreateDirectoryRecursive(MutStringView ioPath)
+static bool sCreateDirectoryRecursive(TempPath& ioPath)
 {
-	gAssert(ioPath[ioPath.size() - 1] == 0);
-	gAssert(ioPath[ioPath.size() - 2] != L'\\');
-	gAssert(ioPath.size() > 2 && ioPath[1] == L':'); // We expect an absolute path, first two characters should be the drive (ioPath might be the drive itself without trailing slash).
+	gAssert(ioPath[ioPath.Size() - 1] == 0);
+	gAssert(ioPath[ioPath.Size() - 2] != L'\\');
+	gAssert(ioPath.Size() > 2 && ioPath[1] == L':'); // We expect an absolute path, first two characters should be the drive (ioPath might be the drive itself without trailing slash).
 
 	// Early out if the directory already exists.
 	if (gDirectoryExists(ioPath))
 		return true;
 
 	// Otherwise try to create every parent directory.
-	char* p_begin = ioPath.data();
-	char* p_end   = ioPath.data() + ioPath.size() - 1; // Just before the null-terminator.
+	char* p_begin = ioPath.Data();
+	char* p_end   = ioPath.Data() + ioPath.Size() - 1; // Just before the null-terminator.
 	char* p       = p_begin + 3;
 	while(p != p_end)
 	{
@@ -111,7 +111,7 @@ bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 		path_copy.mBuffer[path_copy.mSize] = 0;
 	}
 
-	return sCreateDirectoryRecursive(path_copy.AsSpan());
+	return sCreateDirectoryRecursive(path_copy);
 }
 
 
@@ -123,7 +123,7 @@ bool gDirectoryExists(StringView inPath)
 	// If the path ends with a backslash, make a copy and remove it. The Win32 function doesn't like that.
 	if (gEndsWith(inPath, "\\"))
 	{
-		path_copy = path.substr(0, path.size() - 1);
+		path_copy = path.SubStr(0, path.Size() - 1);
 		path      = path_copy;
 	}
 

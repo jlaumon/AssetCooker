@@ -11,7 +11,7 @@
 // Wrapper for a HANDLE that closes it on destruction.
 struct OwnedHandle : NoCopy
 {
-	static constexpr void* cInvalid = (void*)-1;
+	static inline void* const cInvalid = (void*)-1;
 
 	OwnedHandle()									= default;
 	OwnedHandle(void* inHandle)						{ mHandle = inHandle; }
@@ -30,7 +30,7 @@ struct OwnedHandle : NoCopy
 // Some code in the FileSystem monitoring actually supports longer paths, because it might get notifications about files outside repos.
 constexpr size_t cMaxPathSizeUTF8  = 4096ull;
 
-using TempPath = TempString<cMaxPathSizeUTF8>;
+using TempPath = FixedString<cMaxPathSizeUTF8>;
 
 
 constexpr MutStringView gNormalizePath(MutStringView ioPath); // Replace / by \.
@@ -71,7 +71,7 @@ constexpr bool gIsNormalized(StringView inPath)
 
 constexpr bool gIsAbsolute(StringView inPath)
 {
-	return inPath.size() >= 3 && gIsAlpha(inPath[0]) && inPath[1] == ':' && (inPath[2] == '\\' || inPath[2] == '/')
+	return inPath.Size() >= 3 && gIsAlpha(inPath[0]) && inPath[1] == ':' && (inPath[2] == '\\' || inPath[2] == '/')
 		&& !inPath.Contains(".\\")	// Not canonical if it contains "./" or ".\"
 		&& !inPath.Contains("./");  // Note: This also catches "../"
 }
@@ -79,18 +79,18 @@ constexpr bool gIsAbsolute(StringView inPath)
 
 constexpr StringView gGetFileNamePart(StringView inPath)
 {
-	size_t file_start = inPath.find_last_of("\\/");
-	if (file_start == StringView::npos)
+	int file_start = inPath.FindLastOf("\\/");
+	if (file_start == -1)
 		return inPath;
 
-	return inPath.substr(file_start + 1);
+	return inPath.SubStr(file_start + 1);
 }
 
 
 constexpr StringView gNoTrailingSlash(StringView inPath)
 {
-	if (inPath.back() == '\\' || inPath.back() == '/')
-		inPath.remove_suffix(1);
+	if (inPath.Back() == '\\' || inPath.Back() == '/')
+		inPath.RemoveSuffix(1);
 
 	return inPath;
 }
