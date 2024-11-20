@@ -19,7 +19,7 @@ bool ImGui::BeginPopupWithTitle(const char* str_id, StringView inTitle, ImGuiWin
     }
 
     flags |= ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse;
-    bool is_open = Begin(TempString256("{}##{:08x}", inTitle, id).AsCStr(), NULL, flags);
+    bool is_open = Begin(FixedString256("{}##{:08x}", inTitle, id).AsCStr(), NULL, flags);
     if (!is_open) // NB: Begin can return false when the popup is completely clipped (e.g. zero size display)
         EndPopup();
 
