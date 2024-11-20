@@ -20,11 +20,11 @@ struct LuaReader
 	static constexpr StringView sTypeName()
 	{
 		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, TempString32>
-			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>
-			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, FixedString32>
+			|| std::is_same_v<taType, FixedString64>
+			|| std::is_same_v<taType, FixedString128>
+			|| std::is_same_v<taType, FixedString256>
+			|| std::is_same_v<taType, FixedString512>
 			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
 			return "string";
@@ -74,10 +74,10 @@ struct LuaReader
 	// Helper to push a node on the top of the stack, based on its name if currently in a table, or based on current index if currently in a sequence.
 	LuaType Push(StringView inVarName) const
 	{
-		if (mStack.empty())
+		if (mStack.Empty())
 		{
 			// If we're not already in a table, get a global variable.
-			gAssert(!inVarName.empty());
+			gAssert(!inVarName.Empty());
 			return (LuaType)lua_getglobal(mLuaState, inVarName.AsCStr());
 		}
 		else
@@ -86,7 +86,7 @@ struct LuaReader
 
 			// Push the key on the stack.
 			const Element& current = mStack.back();
-			if (inVarName.empty()) // If current is a sequence
+			if (inVarName.Empty()) // If current is a sequence
 				lua_pushinteger(mLuaState, current.mIndex + 1);
 			else
 				lua_pushstring(mLuaState, inVarName.AsCStr());
@@ -97,9 +97,9 @@ struct LuaReader
 	}
 
 	// Helper to get the path to a node based on its name if currently in a table, or based on current index if currently in an array.
-	TempString512 GetPath(StringView inVarName) const
+	FixedString512 GetPath(StringView inVarName) const
 	{
-		TempString512 path;
+		FixedString512 path;
 		for (const Element& elem : mStack)
 		{
 			if (path.Size() != 0 && !gEndsWith(path, "."))
@@ -113,7 +113,7 @@ struct LuaReader
 
 		// Name can be empty if current node is an element in a sequence.
 		// In that case the parent node added the index to the path already.
-		if (!inVarName.empty())
+		if (!inVarName.Empty())
 		{
 			if (path.Size() != 0 && !gEndsWith(path, "."))
 				path.Append(".");
@@ -137,11 +137,11 @@ struct LuaReader
 		// If the variable exists but is of the wrong type, that's an error.
 		bool is_right_type = false;
 		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, TempString32>
-			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>
-			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, FixedString32>
+			|| std::is_same_v<taType, FixedString64>
+			|| std::is_same_v<taType, FixedString128>
+			|| std::is_same_v<taType, FixedString256>
+			|| std::is_same_v<taType, FixedString512>
 			|| std::is_same_v<taType, TempPath>)
 			is_right_type = (node_type == LuaType::String);
 		else if constexpr (std::is_same_v<taType, bool>)
@@ -161,17 +161,17 @@ struct LuaReader
 			// For StringView allocate a copy into the StringPool
 			size_t      str_len = 0;
 			const char* str     = lua_tolstring(mLuaState, -1, &str_len);
-			outVar = mStringPool->AllocateCopy({ str, str_len });
+			outVar = mStringPool->AllocateCopy({ str, (int)str_len });
 		}
-		else if constexpr (std::is_same_v<taType, TempString32>
-			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>
-			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>
+		else if constexpr (std::is_same_v<taType, FixedString32>
+			|| std::is_same_v<taType, FixedString64>
+			|| std::is_same_v<taType, FixedString128>
+			|| std::is_same_v<taType, FixedString256>
+			|| std::is_same_v<taType, FixedString512>
 			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
 		{
-			// For TempStrings and String, just copy into it.
+			// For FixedStrings and String, just copy into it.
 			size_t      str_len = 0;
 			const char* str     = lua_tolstring(mLuaState, -1, &str_len);
 			outVar = StringView(str, str_len);
