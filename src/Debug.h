@@ -4,12 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #pragma once
+
+#include <Bedrock/Debug.h>
 #include "Strings.h"
 
-bool gIsDebuggerAttached();
-
 // Get last error as a string.
-TempString512 GetLastErrorString();
+FixedString512 GetLastErrorString();
 
-// Set the name of the current thread.
-void   gSetCurrentThreadName(const wchar_t* inName);

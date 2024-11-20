@@ -9,16 +9,12 @@
 #include "win32/misc.h"
 #include "win32/threads.h"
 
-bool gIsDebuggerAttached()
-{
-	return IsDebuggerPresent();
-}
 
 // Get last error as a string.
-TempString512 GetLastErrorString()
+FixedString512 GetLastErrorString()
 {
 	DWORD error = GetLastError();
-	TempString512 str;
+	FixedString512 str;
 
 	if (error != ERROR_SUCCESS)
 	{
@@ -55,7 +51,7 @@ TempString512 GetLastErrorString()
 	}
 
 	// Add the error code as an int.
-	str.Append(TempString32(" (0x{:08x})", error));
+	str.Append(FixedString32(" (0x{:08x})", error));
 
 	return str;
 }
