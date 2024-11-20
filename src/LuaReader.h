@@ -85,7 +85,7 @@ struct LuaReader
 			// Otherwise get a variable in the current table.
 
 			// Push the key on the stack.
-			const Element& current = mStack.back();
+			const Element& current = mStack.Back();
 			if (inVarName.Empty()) // If current is a sequence
 				lua_pushinteger(mLuaState, current.mIndex + 1);
 			else
@@ -247,7 +247,7 @@ struct LuaReader
 		}
 
 		mStringPool = ioStringPool;
-		mStack.clear();
+		mStack.Clear();
 		return true;
 	}
 
@@ -271,7 +271,7 @@ struct LuaReader
 			return false;
 		}
 
-		mStack.push_back({ inVarName });
+		mStack.PushBack({ inVarName });
 		return true;
 	}
 
@@ -291,7 +291,7 @@ struct LuaReader
 	{
 		gAssert(lua_istable(mLuaState, -1));
 		lua_pop(mLuaState, 1);
-		mStack.pop_back();
+		mStack.PopBack();
 	}
 
 	bool TryOpenArray(StringView inVarName)
@@ -321,7 +321,7 @@ struct LuaReader
 	bool NextArrayElement()
 	{
 		gAssert(lua_istable(mLuaState, -1));
-		Element& current = mStack.back();
+		Element& current = mStack.Back();
 
 		// Reached the end of the array?
 		if (++current.mIndex >= (int)GetArraySize())
@@ -363,7 +363,7 @@ struct LuaReader
 		StringView       mName;       // The name of that node, if there is one.
 		int              mIndex = -1; // Index in the sequence if node is an sequence.
 	};
-	std::vector<Element> mStack;
+	Vector<Element>      mStack;
 	lua_State*           mLuaState   = nullptr;
 	StringPool*          mStringPool = nullptr;
 	int                  mErrorCount = 0;

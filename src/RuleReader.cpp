@@ -19,7 +19,7 @@ static void sReadRuleFile(StringView inPath)
 	taReaderType reader;
 	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.SetInitError(TempString512(R"(Failed to parse Rule file "{}". See log for details.)", inPath).AsStringView());
+		gApp.SetInitError(FixedString512(R"(Failed to parse Rule file "{}". See log for details.)", inPath).AsStringView());
 		return;
 	}
 
@@ -58,7 +58,7 @@ static void sReadRuleFile(StringView inPath)
 
 				InputFilter& input_filter = rule.mInputFilters.emplace_back();
 
-				TempString512 repo_name;
+				FixedString512 repo_name;
 				if (reader.Read("Repo", repo_name))
 				{
 					// Try to find the repo from the name.
@@ -87,7 +87,7 @@ static void sReadRuleFile(StringView inPath)
 
 		// Check the type of command (either command line or a built-in command).
 		{
-			TempString64 cmd_type;
+			FixedString64 cmd_type;
 			reader.TryRead("CommandType", cmd_type);
 			gStringViewToEnum(cmd_type,			rule.mCommandType);
 		}
@@ -112,7 +112,7 @@ static void sReadRuleFile(StringView inPath)
 		{
 			reader.Read    ("Path",				rule.mDepFilePath);
 
-			TempString64 format;
+			FixedString64 format;
 			reader.Read("Format", format);
 			gStringViewToEnum(format,			rule.mDepFileFormat);
 			

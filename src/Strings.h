@@ -274,7 +274,7 @@ template <typename... taArgs> void FixedString<taSize>::Format(fmt::format_strin
 template <int taSize>
 template <typename... taArgs> void FixedString<taSize>::AppendFormat(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
 {
-	StringView str_view = gFormat(Span(mBuffer).subspan(mSize), inFmt, std::forward<taArgs>(inArgs)...);
+	StringView str_view = gFormat(Span(mBuffer).SubSpan(mSize), inFmt, std::forward<taArgs>(inArgs)...);
 	mSize               += str_view.Size();
 }
 
@@ -290,7 +290,7 @@ void FixedString<taSize>::Format(StringView inFmt, fmt::format_args inArgs)
 template <int taSize>
 void FixedString<taSize>::AppendFormat(StringView inFmt, fmt::format_args inArgs)
 {
-	StringView str_view = gFormatV(Span(mBuffer).subspan(mSize), inFmt, inArgs);
+	StringView str_view = gFormatV(Span(mBuffer).SubSpan(mSize), inFmt, inArgs);
 	mSize               += str_view.Size();
 }
 
