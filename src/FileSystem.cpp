@@ -6,11 +6,12 @@
 #include "FileSystem.h"
 #include "App.h"
 #include "Debug.h"
-#include "Ticks.h"
 #include "CookingSystem.h"
 #include "DepFile.h"
 #include "BinaryReadWriter.h"
 #include "Strings.h"
+#include <Bedrock/Algorithm.h>
+#include <Bedrock/Ticks.h>
 
 #include "win32/misc.h"
 #include "win32/file.h"
@@ -30,8 +31,8 @@ bool             gDebugFailOpenFileRandomly = false;
 constexpr size_t cWin32MaxPathSizeUTF16 = 32768;
 constexpr size_t cWin32MaxPathSizeUTF8  = 32768 * 3ull;	// UTF8 can use up to 6 bytes per character, but let's suppose 3 is good enough on average.
 
-using PathBufferUTF16 = std::array<wchar_t, cWin32MaxPathSizeUTF16>;
-using PathBufferUTF8  = std::array<char, cWin32MaxPathSizeUTF8>;
+using PathBufferUTF16 = wchar_t[cWin32MaxPathSizeUTF16];
+using PathBufferUTF8  = char[cWin32MaxPathSizeUTF8];
 
 
 // Hash the absolute path of a file in a case insensitive manner.
@@ -54,11 +55,11 @@ PathHash gHashPath(StringView inAbsolutePath)
 	// Convert it to uppercase.
 	// Note: LCMapStringA does not seem to work with UTF8 (or at least not with LOCALE_INVARIANT) so we are forced to use wchars here.
 	PathBufferUTF16 uppercase_buffer;
-	int uppercase_size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, wpath->data(), (int)wpath->size(), uppercase_buffer.data(), uppercase_buffer.size() / 2, nullptr, nullptr, 0);
+	int uppercase_size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, wpath->data(), (int)wpath->size(), uppercase_buffer, gElemCount(uppercase_buffer) / 2, nullptr, nullptr, 0);
 	if (uppercase_size == 0)
 		gApp.FatalError("Failed to convert path {} to uppercase", inAbsolutePath);
 
-	WStringView uppercase_wpath = { uppercase_buffer.data(), (size_t)uppercase_size };
+	WStringView uppercase_wpath = { uppercase_buffer, (size_t)uppercase_size };
 
 	// Hash the uppercase version.
 	XXH128_hash_t hash_xx = XXH3_128bits(uppercase_wpath.data(), uppercase_wpath.size() * sizeof(uppercase_wpath[0]));
@@ -92,26 +93,26 @@ FileRefNumber& FileRefNumber::operator=(const _FILE_ID_128& inFileID128)
 
 
 // Find the offset of the character after the last slash, or 0 if there's no slash.
-static uint16 sFindNamePos(StringView inPath)
+static int16 sFindNamePos(StringView inPath)
 {
-	size_t offset = inPath.find_last_of("\\/");
-	if (offset != StringView::npos)
-		return (uint16)(offset + 1); // +1 because file name starts after the slash.
+	int offset = inPath.FindLastOf("\\/");
+	if (offset != -1)
+		return (int16)(offset + 1); // +1 because file name starts after the slash.
 	else
 		return 0; // No subdirs in this path, the start of the name is the start of the string.
 }
 
 
 // Find the offset of the last '.' in the path.
-static uint16 sFindExtensionPos(uint16 inNamePos, StringView inPath)
+static int16 sFindExtensionPos(uint16 inNamePos, StringView inPath)
 {
-	StringView file_name = inPath.substr(inNamePos);
+	StringView file_name = inPath.SubStr(inNamePos);
 
-	size_t offset = file_name.find_last_of('.');
-	if (offset != StringView::npos)
-		return (uint16)offset + inNamePos;
+	int offset = file_name.FindLastOf(".");
+	if (offset != -1)
+		return (int16)offset + inNamePos;
 	else
-		return (uint16)inPath.size(); // No extension.
+		return (int16)inPath.Size(); // No extension.
 }
 
 
@@ -309,7 +310,7 @@ StringView FileRepo::RemoveRootPath(StringView inFullPath)
 	gAssert(gStartsWithNoCase(inFullPath, gNoTrailingSlash(mRootPath)));
 
 	// Use gMin also in case inFullPath is the root path without trailing slash.
-	return inFullPath.substr(gMin(mRootPath.size(), inFullPath.size()));
+	return inFullPath.SubStr(gMin(mRootPath.Size(), inFullPath.Size()));
 }
 
 
@@ -319,7 +320,7 @@ static OptionalStringView sBuildFilePath(StringView inParentDirPath, WStringView
 	MutStringView file_path = ioBuffer;
 
 	// Add the parent dir if there's one (can be empty for the root dir).
-	if (!inParentDirPath.empty())
+	if (!inParentDirPath.Empty())
 	{
 		ioBuffer = gAppend(ioBuffer, inParentDirPath);
 		ioBuffer = gAppend(ioBuffer, "\\");
@@ -334,7 +335,7 @@ static OptionalStringView sBuildFilePath(StringView inParentDirPath, WStringView
 		return {};
 	}
 
-	return StringView{ file_path.data(), gEndPtr(*file_name) };
+	return StringView{ file_path.Data(), gEndPtr(*file_name) };
 }
 
 
@@ -363,7 +364,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 	while (true)
 	{
 		// Fill the scan buffer with content to iterate.
-		if (!GetFileInformationByHandleEx(*dir_handle, file_info_class, ioBuffer.data(), ioBuffer.size()))
+		if (!GetFileInformationByHandleEx(*dir_handle, file_info_class, ioBuffer.Data(), ioBuffer.Size()))
 		{
 			if (GetLastError() == ERROR_NO_MORE_FILES)
 				break; // Finished iterating, exit the loop.
@@ -375,7 +376,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 		file_info_class = FileIdExtdDirectoryInfo;
 
 		// Iterate on entries in the buffer.
-		PFILE_ID_EXTD_DIR_INFO entry = (PFILE_ID_EXTD_DIR_INFO)ioBuffer.data();
+		PFILE_ID_EXTD_DIR_INFO entry = (PFILE_ID_EXTD_DIR_INFO)ioBuffer.Data();
 		bool last_entry = false;
 		do
 		{
@@ -439,7 +440,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 			// Print how much of the buffer was used, to help sizing that buffer.
 			// Seems most folders need <1 KiB but saw one that used 30 KiB.
 			uint8* buffer_end = (uint8*)entry->FileName + entry->FileNameLength;
-			gApp.Log("Used {} of {} buffer.", SizeInBytes(buffer_end - ioBuffer.data()), SizeInBytes(ioBuffer.size()));
+			gApp.Log("Used {} of {} buffer.", SizeInBytes(buffer_end - ioBuffer.Data()), SizeInBytes(ioBuffer.Size()));
 		}
 	}
 }
@@ -485,7 +486,7 @@ FileDrive::FileDrive(char inDriveLetter)
 
 	// Get a handle to the drive.
 	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
-	mHandle = CreateFileA(TempString32(R"(\\.\{}:)", mLetter).AsCStr(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	mHandle = CreateFileA(FixedString32(R"(\\.\{}:)", mLetter).AsCStr(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (!mHandle.IsValid())
 		gApp.FatalError(R"(Failed to get handle to {}:\ - {})", mLetter, GetLastErrorString());
 
@@ -552,9 +553,9 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 
 			// Turn it into a string.
 			if (file_id.IsValid())
-				return TempString<cWin32MaxPathSizeUTF8>("{}", file_id.GetFile());
+				return FixedString<cWin32MaxPathSizeUTF8>("{}", file_id.GetFile());
 			else
-				return TempString<cWin32MaxPathSizeUTF8>("Unknown");
+				return FixedString<cWin32MaxPathSizeUTF8>("Unknown");
 		};
 
 		uint32 error = GetLastError();
@@ -587,8 +588,8 @@ OptionalStringView FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutSt
 	// Get the full path as utf16.
 	// PFILE_NAME_INFO contains the filename without the drive letter and column in front (ie. without the C:).
 	PathBufferUTF16 wpath_buffer;
-	PFILE_NAME_INFO file_name_info = (PFILE_NAME_INFO)wpath_buffer.data();
-	if (!GetFileInformationByHandleEx(inFileHandle, FileNameInfo, file_name_info, wpath_buffer.size() * sizeof(wpath_buffer[0])))
+	PFILE_NAME_INFO file_name_info = (PFILE_NAME_INFO)wpath_buffer;
+	if (!GetFileInformationByHandleEx(inFileHandle, FileNameInfo, file_name_info, gElemCount(wpath_buffer) * sizeof(wpath_buffer[0])))
 		return {};
 
 	WStringView wpath = { file_name_info->FileName, file_name_info->FileNameLength / 2 };
@@ -598,11 +599,11 @@ OptionalStringView FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutSt
 	ioBuffer[1] = ':';
 
 	// Write the path part.
-	OptionalStringView path_part = gWideCharToUtf8(wpath, ioBuffer.subspan(2));
+	OptionalStringView path_part = gWideCharToUtf8(wpath, ioBuffer.SubSpan(2));
 	if (!path_part)
 		return {};
 
-	return StringView{ ioBuffer.data(), gEndPtr(*path_part) };
+	return StringView{ ioBuffer.Data(), gEndPtr(*path_part) };
 }
 
 
@@ -610,18 +611,18 @@ USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
 {
 	PathBufferUTF16 buffer;
 	DWORD available_bytes = 0;
-	if (!DeviceIoControl(inFileHandle, FSCTL_READ_FILE_USN_DATA, nullptr, 0, buffer.data(), buffer.size() * sizeof(buffer[0]), &available_bytes, nullptr))
+	if (!DeviceIoControl(inFileHandle, FSCTL_READ_FILE_USN_DATA, nullptr, 0, buffer, gElemCount(buffer) * sizeof(buffer[0]), &available_bytes, nullptr))
 		gApp.FatalError("Failed to get USN data"); // TODO add file path to message
 
-	auto record_header = (USN_RECORD_COMMON_HEADER*)buffer.data();
+	auto record_header = (USN_RECORD_COMMON_HEADER*)buffer;
 	if (record_header->MajorVersion == 2)
 	{
-		auto record = (USN_RECORD_V2*)buffer.data();
+		auto record = (USN_RECORD_V2*)buffer;
 		return record->Usn;	
 	}
 	else if (record_header->MajorVersion == 3)
 	{
-		auto record = (USN_RECORD_V3*)buffer.data();
+		auto record = (USN_RECORD_V3*)buffer;
 		return record->Usn;
 	}
 	else
@@ -665,9 +666,9 @@ constexpr uint32 operator&(USNReasons inA, USNReasons inB) { return (uint32)inA 
 constexpr uint32 operator&(uint32 inA, USNReasons inB) { return inA & (uint32)inB; }
 constexpr uint32 operator&(USNReasons inA, uint32 inB) { return (uint32)inA & inB; }
 
-TempString512 gToString(USNReasons inReasons)
+FixedString512 gToString(USNReasons inReasons)
 {
-	TempString512 str;
+	FixedString512 str;
 
 	if (inReasons & USNReasons::DATA_OVERWRITE				) str.Append(" DATA_OVERWRITE");
 	if (inReasons & USNReasons::DATA_EXTEND					) str.Append(" DATA_EXTEND");
@@ -724,16 +725,16 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 		
 		// Note: Use FSCTL_READ_UNPRIVILEGED_USN_JOURNAL to make that work without admin rights.
 		uint32 available_bytes;
-		if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioBuffer.data(), (uint32)ioBuffer.size(), &available_bytes, nullptr))
+		if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioBuffer.Data(), (uint32)ioBuffer.Size(), &available_bytes, nullptr))
 		{
 			// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
 			gApp.FatalError("Failed to read USN journal for {}:\\ - {}", mLetter, GetLastErrorString());
 		}
 
-		Span<uint8> available_buffer = ioBuffer.subspan(0, available_bytes);
+		Span<uint8> available_buffer = ioBuffer.SubSpan(0, available_bytes);
 
-		USN next_usn = *(USN*)available_buffer.data();
-		available_buffer = available_buffer.subspan(sizeof(USN));
+		USN next_usn = *(USN*)available_buffer.Data();
+		available_buffer = available_buffer.SubSpan(sizeof(USN));
 
 		if (next_usn == start_usn)
 		{
@@ -744,12 +745,12 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 		// Update the USN for next time.
 		start_usn = next_usn;
 
-		while (!available_buffer.empty())
+		while (!available_buffer.Empty())
 		{
-			const USN_RECORD_V3* record = (USN_RECORD_V3*)available_buffer.data();
+			const USN_RECORD_V3* record = (USN_RECORD_V3*)available_buffer.Data();
 
 			// Defer iterating to the next record so that we can use continue.
-			defer { available_buffer = available_buffer.subspan(record->RecordLength); };
+			defer { available_buffer = available_buffer.SubSpan(record->RecordLength); };
 
 			// We get all events where USN_REASON_CLOSE is present, but we don't care about all of them.
 			if ((record->Reason & cInterestingReasons) == 0)
@@ -800,7 +801,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 					StringView     dir_path;
 
 					// Root dir has an empty path, in this case don't add the slash.
-					if (!deleted_file.mPath.empty())
+					if (!deleted_file.mPath.Empty())
 						dir_path = gConcat(dir_path_buffer, deleted_file.mPath, "\\");
 
 					for (FileInfo& file : repo.mFiles)
@@ -1136,7 +1137,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		{
 			thread = std::thread([&]() 
 			{
-				gSetCurrentThreadName(L"Scan Directory Thread");
+				gSetCurrentThreadName("Scan Directory Thread");
 
 				uint8 buffer_scan[32 * 1024];
 
@@ -1246,7 +1247,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		{
 			thread = std::thread([&]() 
 			{
-				gSetCurrentThreadName(L"USN Read Thread");
+				gSetCurrentThreadName("USN Read Thread");
 
 				// Note: Could do better than having all threads hammer the same atomic, but the cost is negligible compared to OpenFileByRefNumber.
 				int index;
@@ -1289,7 +1290,7 @@ void FileSystem::KickMonitorDirectoryThread()
 // TODO this is doing a bit more than monitoring the filesystem, give it a more general name and move to app?
 void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 {
-	gSetCurrentThreadName(L"Monitor Directory Thread");
+	gSetCurrentThreadName("Monitor Directory Thread");
 	using namespace std::chrono_literals;
 
 	// Start not idle.
@@ -1482,7 +1483,7 @@ void FileSystem::LoadCache()
 	Timer timer;
 	mInitState = InitState::LoadingCache;
 
-	TempString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
+	FixedString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
 	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "rb");
 
 	if (cache_file == nullptr)
@@ -1570,7 +1571,7 @@ void FileSystem::LoadCache()
 			if (!bin.ExpectLabel("REPO"))
 				break; // Early out if reading is failing.
 
-			TempString128 repo_name;
+			FixedString128 repo_name;
 			bin.Read(repo_name);
 
 			TempPath repo_path;
@@ -1615,7 +1616,7 @@ void FileSystem::LoadCache()
 		if (!bin.ExpectLabel("REPO_CONTENT"))
 			break;
 
-		TempString128 repo_name;
+		FixedString128 repo_name;
 		bin.Read(repo_name);
 
 		uint32 file_count = 0;
@@ -1632,7 +1633,7 @@ void FileSystem::LoadCache()
 		if (!bin.ExpectLabel("STRINGS"))
 			break;
 
-		MutStringView all_strings;
+		Span<char> all_strings;
 		if (repo_valid)
 		{
 			// Read the strings.
@@ -1658,7 +1659,7 @@ void FileSystem::LoadCache()
 				bin.Read(serialized_file_info);
 
 				FileInfo& file_info = repo->GetOrAddFile(
-					all_strings.subspan(serialized_file_info.mPathOffset, serialized_file_info.mPathSize), 
+					MutStringView(all_strings.SubSpan(serialized_file_info.mPathOffset, serialized_file_info.mPathSize)), 
 					serialized_file_info.GetType(), 
 					serialized_file_info.mRefNumber);
 
@@ -1690,7 +1691,7 @@ void FileSystem::LoadCache()
 		if (!bin.ExpectLabel("RULE"))
 			break; // Early out if reading is failing.
 
-		TempString128 rule_name;
+		FixedString128 rule_name;
 		bin.Read(rule_name);
 
 		// This info is also in the CookingRule but we serialize it to be able to
@@ -1751,9 +1752,9 @@ void FileSystem::LoadCache()
 				SerializedDepFileHeader serialized_dep_file;
 				bin.Read(serialized_dep_file);
 
-				std::vector<FileID> inputs, outputs;
-				inputs.reserve(serialized_dep_file.mDepFileInputCount);
-				inputs.reserve(serialized_dep_file.mDepFileOutputCount);
+				Vector<FileID> inputs, outputs;
+				inputs.Reserve(serialized_dep_file.mDepFileInputCount);
+				inputs.Reserve(serialized_dep_file.mDepFileOutputCount);
 
 				for (int input_index = 0; input_index < (int)serialized_dep_file.mDepFileInputCount; ++input_index)
 				{
@@ -1762,7 +1763,7 @@ void FileSystem::LoadCache()
 
 					FileID input_file = FindFileIDByPathHash(path_hash);
 					if (input_file.IsValid())
-						inputs.push_back(input_file);
+						inputs.PushBack(input_file);
 				}
 
 				for (int output_index = 0; output_index < (int)serialized_dep_file.mDepFileOutputCount; ++output_index)
@@ -1772,7 +1773,7 @@ void FileSystem::LoadCache()
 
 					FileID output_file = FindFileIDByPathHash(path_hash);
 					if (output_file.IsValid())
-						outputs.push_back(output_file);
+						outputs.PushBack(output_file);
 				}
 
 				if (rule_valid && rule->UseDepFile() && command != nullptr)
@@ -1827,9 +1828,9 @@ void FileSystem::SaveCache()
 	Timer timer;
 
 	// Make sure the cache dir exists.
-	CreateDirectoryA(gApp.mCacheDirectory.c_str(), nullptr);
+	CreateDirectoryA(gApp.mCacheDirectory.AsCStr(), nullptr);
 
-	TempString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
+	FixedString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
 	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "wb");
 
 	if (cache_file == nullptr)
@@ -1878,7 +1879,7 @@ void FileSystem::SaveCache()
 				continue;
 
 			file_count++;
-			string_pool_bytes += file.mPath.size() + 1; // + 1 for null terminator.
+			string_pool_bytes += file.mPath.Size() + 1; // + 1 for null terminator.
 		}
 
 		bin.Write(file_count);
@@ -1893,7 +1894,7 @@ void FileSystem::SaveCache()
 			if (file.IsDeleted())
 				continue;
 
-			bin.Write(Span(file.mPath.data(), file.mPath.size() + 1)); // + 1 to include null terminator.
+			bin.Write(Span(file.mPath.Data(), file.mPath.Size() + 1)); // + 1 to include null terminator.
 		}
 
 		bin.WriteLabel("FILES");
@@ -1908,7 +1909,7 @@ void FileSystem::SaveCache()
 
 			SerializedFileInfo serialized_file_info;
 			serialized_file_info.mPathOffset     = current_offset;
-			serialized_file_info.mPathSize       = file.mPath.size();
+			serialized_file_info.mPathSize       = file.mPath.Size();
 			serialized_file_info.mIsDirectory    = file.IsDirectory();
 			serialized_file_info.mRefNumber      = file.mRefNumber;
 			serialized_file_info.mCreationTime   = file.mCreationTime;
@@ -1917,7 +1918,7 @@ void FileSystem::SaveCache()
 
 			bin.Write(serialized_file_info);
 
-			current_offset += file.mPath.size() + 1;
+			current_offset += file.mPath.Size() + 1;
 		}
 	}
 
@@ -1925,7 +1926,7 @@ void FileSystem::SaveCache()
 
 	// Build the list of commands for each rule.
 	std::vector<SegmentedVector<CookingCommandID>> commands_per_rule;
-	commands_per_rule.resize(rules.size());
+	commands_per_rule.resize(rules.Size());
 	for (const CookingCommand& command : gCookingSystem.GetCommands())
 	{
 		// Skip cleaned up commands. Their inputs don't exist anymore, we don't need to save anything.
@@ -1941,7 +1942,7 @@ void FileSystem::SaveCache()
 	}
 
 	// Write the commands, sorted by rule.
-	bin.Write((uint16)rules.size());
+	bin.Write((uint16)rules.Size());
 	for (const CookingRule& rule : rules)
 	{
 		bin.WriteLabel("RULE");
@@ -1982,8 +1983,8 @@ void FileSystem::SaveCache()
 			{
 				SerializedDepFileHeader serialized_dep_file;
 				serialized_dep_file.mLastDepFileRead    = command.mLastDepFileRead;
-				serialized_dep_file.mDepFileInputCount  = (uint32)command.mDepFileInputs.size();
-				serialized_dep_file.mDepFileOutputCount = (uint32)command.mDepFileOutputs.size();
+				serialized_dep_file.mDepFileInputCount  = (uint32)command.mDepFileInputs.Size();
+				serialized_dep_file.mDepFileOutputCount = (uint32)command.mDepFileOutputs.Size();
 				bin.Write(serialized_dep_file);
 
 				for (FileID file_id : command.mDepFileInputs)

@@ -12,6 +12,8 @@
 #include "FileUtils.h"
 #include "FileTime.h"
 
+#include <Bedrock/Vector.h>
+
 #include <thread>
 #include <semaphore>
 #include <optional>
@@ -154,8 +156,8 @@ enum class FileType : int
 struct FileInfo : NoCopy
 {
 	const FileID                  mID;                  // Our ID for this file.
-	const uint16                  mNamePos;             // Position in the path of the start of the file name (after the last '/').
-	const uint16                  mExtensionPos;        // Position in the path of the last '.' in the file name.
+	const int16                   mNamePos;             // Position in the path of the start of the file name (after the last '/').
+	const int16                   mExtensionPos;        // Position in the path of the last '.' in the file name.
 	const StringView              mPath;                // Path relative to the root directory.
 	const Hash128                 mPathHash;            // Case-insensitive hash of the path.
 
@@ -167,16 +169,16 @@ struct FileInfo : NoCopy
 	USN                           mLastChangeUSN  = 0;  // Identifier of the last change to this file.
 	FileTime                      mLastChangeTime = {}; // Time of the last change to this file.
 
-	std::vector<CookingCommandID> mInputOf;             // List of commands that use this file as input.
-	std::vector<CookingCommandID> mOutputOf;            // List of commands that use this file as output. There should be only one, otherwise it's an error. // TODO tiny vector optimization // TODO actually detect that error
+	Vector<CookingCommandID>      mInputOf;             // List of commands that use this file as input.
+	Vector<CookingCommandID>      mOutputOf;            // List of commands that use this file as output. There should be only one, otherwise it's an error. // TODO tiny vector optimization // TODO actually detect that error
 
 	bool                          IsDeleted() const { return !mRefNumber.IsValid(); }
 	bool                          IsDirectory() const { return mIsDirectory; }
 	FileType                      GetType() const { return mIsDirectory ? FileType::Directory : FileType::File; }
-	StringView                    GetName() const { return mPath.substr(mNamePos); }
-	StringView                    GetNameNoExt() const { return mPath.substr(mNamePos, mExtensionPos - mNamePos); }
-	StringView                    GetExtension() const { return mPath.substr(mExtensionPos); }
-	StringView                    GetDirectory() const { return mPath.substr(0, mNamePos); } // Includes the trailing slash.
+	StringView                    GetName() const { return mPath.SubStr(mNamePos); }
+	StringView                    GetNameNoExt() const { return mPath.SubStr(mNamePos, mExtensionPos - mNamePos); }
+	StringView                    GetExtension() const { return mPath.SubStr(mExtensionPos); }
+	StringView                    GetDirectory() const { return mPath.SubStr(0, mNamePos); } // Includes the trailing slash.
 	const FileRepo&               GetRepo() const { return mID.GetRepo(); }
 
 	FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType inType, FileRefNumber inRefNumber);
