@@ -10,6 +10,8 @@
 #include "Log.h"
 #include "Notifications.h"
 
+#include <Bedrock/String.h>
+
 enum class LogLevel : uint8
 {
 	None,
@@ -43,16 +45,16 @@ struct App
 	bool IsExitRequested();
 	bool IsExitReady();
 
-	bool HasInitError() const { return !mInitError.empty(); }
+	bool HasInitError() const { return !mInitError.Empty(); }
 	void SetInitError(StringView inText) { mInitError = inText; }
 
 	template <class... taArgs>
-	[[noreturn]] void               FatalError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { FatalErrorV(inFmt.get(), fmt::make_format_args(inArgs...)); }
+	[[noreturn]] void               FatalError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { FatalErrorV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...)); }
 	[[noreturn]] void               FatalErrorV(StringView inFmt, fmt::format_args inArgs = {});
 
-	template <class... taArgs> void Log(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogV(inFmt.get(), fmt::make_format_args(inArgs...)); }
+	template <class... taArgs> void Log(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...)); }
 	void                            LogV(StringView inFmt, fmt::format_args inArgs = {}, LogType inType = LogType::Normal);
-	template <class... taArgs> void LogError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogErrorV(inFmt.get(), fmt::make_format_args(inArgs...)); }
+	template <class... taArgs> void LogError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogErrorV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...)); }
 	void                            LogErrorV(StringView inFmt, fmt::format_args inArgs = {}) { LogV(inFmt, inArgs, LogType::Error); }
 
 	void                            OpenLogFile();

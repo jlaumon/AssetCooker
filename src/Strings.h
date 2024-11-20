@@ -14,6 +14,7 @@
 #include "fmt/format.h"
 
 #include <Bedrock/StringView.h>
+#include <Bedrock/String.h>
 
 constexpr bool gIsNullTerminated(StringView inString);
 
@@ -203,6 +204,15 @@ struct fmt::formatter<FixedString<taSize>> : fmt::formatter<fmt::string_view>
 	auto format(const FixedString<taSize>& inTempString, format_context& ioCtx) const
 	{
 		return fmt::formatter<fmt::string_view>::format(fmt::string_view(inTempString.mBuffer, inTempString.mSize), ioCtx);
+	}
+};
+
+// Formatter for String.
+template <> struct fmt::formatter<String> : fmt::formatter<fmt::string_view>
+{
+	auto format(const String& inString, format_context& ioCtx) const
+	{
+		return fmt::formatter<fmt::string_view>::format(fmt::string_view(inString.Data(), inString.Size()), ioCtx);
 	}
 };
 

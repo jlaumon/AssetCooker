@@ -94,7 +94,7 @@ struct StringPool
 
 		template<typename... taArgs> void AppendFormat(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs)
 		{
-			AppendFormatV(inFmt.get(), fmt::make_format_args(inArgs...));
+			AppendFormatV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...));
 		}
 
 		void AppendFormatV(StringView inFmt, fmt::format_args inArgs)
@@ -113,7 +113,7 @@ struct StringPool
 	{
 		// Allocate an empty string (actually allocates a null terminator).
 		auto str = Allocate(0);
-		return { str.data(), str.Size(), *this, this->mBuffer.Lock() };
+		return { str.Data(), str.Size(), *this, this->mBuffer.Lock() };
 	}
 
 };
