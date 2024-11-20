@@ -56,7 +56,7 @@ bool BinaryReader::ReadFile(FILE* inFile)
 	Span uncompressed_buffer = mBuffer.EnsureCapacity(uncompressed_size, mBufferLock);
 
 	// Decompress the data.
-	int actual_uncompressed_size = LZ4_decompress_safe(compressed_buffer, (char*)uncompressed_buffer.data(), compressed_size, uncompressed_buffer.size());
+	int actual_uncompressed_size = LZ4_decompress_safe(compressed_buffer, (char*)uncompressed_buffer.Data(), compressed_size, uncompressed_buffer.Size());
 	gAssert(actual_uncompressed_size == uncompressed_size);
 
 	mBuffer.IncreaseSize(uncompressed_size, mBufferLock);

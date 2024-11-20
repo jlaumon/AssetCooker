@@ -29,10 +29,10 @@ struct BinaryWriter : NoCopy
 	{
 		static_assert(std::has_unique_object_representations_v<taType>); // Don't write padding into the file.
 
-		size_t size_bytes = inSpan.size_bytes();
+		int size_bytes = inSpan.SizeInBytes();
 
 		Span dest = mBuffer.EnsureCapacity(size_bytes, mBufferLock);
-		memcpy(dest.data(), inSpan.data(), size_bytes);
+		memcpy(dest.Data(), inSpan.Data(), size_bytes);
 		mBuffer.IncreaseSize(size_bytes, mBufferLock);
 	}
 
@@ -44,14 +44,14 @@ struct BinaryWriter : NoCopy
 
 	void Write(StringView inStr)
 	{
-		Write((uint32)inStr.size());
-		Write(Span(inStr));
+		Write((uint32)inStr.Size());
+		Write(Span(inStr.Data(), inStr.Size()));
 	}
 
 	void WriteLabel(Span<const char> inLabel)
 	{
 		// Don't write the null terminator, we don't need it/don't read it back.
-		Write(inLabel.subspan(0, inLabel.size() - 1));
+		Write(inLabel.SubSpan(0, inLabel.Size() - 1));
 	}
 
 	VMemArray<uint8> mBuffer = { 1'000'000'000, 256ull * 1024 };
@@ -75,7 +75,7 @@ struct BinaryReader : NoCopy
 	template <typename taType>
 	void Read(Span<taType> outSpan)
 	{
-		if (mCurrentOffset + outSpan.size_bytes() > mBuffer.SizeRelaxed())
+		if (mCurrentOffset + outSpan.SizeInBytes() > mBuffer.SizeRelaxed())
 		{
 			mError = true;
 			return;
@@ -83,8 +83,8 @@ struct BinaryReader : NoCopy
 
 		static_assert(std::has_unique_object_representations_v<taType>); // Make sure there's no padding inside that type.
 
-		memcpy(outSpan.data(), mBuffer.Begin() + mCurrentOffset, outSpan.size_bytes());
-		mCurrentOffset += outSpan.size_bytes();
+		memcpy(outSpan.Data(), mBuffer.Begin() + mCurrentOffset, outSpan.SizeInBytes());
+		mCurrentOffset += outSpan.SizeInBytes();
 	}
 
 	template <typename taType>
@@ -94,7 +94,7 @@ struct BinaryReader : NoCopy
 	}
 
 	template <size_t taSize>
-	void Read(TempString<taSize>& outStr)
+	void Read(FixedString<taSize>& outStr)
 	{
 		uint32 size = 0;
 		Read(size);
@@ -102,7 +102,7 @@ struct BinaryReader : NoCopy
 		if (size > outStr.cCapacity - 1)
 		{
 			gAssert(false);
-			gApp.LogError("BinaryReader tried to read a string of size {} in a TempString{}, it does not fit!", size, outStr.cCapacity);
+			gApp.LogError("BinaryReader tried to read a string of size {} in a FixedString{}, it does not fit!", size, outStr.cCapacity);
 			mError = true;
 
 			// Skip the string instead of reading it.
@@ -122,7 +122,7 @@ struct BinaryReader : NoCopy
 		Read(size);
 
 		MutStringView buffer = ioStringPool.Allocate(size);
-		Read(Span(buffer.data(), size));
+		Read(Span(buffer.Data(), (int)size));
 
 		return buffer;
 	}
