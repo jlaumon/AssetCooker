@@ -8,7 +8,8 @@
 #include "App.h"
 #include "Debug.h"
 #include "FileSystem.h"
-#include "Tests.h"
+#include <Bedrock/Test.h>
+#include <Bedrock/Algorithm.h>
 
 #include "win32/file.h"
 #include "win32/io.h"
@@ -16,7 +17,7 @@
 bool gReadFile(StringView inPath, VMemArray<uint8>& outFileData)
 {
 	TempPath long_path;
-	if (inPath.size() >= MAX_PATH && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
+	if (inPath.Size() >= MAX_PATH && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
 	{
 		long_path.Append(R"(\\?\)");
 		long_path.Append(inPath);
@@ -38,7 +39,7 @@ bool gReadFile(StringView inPath, VMemArray<uint8>& outFileData)
 	Span<uint8> buffer = outFileData.EnsureCapacity(file_size.QuadPart + 1, lock);
 
 	DWORD bytes_read = 0;
-	BOOL success = ReadFile(handle, buffer.data(), file_size.LowPart, &bytes_read, nullptr) != 0;
+	BOOL success = ReadFile(handle, buffer.Data(), file_size.LowPart, &bytes_read, nullptr) != 0;
 
 	// Null terminate in case it's text.
 	buffer[file_size.QuadPart] = 0;
@@ -70,17 +71,17 @@ static StringView sExtractFirstPath(StringView inLine)
 {
 	bool escaping_next_character = false;
 	// Trim spaces before processing.
-	while (!inLine.empty() && sIsSpace(inLine[0]))
+	while (!inLine.Empty() && sIsSpace(inLine[0]))
 	{
-		inLine.remove_prefix(1);
+		inLine.RemovePrefix(1);
 	}
-	while (!inLine.empty() && sIsSpace(inLine[inLine.size() - 1]))
+	while (!inLine.Empty() && sIsSpace(inLine[inLine.Size() - 1]))
 	{
-		inLine.remove_suffix(1);
+		inLine.RemoveSuffix(1);
 	}
 
 	StringView remaining = inLine;
-	while (!remaining.empty())
+	while (!remaining.Empty())
 	{
 		char c = remaining[0];
 		if (escaping_next_character)
@@ -92,9 +93,9 @@ static StringView sExtractFirstPath(StringView inLine)
 			escaping_next_character = true;
 		}
 		else if(sIsSpace(c))
-			return inLine.substr(0, remaining.data() - inLine.data());
+			return inLine.SubStr(0, remaining.Data() - inLine.Data());
 
-		remaining = remaining.substr(1);
+		remaining = remaining.SubStr(1);
 	}
 	return inLine;
 }
@@ -170,60 +171,60 @@ REGISTER_TEST("CleanupPath")
 };
 
 // Barebones GNU Make-like dependency file parser. 
-static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, std::vector<FileID>& outInputs)
+static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, Vector<FileID>& outInputs)
 {
 	StringView dep_file_content = inDepFileContent;
 
 	// First there's the rule name, followed by a colon and a space. Skip that.
 	constexpr StringView cDepStartMarker  = ": ";
-	size_t deps_start = dep_file_content.find(cDepStartMarker);
-	if (deps_start == StringView::npos)
+	int deps_start = dep_file_content.Find(cDepStartMarker);
+	if (deps_start == -1)
 	{
 		gApp.LogError(R"(Failed to parse Dep File {}, couldn't find the first dependency)", inDepFileID.GetFile());
 		return false;
 	}
 
-	dep_file_content = dep_file_content.substr(deps_start + cDepStartMarker.size());
+	dep_file_content = dep_file_content.SubStr(deps_start + cDepStartMarker.Size());
 	
-	while (!dep_file_content.empty())
+	while (!dep_file_content.Empty())
 	{
 		// Skip white space before the path.
-		while (!dep_file_content.empty() && sIsSpace(dep_file_content.front()))
-			dep_file_content = dep_file_content.substr(1);
+		while (!dep_file_content.Empty() && sIsSpace(dep_file_content.Front()))
+			dep_file_content = dep_file_content.SubStr(1);
 
 		// Lines generally end with space + backslash + linefeed.
 		constexpr StringView cWindowsLineEnd  = " \\\r\n";
 		constexpr StringView cLineEnd  = " \\\n";
-		size_t path_end  = dep_file_content.find(cWindowsLineEnd);
-		size_t next_path = path_end + cWindowsLineEnd.size();
+		int path_end  = dep_file_content.Find(cWindowsLineEnd);
+		int next_path = path_end + cWindowsLineEnd.Size();
 
 		// Match first on Windows' CRLF before matching on LF.
-		if (path_end == StringView::npos)
+		if (path_end == -1)
 		{
-			path_end  = dep_file_content.find(cLineEnd);
-			next_path = path_end + cLineEnd.size();
+			path_end  = dep_file_content.Find(cLineEnd);
+			next_path = path_end + cLineEnd.Size();
 		}
-		if (path_end == StringView::npos)
+		if (path_end == -1)
 		{
 			// Last line might also end with a linefeed (or nothing).
 			constexpr StringView cLastLineEnd = "\n\r";
-			path_end = dep_file_content.find_first_of(cLastLineEnd);
+			path_end = dep_file_content.FindFirstOf(cLastLineEnd);
 			next_path = path_end + 1;
 
-			if (path_end == StringView::npos)
-				next_path = dep_file_content.size();
+			if (path_end == -1)
+				next_path = dep_file_content.Size();
 		}
 
-		if (path_end == StringView::npos)
-			next_path = dep_file_content.size();
+		if (path_end == -1)
+			next_path = dep_file_content.Size();
 
-		StringView current_line = StringView(dep_file_content.substr(0, path_end));
+		StringView current_line = StringView(dep_file_content.SubStr(0, path_end));
 
-		while (!current_line.empty())
+		while (!current_line.Empty())
 		{
 			StringView dep_file_path = sExtractFirstPath(current_line);
 
-			current_line = current_line.substr(dep_file_path.data() + dep_file_path.size() - current_line.data());
+			current_line = current_line.SubStr(dep_file_path.Data() + dep_file_path.Size() - current_line.Data());
 
 			// Make a copy because we need a null terminated string.
 			TempPath  path = sCleanupPath(dep_file_path);
@@ -240,7 +241,7 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 			}
 
 			// Skip the repo path to get the file part.
-			StringView file_path = abs_path.AsStringView().substr(repo->mRootPath.size());
+			StringView file_path = abs_path.AsStringView().SubStr(repo->mRootPath.Size());
 
 			// Find or add the file.
 			// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).
@@ -251,14 +252,14 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, s
 		}
 
 		// Continue to the next path.
-		dep_file_content.remove_prefix(next_path);
+		dep_file_content.RemovePrefix(next_path);
 	} 
 
 	return true;
 }
 
 
-bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, std::vector<FileID>& outInputs, std::vector<FileID>& outOutputs)
+bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& outInputs, Vector<FileID>& outOutputs)
 {
 	TempPath full_path("{}{}", inDepFileID.GetRepo().mRootPath, inDepFileID.GetFile().mPath);
 
@@ -295,7 +296,7 @@ void gApplyDepFileContent(CookingCommand& ioCommand, Span<FileID> inDepFileInput
 		// If there are new inputs, let them know about this command.
 		for (FileID input : inDepFileInputs)
 			if (!old_dep_file_inputs.contains(input) && !gContains(ioCommand.mInputs, input))
-				input.GetFile().mInputOf.push_back(ioCommand.mID);
+				input.GetFile().mInputOf.PushBack(ioCommand.mID);
 
 		// If some inputs disappeared, remove this command from them.
 		for (FileID old_input : old_dep_file_inputs)
@@ -314,7 +315,7 @@ void gApplyDepFileContent(CookingCommand& ioCommand, Span<FileID> inDepFileInput
 		// If there are new outputs, let them know about this command.
 		for (FileID output : inDepFileOutputs)
 			if (!old_dep_file_outputs.contains(output) && !gContains(ioCommand.mOutputs, output))
-				output.GetFile().mOutputOf.push_back(ioCommand.mID);
+				output.GetFile().mOutputOf.PushBack(ioCommand.mID);
 
 		// If some outputs disappeared, remove this command from them.
 		for (FileID old_output : old_dep_file_outputs)
@@ -326,6 +327,6 @@ void gApplyDepFileContent(CookingCommand& ioCommand, Span<FileID> inDepFileInput
 	}
 
 	// Update the DepFile input/output lists.
-	ioCommand.mDepFileInputs.assign(inDepFileInputs.begin(), inDepFileInputs.end());
-	ioCommand.mDepFileOutputs.assign(inDepFileOutputs.begin(), inDepFileOutputs.end());
+	ioCommand.mDepFileInputs = inDepFileInputs;
+	ioCommand.mDepFileOutputs = inDepFileOutputs;
 }
