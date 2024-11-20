@@ -19,7 +19,24 @@ constexpr bool gIsNullTerminated(StringView inString);
 
 
 // Mutable StringView. Size is fixed but content is mutable. Size includes the null-terminator.
-using MutStringView = Span<char>;
+struct MutStringView : Span<char>
+{
+	MutStringView() = default;
+	MutStringView(const MutStringView&) = default;
+	MutStringView(Span inSpan) : Span(inSpan) {}
+	using Span::Span;
+
+	operator StringView() const
+	{
+		StringView string_view(Data(), Size());
+
+		// Don't include the null terminator if there's one.
+		if (!string_view.Empty() && string_view.Back() == 0)
+			string_view.RemoveSuffix(1);
+
+		return string_view;
+	}
+};
 
 template<int taSize> struct FixedString;
 
@@ -57,13 +74,15 @@ struct FixedString : NoCopy // No copy for now, should not be needed on temporar
 	void                               AppendFormat(StringView inFmt, fmt::format_args inArgs);
 	void                               Set(StringView inString);
 	void                               Append(StringView inString);
-	FixedString&                        operator=(StringView inString) { Set(inString); return *this; }
+	FixedString&                       operator=(StringView inString) { Set(inString); return *this; }
 
+	operator StringView() const { return { mBuffer, mSize }; }
 	StringView                         AsStringView() const { return { mBuffer, mSize }; }
 	Span<char>                         AsSpan() { return { mBuffer, mSize + 1 }; }
 	const char*                        AsCStr() const { return mBuffer; }
 	int                                Size() const { return mSize; }
 	char                               operator[](size_t inIndex) const { gAssert(inIndex <= mSize); return mBuffer[inIndex]; }
+	char*                              Data() { return mBuffer; }
 
 	int			mSize = 0; // Size of the string, not including the null terminator.
 	char        mBuffer[taSize];
@@ -139,7 +158,7 @@ constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr)
 	// Add a null-terminator.
 	ioDest[copy_size] = 0;
 
-	return { ioDest.data() + copy_size, ioDest.Size() - copy_size };
+	return { ioDest.Data() + copy_size, ioDest.Size() - copy_size };
 }
 constexpr MutStringView gStringCopy(MutStringView ioDest, const StringView inStr) { return gAppend(ioDest, inStr); }
 
@@ -157,7 +176,7 @@ constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr, ta
 {
 	MutStringView concatenated_str = gConcat(gAppend(ioDest, inStr), inArgs...);
 
-	return { ioDest.data(), concatenated_str.End() };
+	return { ioDest.Data(), concatenated_str.End() };
 }
 
 // Return true if this string view is null-terminated.
@@ -220,17 +239,17 @@ inline StringView gFormatV(MutStringView ioBuffer, StringView inFmt, fmt::format
 	// Assert if destination isn't large enough, but still make sure we don't overflow.
 	size_t dest_available_size = ioBuffer.Size() - 1; // Keep 1 for null terminator.
 
-	auto result = fmt::vformat_to_n(ioBuffer.data(), dest_available_size, fmt::string_view(inFmt.Data(), inFmt.Size()), inArgs);
+	auto result = fmt::vformat_to_n(ioBuffer.Data(), dest_available_size, fmt::string_view(inFmt.Data(), inFmt.Size()), inArgs);
 	*result.out = 0; // Add the null terminator.
 	gAssert(result.size <= dest_available_size);
 
-	return { ioBuffer.data(), result.out };
+	return { ioBuffer.Data(), result.out };
 }
 
 template<typename... taArgs>
 StringView gFormat(MutStringView ioBuffer, fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
 {
-	return gFormatV(ioBuffer, inFmt.get(), fmt::make_format_args(inArgs...));
+	return gFormatV(ioBuffer, StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...));
 }
 
 
@@ -269,8 +288,8 @@ void FixedString<taSize>::AppendFormat(StringView inFmt, fmt::format_args inArgs
 template <int taSize>
 void FixedString<taSize>::Set(StringView inString)
 {
-	StringView str_view = gConcat(mBuffer, inString);
-	mSize               = str_view.Size();
+	MutStringView str_view = gConcat(mBuffer, inString);
+	mSize                  = str_view.Size();
 }
 
 template <int taSize>
@@ -278,8 +297,10 @@ void FixedString<taSize>::Append(StringView inString)
 {
 	gAssert(mSize + inString.Size() < cCapacity); // String will be cropped!
 
-	StringView appended_str = gConcat(MutStringView(mBuffer).subspan(mSize), inString);
-	mSize += appended_str.Size();
+	MutStringView appended_str = gConcat(MutStringView(mBuffer).SubSpan(mSize), inString);
+
+	gAssert(appended_str.Back() == 0);
+	mSize += appended_str.Size() - 1;
 }
 
 

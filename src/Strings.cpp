@@ -41,7 +41,7 @@ bool gEndsWithNoCase(StringView inString, StringView inEnd)
 // Transform the string to lower case in place.
 void gToLowercase(MutStringView ioString)
 {
-	_mbslwr_s((unsigned char*)ioString.data(), ioString.Size());
+	_mbslwr_s((unsigned char*)ioString.Data(), ioString.Size());
 }
 
 
@@ -58,7 +58,7 @@ OptionalStringView gWideCharToUtf8(WStringView inWString, MutStringView ioBuffer
 	if (source_is_null_terminated)
 		available_bytes--;
 
-	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), ioBuffer.data(), available_bytes, nullptr, nullptr);
+	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), ioBuffer.Data(), available_bytes, nullptr, nullptr);
 
 	if (written_bytes == 0 && !inWString.empty())
 		return {}; // Failed to convert.
