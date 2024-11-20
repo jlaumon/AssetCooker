@@ -17,7 +17,7 @@ void gReadConfigFile(StringView inPath)
 	TomlReader reader;
 	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.SetInitError(TempString512(R"(Failed to parse Config file "{}". See log for details.)", inPath).AsStringView());
+		gApp.SetInitError(FixedString512(R"(Failed to parse Config file "{}". See log for details.)", inPath).AsStringView());
 		return;
 	}
 
@@ -41,10 +41,10 @@ void gReadConfigFile(StringView inPath)
 
 			defer { reader.CloseTable(); };
 
-			TempString512 name;
+			FixedString512 name;
 			reader.Read("Name", name);
 
-			TempString512 path;
+			FixedString512 path;
 			reader.Read("Path", path);
 
 			if (name.mSize && path.mSize)
@@ -54,14 +54,14 @@ void gReadConfigFile(StringView inPath)
 
 	// Read the Rule File path.
 	{
-		TempString512 rule_file_path;
+		FixedString512 rule_file_path;
 		if (reader.TryRead("RuleFile", rule_file_path))
 			gApp.mRuleFilePath = rule_file_path.AsStringView();
 	}
 
 	// Log directory path
 	{
-		TempString512 log_dir;
+		FixedString512 log_dir;
 		if (reader.TryRead("LogDirectory", log_dir))
 		{
 			// Normalize the path.
@@ -80,7 +80,7 @@ void gReadConfigFile(StringView inPath)
 
 	// Cache directory path
 	{
-		TempString512 cache_dir;
+		FixedString512 cache_dir;
 		if (reader.TryRead("CacheDirectory", cache_dir))
 		{
 			// Normalize the path.
