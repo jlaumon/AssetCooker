@@ -312,10 +312,10 @@ struct LuaReader
 		return CloseTable();
 	}
 
-	size_t GetArraySize() const
+	int GetArraySize() const
 	{
 		gAssert(lua_istable(mLuaState, -1));
-		return lua_rawlen(mLuaState, -1);
+		return (int)lua_rawlen(mLuaState, -1);
 	}
 
 	bool NextArrayElement()
@@ -324,7 +324,7 @@ struct LuaReader
 		Element& current = mStack.Back();
 
 		// Reached the end of the array?
-		if (++current.mIndex >= (int)GetArraySize())
+		if (++current.mIndex >= GetArraySize())
 			return false;
 
 		return true;
@@ -336,10 +336,10 @@ struct LuaReader
 		if (!TryOpenArray(inVarName))
 			return false;
 
-		ioContainer.reserve(ioContainer.size() + GetArraySize());
+		ioContainer.Reserve(ioContainer.Size() + GetArraySize());
 
 		while (NextArrayElement())
-			Read("", ioContainer.emplace_back());
+			Read("", ioContainer.EmplaceBack());
 
 		CloseArray();
 		return true;

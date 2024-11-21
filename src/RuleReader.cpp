@@ -56,7 +56,7 @@ static void sReadRuleFile(StringView inPath)
 					continue;
 				defer { reader.CloseTable(); };
 
-				InputFilter& input_filter = rule.mInputFilters.emplace_back();
+				InputFilter& input_filter = rule.mInputFilters.EmplaceBack();
 
 				FixedString512 repo_name;
 				if (reader.Read("Repo", repo_name))

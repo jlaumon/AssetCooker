@@ -44,17 +44,25 @@ template <> struct fmt::formatter<toml::path> : fmt::formatter<fmt::string_view>
 	}
 };
 
+
+inline toml::path operator+ (const toml::path& lhs, StringView rhs)
+{
+	std::string_view std_view(rhs.Data(), rhs.Size());
+	return lhs + std_view;
+}
+
+
 struct TomlReader
 {
 	template <typename taType>
 	static constexpr StringView sTypeName()
 	{
 		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, TempString32>
-			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>
-			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>
+			|| std::is_same_v<taType, FixedString32>
+			|| std::is_same_v<taType, FixedString64>
+			|| std::is_same_v<taType, FixedString128>
+			|| std::is_same_v<taType, FixedString256>
+			|| std::is_same_v<taType, FixedString512>
 			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
 			return "string";
@@ -72,19 +80,19 @@ struct TomlReader
 	// Helper to get a node based on its name if currently in a table, or based on current index if currently in an array.
 	const toml::node* GetNode(StringView inVarName) const
 	{
-		const Element& current = mStack.back();
+		const Element& current = mStack.Back();
 		if (current.mNode->is_array())
 			return current.mNode->as_array()->get(current.mIndex);
 		else
-			return current.mNode->as_table()->get(inVarName);
+			return current.mNode->as_table()->get(std::string_view(inVarName.Data(), inVarName.Size()));
 	}
 
 	// Helper to get the path to a node based on its name if currently in a table, or based on current index if currently in an array.
 	toml::path GetPath(StringView inVarName) const
 	{
-		const Element& current = mStack.back();
+		const Element& current = mStack.Back();
 		if (current.mNode->is_array())
-			return mPath + TempString32("[{}]", current.mIndex).AsStringView();
+			return mPath + FixedString32("[{}]", current.mIndex).AsStringView();
 		else
 			return mPath + inVarName;
 	}
@@ -101,12 +109,13 @@ struct TomlReader
 		// If the variable exists but is of the wrong type, that's an error.
 		bool is_right_type;
 		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, TempString32>
-			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>
-			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>
-			|| std::is_same_v<taType, TempPath>)
+			|| std::is_same_v<taType, FixedString32>
+			|| std::is_same_v<taType, FixedString64>
+			|| std::is_same_v<taType, FixedString128>
+			|| std::is_same_v<taType, FixedString256>
+			|| std::is_same_v<taType, FixedString512>
+			|| std::is_same_v<taType, TempPath>
+			|| std::is_same_v<taType, String>)
 			is_right_type = node->is_string();
 		else if constexpr (std::is_same_v<taType, bool>)
 			is_right_type = node->is_boolean();
@@ -125,17 +134,23 @@ struct TomlReader
 		}
 
 		if constexpr (std::is_same_v<taType, StringView>)
+		{
+			std::string_view std_view = *node->value<std::string_view>();
 			// For StringView allocate a copy into the StringPool
-			outVar = mStringPool->AllocateCopy(*node->value<std::string_view>());
-		else if constexpr (std::is_same_v<taType, TempString32>
-			|| std::is_same_v<taType, TempString64>
-			|| std::is_same_v<taType, TempString128>
-			|| std::is_same_v<taType, TempString256>
-			|| std::is_same_v<taType, TempString512>
+			outVar = mStringPool->AllocateCopy(StringView(std_view.data(), (int)std_view.size()));
+		}
+		else if constexpr (std::is_same_v<taType, FixedString32>
+			|| std::is_same_v<taType, FixedString64>
+			|| std::is_same_v<taType, FixedString128>
+			|| std::is_same_v<taType, FixedString256>
+			|| std::is_same_v<taType, FixedString512>
 			|| std::is_same_v<taType, TempPath>
 			|| std::is_same_v<taType, String>)
-			// For TempStrings and String, just copy into it.
-			outVar = StringView(*node->value<std::string_view>());
+		{
+			std::string_view std_view = *node->value<std::string_view>();
+			// For FixedStrings and String, just copy into it.
+			outVar = StringView(std_view.data(), (int)std_view.size());
+		}
 		else if constexpr (std::is_same_v<taType, bool>)
 			outVar = *node->value<bool>();
 		else if constexpr (std::is_floating_point_v<taType>)
@@ -172,7 +187,7 @@ struct TomlReader
 	bool Init(StringView inPath, StringPool* ioStringPool)
 	{
 		// Parse the toml file.
-		mParsedFile = toml::parse_file(inPath);
+		mParsedFile = toml::parse_file(std::string_view(inPath.Data(), inPath.Size()));
 		if (!mParsedFile)
 		{
 			gApp.LogError(R"(Failed to parse TOML file "{}".)", inPath);
@@ -181,8 +196,8 @@ struct TomlReader
 		}
 
 		mStringPool = ioStringPool;
-		mStack.clear();
-		mStack.push_back({ &mParsedFile.table() });
+		mStack.Clear();
+		mStack.PushBack({ &mParsedFile.table() });
 		return true;
 	}
 
@@ -203,7 +218,7 @@ struct TomlReader
 		}
 
 		mPath = GetPath(inVarName);
-		mStack.push_back({ node });
+		mStack.PushBack({ node });
 		return true;
 	}
 
@@ -221,9 +236,9 @@ struct TomlReader
 
 	void CloseTable()
 	{
-		gAssert(mStack.back().mNode->is_table());
+		gAssert(mStack.Back().mNode->is_table());
 		mPath.truncate(1);
-		mStack.pop_back();
+		mStack.PopBack();
 	}
 
 	bool TryOpenArray(StringView inVarName)
@@ -243,7 +258,7 @@ struct TomlReader
 		}
 
 		mPath = GetPath(inVarName);
-		mStack.push_back({ node });
+		mStack.PushBack({ node });
 		return true;
 	}
 
@@ -261,21 +276,21 @@ struct TomlReader
 
 	void CloseArray()
 	{
-		gAssert(mStack.back().mNode->is_array());
+		gAssert(mStack.Back().mNode->is_array());
 		mPath.truncate(1);
-		mStack.pop_back();
+		mStack.PopBack();
 	}
 
-	size_t GetArraySize() const
+	int GetArraySize() const
 	{
-		const Element& current = mStack.back();
+		const Element& current = mStack.Back();
 		gAssert(current.mNode->is_array());
-		return current.mNode->as_array()->size();
+		return (int)current.mNode->as_array()->size();
 	}
 
 	bool NextArrayElement()
 	{
-		Element& current = mStack.back();
+		Element& current = mStack.Back();
 		gAssert(current.mNode->is_array());
 
 		// Reached the end of the array?
@@ -291,10 +306,10 @@ struct TomlReader
 		if (!TryOpenArray(inVarName))
 			return false;
 
-		ioContainer.reserve(ioContainer.size() + GetArraySize());
+		ioContainer.Reserve(ioContainer.Size() + GetArraySize());
 
 		while (NextArrayElement())
-			Read("", ioContainer.emplace_back());
+			Read("", ioContainer.EmplaceBack());
 
 		CloseArray();
 		return true;
@@ -318,7 +333,7 @@ struct TomlReader
 		const toml::node* mNode = nullptr;	// Either a table or an array.
 		int               mIndex = -1;		// Index in the array if node is an array.
 	};
-	std::vector<Element> mStack;
+	Vector<Element>      mStack;
 	toml::path           mPath;
 	StringPool*          mStringPool = nullptr;
 	int                  mErrorCount = 0;

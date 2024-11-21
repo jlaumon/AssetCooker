@@ -15,9 +15,9 @@
 #include "Debug.h"
 #include "FileSystem.h"
 #include "CookingSystem.h"
-#include "Ticks.h"
 #include "Notifications.h"
-#include "Tests.h"
+#include <Bedrock/Test.h>
+#include <Bedrock/Ticks.h>
 
 
 // Data
@@ -189,16 +189,16 @@ int WinMain(
 	// Check if we only want to run the tests.
 	if (StringView(lpCmdLine).Contains("-test"))
 	{
-		return gRunTests() ? 0 : 1;
+		return (gRunTests() == TestResult::Success) ? 0 : 1;
 	}
 
-	gSetCurrentThreadName(L"Main Thread");
+	gSetCurrentThreadName("Main Thread");
 
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	gApp.Init();
 
-	TempString256 window_title("{} - Build: {} {}", gApp.mMainWindowTitle, __DATE__, __TIME__);
+	FixedString256 window_title("{} - Build: {} {}", gApp.mMainWindowTitle, __DATE__, __TIME__);
 
 	wchar_t     window_title_wchar_buffer[256];
 	auto        window_title_wchar = gUtf8ToWideChar(window_title, window_title_wchar_buffer).value_or(L"Asset Cooker");

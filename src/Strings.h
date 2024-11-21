@@ -325,8 +325,6 @@ template <> struct ankerl::unordered_dense::hash<StringView>
     }
 };
 
-inline uint64 gHash(StringView inString) { return ankerl::unordered_dense::detail::wyhash::hash(inString.Data(), inString.Size()); }
-
 
 // Helper to turn back an StringView into an enum, assuming the right gToStringView exists for the enum and that its values go from 0 to _Count.
 template <typename taEnumType>

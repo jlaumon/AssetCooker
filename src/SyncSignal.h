@@ -6,7 +6,7 @@
 #pragma once
 
 #include "Core.h"
-#include "Ticks.h"
+#include <Bedrock/Ticks.h>
 
 #include <condition_variable>
 #include <mutex>

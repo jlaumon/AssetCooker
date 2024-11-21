@@ -21,7 +21,7 @@ void gReadUserPreferencesFile(StringView inPath)
 	TomlReader reader;
 	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.SetInitError(TempString512(R"(Failed to parse User Preferences file "{}". See log for details.)", inPath).AsStringView());
+		gApp.SetInitError(FixedString512(R"(Failed to parse User Preferences file "{}". See log for details.)", inPath).AsStringView());
 		return;
 	}
 
@@ -48,7 +48,7 @@ void gReadUserPreferencesFile(StringView inPath)
 
 	// Filesystem log verbosity.
 	{
-		TempString64 log_level_str;
+		FixedString64 log_level_str;
 		if (reader.TryRead("LogFSActivity", log_level_str))
 			gStringViewToEnum(log_level_str, gApp.mLogFSActivity);
 	}
@@ -64,22 +64,22 @@ void gReadUserPreferencesFile(StringView inPath)
 
 	// Notifications.
 	{
-		TempString64 enable_str;
+		FixedString64 enable_str;
 		if (reader.TryRead("EnableNotifOnHideWindow", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifOnHideWindow);
 	}
 	{
-		TempString64 enable_str;
+		FixedString64 enable_str;
 		if (reader.TryRead("EnableNotifOnCookingError", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifOnCookingError);
 	}
 	{
-		TempString64 enable_str;
+		FixedString64 enable_str;
 		if (reader.TryRead("EnableNotifOnCookingFinish", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifOnCookingFinish);
 	}
 	{
-		TempString64 enable_str;
+		FixedString64 enable_str;
 		if (reader.TryRead("EnableNotifSound", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifSound);
 	}
@@ -99,14 +99,14 @@ void gWriteUserPreferencesFile(StringView inPath)
 
 	prefs_toml.insert("StartPaused", gCookingSystem.IsCookingPaused());
 	prefs_toml.insert("NumCookingThreads", gCookingSystem.GetCookingThreadCount());
-	prefs_toml.insert("LogFSActivity", std::string_view(gToStringView(gApp.mLogFSActivity)));
+	prefs_toml.insert("LogFSActivity", std::string_view(gToStringView(gApp.mLogFSActivity).AsCStr()));
 	prefs_toml.insert("UIScale", gUIGetUserScale());
 
 	prefs_toml.insert("HideWindowOnMinimize", gApp.mHideWindowOnMinimize);
-	prefs_toml.insert("EnableNotifOnHideWindow", std::string_view(gToStringView(gApp.mEnableNotifOnHideWindow)));
-	prefs_toml.insert("EnableNotifOnCookingError", std::string_view(gToStringView(gApp.mEnableNotifOnCookingError)));
-	prefs_toml.insert("EnableNotifOnCookingFinish", std::string_view(gToStringView(gApp.mEnableNotifOnCookingFinish)));
-	prefs_toml.insert("EnableNotifSound", std::string_view(gToStringView(gApp.mEnableNotifSound)));
+	prefs_toml.insert("EnableNotifOnHideWindow", std::string_view(gToStringView(gApp.mEnableNotifOnHideWindow).AsCStr()));
+	prefs_toml.insert("EnableNotifOnCookingError", std::string_view(gToStringView(gApp.mEnableNotifOnCookingError).AsCStr()));
+	prefs_toml.insert("EnableNotifOnCookingFinish", std::string_view(gToStringView(gApp.mEnableNotifOnCookingFinish).AsCStr()));
+	prefs_toml.insert("EnableNotifSound", std::string_view(gToStringView(gApp.mEnableNotifSound).AsCStr()));
 
 	std::stringstream sstream;
 	sstream << prefs_toml;

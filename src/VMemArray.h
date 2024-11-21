@@ -32,6 +32,8 @@ using VMemArrayLock = std::unique_lock<std::mutex>;
 template <typename taType>
 struct VMemArray : NoCopy
 {
+	using ValueType = taType;
+
 	VMemArray(size_t inMaxCapacityInBytes = 0, size_t inMinGrowSizeInBytes = 0)
 	{
 		if (inMaxCapacityInBytes)
@@ -123,6 +125,7 @@ struct VMemArray : NoCopy
 	{
 		// If no lock was provided, make a new one.
 		const VMemArrayLock& lock = inLock.value_or((const VMemArrayLock&)Lock());
+		(void)lock;
 
 		Span elements = *this;
 		mEnd          = mBegin;
@@ -158,3 +161,7 @@ private:
 	size_t               mSizeToReserve = 1024ull * 1024 * 1024;
 	size_t               mMinCommitSize = 256ull * 1024;			// Minimum size to commit at once, to avoid calling gVMemCommit too often.
 };
+
+
+// VMemArray is a contiguous container.
+template<class T> inline constexpr bool cIsContiguous<VMemArray<T>> = true;
