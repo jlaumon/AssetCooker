@@ -10,6 +10,8 @@
 #include "FileSystem.h"
 #include "CookingSystemIDs.h"
 
+#include <Bedrock/String.h>
+
 #include <vector>
 
 enum class CommandVariables : uint8
@@ -124,13 +126,13 @@ struct CookingRule : NoCopy
 	StringView               mDepFilePath;        // Optional file containing extra inputs/ouputs for the command.
 	StringView               mDepFileCommandLine; // Optional separate command line used to generate the dep file (in case the main command cannot generate it directly).
 	StringView               mCommandLine;
-	std::vector<InputFilter> mInputFilters;
-	std::vector<StringView>  mInputPaths;
-	std::vector<StringView>  mOutputPaths;
+	Vector<InputFilter>      mInputFilters;
+	Vector<StringView>       mInputPaths;
+	Vector<StringView>       mOutputPaths;
 
 	mutable std::atomic<int> mCommandCount = 0;
 
-	bool                     UseDepFile() const { return !mDepFilePath.empty(); }
+	bool                     UseDepFile() const { return !mDepFilePath.Empty(); }
 };
 
 
@@ -155,7 +157,7 @@ constexpr StringView gToStringView(CookingState inVar)
 		"Error",
 		"Success",
 	};
-	static_assert(gElemCount(cNames) == (size_t)CookingState::_Count);
+	static_assert(gElemCount(cNames) == (int)CookingState::_Count);
 
 	return cNames[(int)inVar];
 };
@@ -178,10 +180,10 @@ struct CookingCommand : NoCopy
 {
 	CookingCommandID    mID;
 	CookingRuleID       mRuleID;
-	std::vector<FileID> mInputs;         // Static inputs.
-	std::vector<FileID> mOutputs;        // Static outputs.
-	std::vector<FileID> mDepFileInputs;  // Dynamic inputs specified by the dep file.
-	std::vector<FileID> mDepFileOutputs; // Dynamic outputs specified by the dep file.
+	Vector<FileID>      mInputs;         // Static inputs.
+	Vector<FileID>      mOutputs;        // Static outputs.
+	Vector<FileID>      mDepFileInputs;  // Dynamic inputs specified by the dep file.
+	Vector<FileID>      mDepFileOutputs; // Dynamic outputs specified by the dep file.
 
 	enum DirtyState : uint8
 	{
@@ -256,14 +258,14 @@ struct CookingQueue : NoCopy
 	struct PrioBucket
 	{
 		int                           mPriority = 0;
-		std::vector<CookingCommandID> mCommands; // TODO replace by a ring buffer or some kind of deque
+		Vector<CookingCommandID>      mCommands; // TODO replace by a ring buffer or some kind of deque
 
 		auto                          operator<=>(int inOrder) const { return mPriority <=> inOrder; }
 		auto                          operator==(int inOrder) const { return mPriority == inOrder; }
 		auto                          operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
 	};
 
-	std::vector<PrioBucket> mPrioBuckets;
+	Vector<PrioBucket>      mPrioBuckets;
 	size_t                  mTotalSize = 0;
 	mutable std::mutex      mMutex;
 };
@@ -286,7 +288,7 @@ struct CookingThreadsQueue : CookingQueue
 		auto operator==(int inOrder) const { return mPriority == inOrder; }
 		auto operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
 	};
-	std::vector<PrioData>   mPrioData;
+	Vector<PrioData>        mPrioData;
 	std::condition_variable mBarrier;
 	bool                    mStopRequested = false;
 };

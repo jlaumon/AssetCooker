@@ -8,8 +8,9 @@
 #include "Debug.h"
 #include "DepFile.h"
 #include "Notifications.h"
-#include "Ticks.h"
-#include "Tests.h"
+#include <Bedrock/Test.h>
+#include <Bedrock/Algorithm.h>
+#include <Bedrock/Ticks.h>
 
 #include "subprocess/subprocess.h"
 #include "win32/file.h"
@@ -18,6 +19,19 @@
 
 // Debug toggle to fake cooking failures, to test error handling.
 bool gDebugFailCookingRandomly = false;
+
+
+// Helper to add a value to a vector-like container only if it's not already in it.
+template<typename taValue, typename taContainer>
+constexpr bool gPushBackUnique(taContainer& ioContainer, const taValue& inElem)
+{
+	if (gContains(ioContainer, inElem))
+		return false;
+
+	ioContainer.PushBack(inElem);
+	return true;
+}
+
 
 
 static bool sIsSpace(char inChar)
@@ -63,7 +77,7 @@ template<class taFormatter>
 static Optional<String> sParseCommandVariables(StringView inFormatStr, const taFormatter& inFormatter)
 {
 	String str;
-	const char* p_begin = inFormatStr.data();
+	const char* p_begin = inFormatStr.Data();
 	const char* p_end   = gEndPtr(inFormatStr);
 	const char* p       = p_begin;
 
@@ -71,7 +85,7 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 	{
 		if (*p == '{')
 		{
-			str.append({ p_begin, p });
+			str.Append({ p_begin, p });
 
 			StringView arg = sParseArgument(p, p_end);
 
@@ -80,12 +94,12 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 
 			if (gStartsWith(arg, gToStringView(CommandVariables::Repo)))
 			{
-				arg.remove_prefix(gToStringView(CommandVariables::Repo).size());
+				arg.RemovePrefix(gToStringView(CommandVariables::Repo).Size());
 
-				if (arg.size() < 2 || arg[0] != ':')
+				if (arg.Size() < 2 || arg[0] != ':')
 					return {}; // Failed to get the repo name part.
 			
-				StringView repo_name = arg.substr(1);
+				StringView repo_name = arg.SubStr(1);
 
 				if (!inFormatter(CommandVariables::Repo, repo_name, { p, p_end }, str))
 					return {}; // Formatter says error.
@@ -120,7 +134,7 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 		}
 	}
 
-	str.append({ p_begin, p });
+	str.Append({ p_begin, p });
 
 	return str;
 }
@@ -129,7 +143,7 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 // TODO add an output error string to help understand why it fails
 Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
 {
-	if (inFormatStr.empty())
+	if (inFormatStr.Empty())
 		return {}; // Consider empty format string is an error.
 
 	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, String& outStr) 
@@ -137,30 +151,30 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 		switch (inVar)
 		{
 		case CommandVariables::Ext:
-			outStr.append(inFile.GetExtension());
+			outStr.Append(inFile.GetExtension());
 			break;
 		case CommandVariables::File:
-			outStr.append(inFile.GetNameNoExt());
+			outStr.Append(inFile.GetNameNoExt());
 			break;
 		case CommandVariables::Dir:
-			if (!inFile.GetDirectory().empty())
-				outStr.append(inFile.GetDirectory());
+			if (!inFile.GetDirectory().Empty())
+				outStr.Append(inFile.GetDirectory());
 
 			// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
 			// Add a second backslash to avoid that.
 			// Note: we also do it if the first backslash wasn't added by the Dir itself (if Dir is empty) as it's often preceded by a Repo (which also ends with a '\').
-			if (!outStr.empty() && outStr.back() == '\\')
+			if (!outStr.Empty() && outStr.Back() == '\\')
 			{
-				if (!inRemainingFormatStr.empty() && inRemainingFormatStr[0] == '"')
-					outStr.append("\\");
+				if (!inRemainingFormatStr.Empty() && inRemainingFormatStr[0] == '"')
+					outStr.Append("\\");
 			}
 			break;
 		case CommandVariables::Dir_NoTrailingSlash:
-			if (!inFile.GetDirectory().empty())
-				outStr.append(inFile.GetDirectory().substr(0, inFile.GetDirectory().size() - 1));
+			if (!inFile.GetDirectory().Empty())
+				outStr.Append(inFile.GetDirectory().SubStr(0, inFile.GetDirectory().Size() - 1));
 			break;
 		case CommandVariables::Path:
-			outStr.append(inFile.mPath);
+			outStr.Append(inFile.mPath);
 			break;
 		case CommandVariables::Repo:
 			{
@@ -170,12 +184,12 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 				if (repo == nullptr)
 					return false;
 
-				outStr.append(repo->mRootPath);
+				outStr.Append(repo->mRootPath);
 
 				// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
 				// Add a second backslash to avoid that.
-				if (!inRemainingFormatStr.empty() && inRemainingFormatStr[0] == '"')
-					outStr.append("\\");
+				if (!inRemainingFormatStr.Empty() && inRemainingFormatStr[0] == '"')
+					outStr.Append("\\");
 			}
 			break;
 		default:
@@ -195,24 +209,24 @@ Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo
 		switch (inVar)
 		{
 		case CommandVariables::Ext:
-			outStr.append(inFile.GetExtension());
+			outStr.Append(inFile.GetExtension());
 			break;
 		case CommandVariables::File:
-			outStr.append(inFile.GetNameNoExt());
+			outStr.Append(inFile.GetNameNoExt());
 			break;
 		case CommandVariables::Dir:
-			outStr.append(inFile.GetDirectory());
+			outStr.Append(inFile.GetDirectory());
 			break;
 		case CommandVariables::Dir_NoTrailingSlash:
-			if (!inFile.GetDirectory().empty())
-				outStr.append(inFile.GetDirectory().substr(0, inFile.GetDirectory().size() - 1));
+			if (!inFile.GetDirectory().Empty())
+				outStr.Append(inFile.GetDirectory().SubStr(0, inFile.GetDirectory().Size() - 1));
 			break;
 		case CommandVariables::Path:
-			outStr.append(inFile.mPath);
+			outStr.Append(inFile.mPath);
 			break;
 		case CommandVariables::Repo:
 			// There can only be 1 Repo arg and it should be at the very beginning of the path.
-			if (repo != nullptr || !outStr.empty())
+			if (repo != nullptr || !outStr.Empty())
 				return false;
 
 			repo = gFileSystem.FindRepo(inRepoName);
@@ -242,42 +256,11 @@ FileID gGetOrAddFileFromFormat(StringView inFormatStr, const FileInfo& inFile)
 }
 
 
-template <typename taContainer, typename taPredicate>
-bool gAnyOf(taContainer& inContainer, taPredicate inPredicate)
-{
-	for (auto& element : inContainer)
-		if (inPredicate(element))
-			return true;
-	return false;
-}
-
-
-template <typename taContainer, typename taPredicate>
-bool gNoneOf(taContainer& inContainer, taPredicate inPredicate)
-{
-	for (auto& element : inContainer)
-		if (inPredicate(element))
-			return false;
-	return true;
-}
-
-
-
-template <typename taContainer, typename taPredicate>
-bool gAllOf(taContainer& inContainer, taPredicate inPredicate)
-{
-	for (auto& element : inContainer)
-		if (!inPredicate(element))
-			return false;
-	return true;
-}
-
-
 // Test a path against a pattern. Return true if the path matches the pattern (case-insensitive).
 // Pattern supports wild cards '*' (any number of characters) and '?' (single character).
 bool gMatchPath(StringView inPath, StringView inPattern)
 {
-	gAssert(!inPattern.empty());
+	gAssert(!inPattern.Empty());
 	gAssert(gIsNormalized(inPath) && gIsNormalized(inPattern));
 
 	// Convert the path and pattern to lowercase to make sure the search is case-insensitive.
@@ -293,7 +276,7 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 	while (true)
 	{
 		// Find the next wild card in the pattern.
-		size_t next_wildcard_index = pattern.find_first_of("?*");
+		int next_wildcard_index = pattern.FindFirstOf("?*");
 
 		// If the next char isn't a wild card and we have a pending '*', process it now.
 		// This case happens when we encounter '*?'. More explanations where pending_star is set to true below.
@@ -302,51 +285,51 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 			pending_star = false;
 
 			// If the pattern ends with '*', it's an automatic match.
-			if (pattern.empty())
+			if (pattern.Empty())
 				return true;
 
 			// Find where the string starts matching the pattern again.
-			size_t next_match = str.find(pattern[0]);
+			int next_match = str.Find(pattern[0]);
 
 			// Never? Then it's a fail.
-			if (next_match == StringView::npos)
+			if (next_match == -1)
 				return false;
 
 			// Skip to where it matches again.
-			str.remove_prefix(next_match);
+			str.RemovePrefix(next_match);
 		}
 
 		// Strings should be equal until there (or until end of the string).
-		if (str.substr(0, next_wildcard_index) != pattern.substr(0, next_wildcard_index))
+		if (str.SubStr(0, next_wildcard_index) != pattern.SubStr(0, next_wildcard_index))
 			return false;
 
 		// If there was no wild card, we're done! Strings match.
-		if (next_wildcard_index == StringView::npos)
+		if (next_wildcard_index == -1)
 			return true;
 
 		// Skip the parts that match.
-		str.remove_prefix(next_wildcard_index);
-		pattern.remove_prefix(next_wildcard_index);
+		str.RemovePrefix(next_wildcard_index);
+		pattern.RemovePrefix(next_wildcard_index);
 
 		// Also skip the wild card, but keep a copy.
 		char wild_card = pattern[0];
-		pattern.remove_prefix(1);
+		pattern.RemovePrefix(1);
 
 		if (wild_card == '?')
 		{
 			// If there is no character left, it's a fail.
-			if (str.length() < 1)
+			if (str.Size() < 1)
 				return false;
 
 			// Skip one character.
-			str.remove_prefix(1);
+			str.RemovePrefix(1);
 		}
 		else
 		{
 			gAssert(wild_card == '*');
 
 			// If the pattern ends with '*', it's an automatic match.
-			if (pattern.empty())
+			if (pattern.Empty())
 				return true;
 
 			// If the * is followed by another '*', continue to process the next wild card directly, '**' is equivalent to '*'.
@@ -366,14 +349,14 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 			pending_star = false;
 
 			// Find where the string starts matching the pattern again.
-			size_t next_match = str.find(pattern[0]);
+			int next_match = str.Find(pattern[0]);
 
 			// Never? Then it's a fail.
-			if (next_match == StringView::npos)
+			if (next_match == -1)
 				return false;
 
 			// Skip to where it matches again.
-			str.remove_prefix(next_match);
+			str.RemovePrefix(next_match);
 		}
 	}
 }
@@ -461,7 +444,7 @@ void CookingCommand::UpdateDirtyState()
 	// Normally this should be stored in the cached state and read on start up,
 	// but when doing an initial scan we use the oldest output (ie. min USN) as the
 	// probable last point when the command was cooked.
-	if (last_cook == 0 && !GetAllOutputs().empty())
+	if (last_cook == 0 && !GetAllOutputs().Empty())
 	{
 		// TODO this does not work if multiple drives are involved, we can only compare USNs from the same journal
 		last_cook = cMaxUSN;
@@ -573,7 +556,7 @@ bool CookingCommand::ReadDepFile()
 	// Update the USN of the last time we read the dep file.
 	mLastDepFileRead = dep_file.mLastChangeUSN;
 
-	std::vector<FileID> inputs, outputs;
+	Vector<FileID> inputs, outputs;
 
 	// If the file is deleted, don't actually try to read it.
 	if (!dep_file.IsDeleted())
@@ -616,9 +599,9 @@ void CookingQueue::PushInternal(std::unique_lock<std::mutex>& ioLock, int inPrio
 
 	// Add the command.
 	if (inPosition == PushPosition::Back)
-		bucket.mCommands.push_back(inCommandID);
+		bucket.mCommands.PushBack(inCommandID);
 	else
-		bucket.mCommands.insert(bucket.mCommands.begin(), inCommandID);
+		bucket.mCommands.Insert(0, inCommandID);
 
 	mTotalSize++;
 }
@@ -631,11 +614,11 @@ CookingCommandID CookingQueue::Pop()
 	// Find the first non-empty bucket.
 	for (PrioBucket& bucket : mPrioBuckets)
 	{
-		if (!bucket.mCommands.empty())
+		if (!bucket.mCommands.Empty())
 		{
 			// Pop a command.
-			CookingCommandID id = bucket.mCommands.back();
-			bucket.mCommands.pop_back();
+			CookingCommandID id = bucket.mCommands.Back();
+			bucket.mCommands.PopBack();
 			mTotalSize--;
 
 			return id;
@@ -672,12 +655,12 @@ bool CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* 
 	// Remove it.
 	if (inOption & RemoveOption::KeepOrder)
 	{
-		bucket_it->mCommands.erase(it);
+		bucket_it->mCommands.Erase(bucket_it->mCommands.GetIndex(*it));
 	}
 	else
 	{
-		std::swap(*it, bucket_it->mCommands.back());
-		bucket_it->mCommands.pop_back();
+		std::swap(*it, bucket_it->mCommands.Back());
+		bucket_it->mCommands.PopBack();
 	}
 
 	mTotalSize--;
@@ -690,7 +673,7 @@ void CookingQueue::Clear()
 	std::lock_guard lock(mMutex);
 
 	for (PrioBucket& bucket : mPrioBuckets)
-		bucket.mCommands.clear();
+		bucket.mCommands.Clear();
 
 	mTotalSize = 0;
 }
@@ -724,7 +707,7 @@ void CookingThreadsQueue::Push(CookingCommandID inCommandID, PushPosition inPosi
 CookingCommandID CookingThreadsQueue::Pop()
 {
 	std::unique_lock lock(mMutex);
-	gAssert(mPrioData.size() == mPrioBuckets.size());
+	gAssert(mPrioData.Size() == mPrioBuckets.Size());
 
 	int  non_empty_bucket_index = -1;
 
@@ -739,22 +722,22 @@ CookingCommandID CookingThreadsQueue::Pop()
 		mBarrier.wait(lock);
 
 		// Find the first bucket containing command that can run.
-		for (int prio_index = 0; prio_index < (int)mPrioBuckets.size(); ++prio_index)
+		for (int prio_index = 0; prio_index < mPrioBuckets.Size(); ++prio_index)
 		{
 			PrioBucket& bucket = mPrioBuckets[prio_index];
 			PrioData&   data   = mPrioData[prio_index];
 
 			// If this bucket is empty but some commands are still being cooked, wait until they're finished before checking the next buckets.
-			if (bucket.mCommands.empty() && data.mCommandsBeingCooked > 0)
+			if (bucket.mCommands.Empty() && data.mCommandsBeingCooked > 0)
 			{
 				// Go back to waiting and start over if more work is added or these commands are finished.
 				break;
 			}
 
-			if (!bucket.mCommands.empty())
+			if (!bucket.mCommands.Empty())
 			{
 				// Found one!
-				non_empty_bucket_index = (int)(&bucket - &mPrioBuckets.front());
+				non_empty_bucket_index = (int)(&bucket - &mPrioBuckets.Front());
 				break;
 			}
 		}
@@ -770,8 +753,8 @@ CookingCommandID CookingThreadsQueue::Pop()
 		PrioData&        data   = mPrioData[non_empty_bucket_index];
 
 		// Pop a command.
-		CookingCommandID id     = bucket.mCommands.back();
-		bucket.mCommands.pop_back();
+		CookingCommandID id     = bucket.mCommands.Back();
+		bucket.mCommands.PopBack();
 		mTotalSize--;
 
 		// Remember there's now one command ongoing.
@@ -802,7 +785,7 @@ void CookingThreadsQueue::FinishedCooking(CookingCommandID inCommandID)
 		}
 
 		// Update the number of commands still cooking.
-		int index = (int)(&*bucket_it - &mPrioBuckets.front());
+		int index = mPrioBuckets.GetIndex(*bucket_it);
 		PrioData& data  = mPrioData[index];
 		data.mCommandsBeingCooked--;
 
@@ -873,8 +856,8 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 
 			// Add the main input file.
 			// Note: order is important, the main input file is always the first input.
-			std::vector<FileID> inputs;
-			inputs.push_back(ioFile.mID);
+			Vector<FileID> inputs;
+			inputs.PushBack(ioFile.mID);
 
 			// Get the additional input files.
 			for (StringView path : rule.mInputPaths)
@@ -891,9 +874,9 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 
 			// If there is an output dep file, add it to the outputs.
 			// Note: order is important, the dep file is always the first output.
-			std::vector<FileID> outputs;
+			Vector<FileID> outputs;
 			if (dep_file.IsValid())
-				outputs.push_back(dep_file);
+				outputs.PushBack(dep_file);
 
 			// Add the ouput files.
 			for (StringView path : rule.mOutputPaths)
@@ -927,8 +910,8 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 				CookingCommand& command = mCommands.Emplace(lock);
 				command.mID             = command_id;
 				command.mRuleID         = rule.mID;
-				command.mInputs         = std::move(inputs);
-				command.mOutputs        = std::move(outputs);
+				command.mInputs         = gMove(inputs);
+				command.mOutputs        = gMove(outputs);
 			}
 
 			// Update stats.
@@ -940,10 +923,10 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 			const CookingCommand& command = GetCommand(command_id);
 
 			for (FileID file_id : command.mInputs)
-				gFileSystem.GetFile(file_id).mInputOf.push_back(command.mID);
+				gFileSystem.GetFile(file_id).mInputOf.PushBack(command.mID);
 
 			for (FileID file_id : command.mOutputs)
-				gFileSystem.GetFile(file_id).mOutputOf.push_back(command.mID);
+				gFileSystem.GetFile(file_id).mOutputOf.PushBack(command.mID);
 		}
 
 		// TODO: add validation
@@ -997,12 +980,10 @@ bool CookingSystem::ValidateRules()
 		errors++;
 	}
 
-	for (size_t rule_index = 0; rule_index < rules.size(); ++rule_index)
+	for (const CookingRule& rule : rules)
 	{
-		const CookingRule& rule = rules[rule_index];
-
 		// Validate the name.
-		if (!rule.mName.empty())
+		if (!rule.mName.Empty())
 		{
 			auto [_, inserted] = all_names.insert(rule.mName);
 			if (!inserted)
@@ -1014,7 +995,7 @@ bool CookingSystem::ValidateRules()
 		else
 		{
 			errors++;
-			gApp.LogError(R"(Rule[{}] has no name)", rule_index);
+			gApp.LogError(R"(Rule[{}] has no name)", rules.GetIndex(rule));
 		}
 
 		// Validate the version.
@@ -1025,12 +1006,12 @@ bool CookingSystem::ValidateRules()
 		}
 
 		// Validate the input filters.
-		for (size_t i = 0; i < rule.mInputFilters.size(); ++i)
+		for (int i = 0; i < rule.mInputFilters.Size(); ++i)
 		{
 			const InputFilter& filter = rule.mInputFilters[i];
 
 			// Make sure there's at least one way to filter.
-			if (filter.mPathPattern.empty())
+			if (filter.mPathPattern.Empty())
 			{
 				errors++;
 				gApp.LogError(R"(Rule {}, InputFilter[{}].PathPattern cannot be empty.)", rule.mName, i);
@@ -1055,7 +1036,7 @@ bool CookingSystem::ValidateRules()
 		}
 
 		// Validate the input paths.
-		for (size_t i = 0; i < rule.mInputPaths.size(); ++i)
+		for (int i = 0; i < rule.mInputPaths.Size(); ++i)
 		{
 			if (!gFormatCommandString(rule.mInputPaths[i], dummy_file))
 			{
@@ -1065,7 +1046,7 @@ bool CookingSystem::ValidateRules()
 		}
 
 		// Validate the output paths.
-		for (size_t i = 0; i < rule.mOutputPaths.size(); ++i)
+		for (int i = 0; i < rule.mOutputPaths.Size(); ++i)
 		{
 			if (!gFormatCommandString(rule.mOutputPaths[i], dummy_file))
 			{
@@ -1075,7 +1056,7 @@ bool CookingSystem::ValidateRules()
 		}
 
 		// Validate that there is at least one output.
-		if (rule.mOutputPaths.empty() && (!rule.UseDepFile() || rule.mDepFileFormat == DepFileFormat::Make)) // Make format DepFiles can only add inputs, not outputs.
+		if (rule.mOutputPaths.Empty() && (!rule.UseDepFile() || rule.mDepFileFormat == DepFileFormat::Make)) // Make format DepFiles can only add inputs, not outputs.
 		{
 			errors++;
 			gApp.LogError(R"(Rule {}: a rule must have at least one output, or a DepFile that can register outputs.)", rule.mName);
@@ -1259,7 +1240,7 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 		char  buffer[1024];
 		while (true)
 		{
-			size_t bytes_read  = subprocess_read_stdout(&process, buffer, sizeof(buffer) - 1);
+			int bytes_read = (int)subprocess_read_stdout(&process, buffer, sizeof(buffer) - 1);
 			buffer[bytes_read] = 0;
 
 			if (bytes_read == 0)
@@ -1436,7 +1417,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	
 	// If there is a dep file command line, build it.
 	Optional<String> dep_command_line;
-	if (!rule.mDepFileCommandLine.empty())
+	if (!rule.mDepFileCommandLine.Empty())
 	{
 		dep_command_line = gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
 		if (!dep_command_line)
@@ -1578,7 +1559,7 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 {
 	using namespace std::chrono_literals;
 
-	gSetCurrentThreadName(L"TimeOut Update Thread");
+	gSetCurrentThreadName("TimeOut Update Thread");
 
 	// The logic in this loop is a bit weird, but the idea is to wait *at least* this amount of time before declaring a command is in error.
 	// Many commands will wait twice as much because they won't be in the first batch to be processed, but that's okay.
@@ -1648,7 +1629,7 @@ void CookingSystem::QueueUpdateDirtyStates(FileID inFileID)
 
 	const FileInfo& file = inFileID.GetFile();
 
-	if (file.mInputOf.empty() && file.mOutputOf.empty())
+	if (file.mInputOf.Empty() && file.mOutputOf.Empty())
 		return; // Early out if we know there will be nothing to do.
 
 	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
@@ -1718,7 +1699,7 @@ void CookingSystem::ForceCook(CookingCommandID inCommandID)
 
 void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken)
 {
-	gSetCurrentThreadName(L"CookingThread");
+	gSetCurrentThreadName("CookingThread");
 
 	while (true)
 	{
@@ -1827,12 +1808,12 @@ void CookingSystem::UpdateNotifications()
 		{
 			size_t command_count = cooking_log_size - mLastNotifCookingLogSize;
 			if (gShouldNotify(gApp.mEnableNotifOnCookingFinish))
-				gNotifAdd(NotifType::Info, "Cooking finished!", TempString128("{} {}.", command_count, command_count > 1 ? "commands" : "command"));
+				gNotifAdd(NotifType::Info, "Cooking finished!", FixedString128("{} {}.", command_count, command_count > 1 ? "commands" : "command"));
 		}
 		else
 		{
 			if (gShouldNotify(gApp.mEnableNotifOnCookingFinish) || gShouldNotify(gApp.mEnableNotifOnCookingError))
-				gNotifAdd(NotifType::Error, "Cooking finished with errors.", TempString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
+				gNotifAdd(NotifType::Error, "Cooking finished with errors.", FixedString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
 		}
 
 		// Update the last notif values even if we didn't actually display a notif,
@@ -1845,7 +1826,7 @@ void CookingSystem::UpdateNotifications()
 	{
 		if (gShouldNotify(gApp.mEnableNotifOnCookingError))
 		{
-			gNotifAdd(NotifType::Error, "Oh la la!", TempString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
+			gNotifAdd(NotifType::Error, "Oh la la!", FixedString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
 
 			// Here however only update the last notif values if we actually display a notif,
 			// because otherwise it might cause the next cooking finished notif to be skipped.
