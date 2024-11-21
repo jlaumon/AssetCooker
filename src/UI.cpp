@@ -11,8 +11,8 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
-#include "Ticks.h"
-#include "Tests.h"
+#include <Bedrock/Test.h>
+#include <Bedrock/Ticks.h>
 
 #include "win32/misc.h"
 #include "win32/window.h"
@@ -70,7 +70,7 @@ Span<const uint8> gGetEmbeddedFont(StringView inName)
 	HGLOBAL resource_data_handle = LoadResource(nullptr, resource);
 	auto    resource_data        = (const uint8*)LockResource(resource_data_handle);
 
-	return { resource_data, resource_data_size };
+	return { resource_data, (int)resource_data_size };
 }
 
 struct UIScale
@@ -143,7 +143,7 @@ void gUIUpdate()
 		// The main font.
 		{
 			auto cousine_ttf = gGetEmbeddedFont("cousine_regular");
-			io.Fonts->AddFontFromMemoryTTF((void*)cousine_ttf.data(), (int)cousine_ttf.size(), 14.0f * gUIScale.GetFinalScale(), &font_config);
+			io.Fonts->AddFontFromMemoryTTF((void*)cousine_ttf.Data(), cousine_ttf.Size(), 14.0f * gUIScale.GetFinalScale(), &font_config);
 		}
 
 		// The icons font.
@@ -155,7 +155,7 @@ void gUIUpdate()
 			static const ImWchar icon_ranges[] = { ICON_MIN_FK, ICON_MAX_FK, 0 };
 
 			auto ttf_data = gGetEmbeddedFont("forkawesome");
-			io.Fonts->AddFontFromMemoryTTF((void*)ttf_data.data(), (int)ttf_data.size(), 14.0f * gUIScale.GetFinalScale(), &icons_config, icon_ranges);
+			io.Fonts->AddFontFromMemoryTTF((void*)ttf_data.Data(), ttf_data.Size(), 14.0f * gUIScale.GetFinalScale(), &icons_config, icon_ranges);
 		}
 
 		// Re-create the DX11 objects.
@@ -287,7 +287,7 @@ struct FileContext
 
 void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 {
-	ImGui::PushID(TempString32("File {}", inFile.mID.AsUInt()).AsCStr());
+	ImGui::PushID(FixedString32("File {}", inFile.mID.AsUInt()).AsCStr());
 	defer { ImGui::PopID(); };
 
 	enum
@@ -349,7 +349,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		ImGui::OpenPopup("Popup");
 
 	if (ImGui::IsPopupOpen("Popup") && 
-		ImGui::BeginPopupWithTitle("Popup", TempString128("{} {}: ...\\{}", 
+		ImGui::BeginPopupWithTitle("Popup", FixedString128("{} {}: ...\\{}", 
 			inFile.IsDirectory() ? ICON_FK_FOLDER_OPEN_O : ICON_FK_FILE_O,
 			inFile.GetRepo().mName, inFile.GetName()).AsCStr()))
 	{
@@ -372,10 +372,10 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		{
 			if (inFile.IsDeleted())
 				// Open the parent dir.
-				ShellExecuteA(nullptr, "explore", TempString512("{}{}", inFile.GetRepo().mRootPath, inFile.GetDirectory()).AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
+				ShellExecuteA(nullptr, "explore", FixedString512("{}{}", inFile.GetRepo().mRootPath, inFile.GetDirectory()).AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
 			else
 				// Open the parent dir with the file selected.
-				ShellExecuteA(nullptr, nullptr, "explorer", TempString512("/select, {}{}", inFile.GetRepo().mRootPath, inFile.mPath).AsCStr(), nullptr, SW_SHOWDEFAULT);
+				ShellExecuteA(nullptr, nullptr, "explorer", FixedString512("/select, {}{}", inFile.GetRepo().mRootPath, inFile.mPath).AsCStr(), nullptr, SW_SHOWDEFAULT);
 		}
 
 		ImGui::SameLine();
@@ -394,26 +394,26 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 			ImGui::TableNextRow();
 			
 			ImGui::TableNextColumn(); ImGui::TextUnformatted("Repo");
-			ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString128("{} ({})", inFile.GetRepo().mName, inFile.GetRepo().mRootPath));
+			ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString128("{} ({})", inFile.GetRepo().mName, inFile.GetRepo().mRootPath));
 
 			if (inFile.IsDeleted())
 			{
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Deletion Time");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mCreationTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString64("{}", inFile.mCreationTime));
 			}
 			else
 			{
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("RefNumber");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mRefNumber));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString64("{}", inFile.mRefNumber));
 				
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Creation Time");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mCreationTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString64("{}", inFile.mCreationTime));
 
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change Time");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mLastChangeTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString64("{}", inFile.mLastChangeTime));
 				
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change USN");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inFile.mLastChangeUSN));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString64("{}", inFile.mLastChangeUSN));
 			}
 
 			ImGui::EndTable();
@@ -421,9 +421,9 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 
 		ImGui::SeparatorText("Related Commands");
 
-		if (!inFile.mInputOf.empty())
+		if (!inFile.mInputOf.Empty())
 			gDrawCookingCommandSpan("Is Input Of", inFile.mInputOf);
-		if (!inFile.mOutputOf.empty())
+		if (!inFile.mOutputOf.Empty())
 			gDrawCookingCommandSpan("Is Output Of", inFile.mOutputOf);
 	}
 }
@@ -442,7 +442,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 	if (!ImGui::IsPopupOpen("Popup"))
 		return;
 
-	if (!ImGui::BeginPopupWithTitle("Popup", TempString512(ICON_FK_CUTLERY " {}{} ...\\{}",
+	if (!ImGui::BeginPopupWithTitle("Popup", FixedString512(ICON_FK_CUTLERY " {}{} ...\\{}",
 		inCommand.GetRule().mName,
 		inCommand.NeedsCleanup() ? " (Cleanup)" : "",
 		inCommand.GetMainInput().GetFile().GetName()).AsStringView()))
@@ -477,7 +477,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 		{
 			if (inCommand.IsDirty())
 			{
-				TempString256 dirty_details("Dirty (");
+				FixedString256 dirty_details("Dirty (");
 				if (inCommand.mDirtyState & CookingCommand::Error)
 					dirty_details.Append("Error|");
 				if (inCommand.mDirtyState & CookingCommand::VersionMismatch)
@@ -520,10 +520,10 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook Time");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCookTime));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString64("{}", inCommand.mLastCookTime));
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook USN");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString64("{}", inCommand.mLastCookUSN));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString64("{}", inCommand.mLastCookUSN));
 		
 		ImGui::EndTable();
 	}
@@ -532,12 +532,12 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	gDrawFileInfoSpan("Inputs", inCommand.mInputs, { DependencyType::Input, inCommand.mLastCookUSN });
 	
-	if (!inCommand.mDepFileInputs.empty())
+	if (!inCommand.mDepFileInputs.Empty())
 		gDrawFileInfoSpan("DepFile Inputs", inCommand.mDepFileInputs, { DependencyType::Input, inCommand.mLastCookUSN });
 
 	gDrawFileInfoSpan("Outputs", inCommand.mOutputs, { DependencyType::Output, inCommand.mLastCookUSN });
 
-	if (!inCommand.mDepFileOutputs.empty())
+	if (!inCommand.mDepFileOutputs.Empty())
 		gDrawFileInfoSpan("DepFile Outputs", inCommand.mDepFileOutputs, { DependencyType::Output, inCommand.mLastCookUSN });
 
 	ImGui::PopStyleVar();
@@ -546,7 +546,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 void gDrawCookingCommand(const CookingCommand& inCommand)
 {
-	ImGui::PushID(TempString32("Command {}", inCommand.mID.mIndex).AsCStr());
+	ImGui::PushID(FixedString32("Command {}", inCommand.mID.mIndex).AsCStr());
 	defer { ImGui::PopID(); };
 	
 	int pop_color = 0;
@@ -578,7 +578,7 @@ void gDrawCookingRulePopup(const CookingRule& inRule)
 	if (!ImGui::IsPopupOpen("Popup"))
 		return;
 
-	if (!ImGui::BeginPopupWithTitle("Popup", TempString128(ICON_FK_COG " {} ({} Commands)",
+	if (!ImGui::BeginPopupWithTitle("Popup", FixedString128(ICON_FK_COG " {} ({} Commands)",
 		inRule.mName,
 		inRule.mCommandCount.load())))
 		return;
@@ -592,16 +592,16 @@ void gDrawCookingRulePopup(const CookingRule& inRule)
 		ImGui::TableNextRow();
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Priority");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString32("{}", inRule.mPriority));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString32("{}", inRule.mPriority));
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Version");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString32("{}", inRule.mVersion));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString32("{}", inRule.mVersion));
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("CommandType");
 		ImGui::TableNextColumn(); ImGui::TextUnformatted(gToStringView(inRule.mCommandType));
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("MatchMoreRules");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(TempString32("{}", inRule.mMatchMoreRules));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(FixedString32("{}", inRule.mMatchMoreRules));
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("CommandLine");
 		ImGui::TableNextColumn(); ImGui::TextUnformatted(inRule.mCommandLine);
@@ -614,7 +614,7 @@ void gDrawCookingRulePopup(const CookingRule& inRule)
 			ImGui::TableNextColumn(); ImGui::TextUnformatted("DepFilePath");
 			ImGui::TableNextColumn(); ImGui::TextUnformatted(inRule.mDepFilePath);
 
-			if (!inRule.mDepFileCommandLine.empty())
+			if (!inRule.mDepFileCommandLine.Empty())
 			{
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("DepFileCommandLine");
 				ImGui::TableNextColumn(); ImGui::TextUnformatted(inRule.mDepFileCommandLine);
@@ -624,22 +624,22 @@ void gDrawCookingRulePopup(const CookingRule& inRule)
 		ImGui::EndTable();
 	}
 
-	ImGui::SeparatorText(TempString64("Input Filters ({} items)", inRule.mInputFilters.size()));
+	ImGui::SeparatorText(FixedString64("Input Filters ({} items)", inRule.mInputFilters.Size()));
 
 	for (const InputFilter& input_filter : inRule.mInputFilters)
 		ImGui::TextUnformatted(TempPath(R"({}: {})", gFileSystem.GetRepo(FileID{ input_filter.mRepoIndex, 0 }).mName, input_filter.mPathPattern));
 
-	if (!inRule.mInputPaths.empty())
+	if (!inRule.mInputPaths.Empty())
 	{
-		ImGui::SeparatorText(TempString64("Input Paths ({} items)", inRule.mInputPaths.size()));
+		ImGui::SeparatorText(FixedString64("Input Paths ({} items)", inRule.mInputPaths.Size()));
 
 		for (StringView path : inRule.mInputPaths)
 			ImGui::TextUnformatted(path);
 	}
 
-	if (!inRule.mOutputPaths.empty())
+	if (!inRule.mOutputPaths.Empty())
 	{
-		ImGui::SeparatorText(TempString64("Output Paths ({} items)", inRule.mOutputPaths.size()));
+		ImGui::SeparatorText(FixedString64("Output Paths ({} items)", inRule.mOutputPaths.Size()));
 
 		for (StringView path : inRule.mOutputPaths)
 			ImGui::TextUnformatted(path);
@@ -654,7 +654,7 @@ void gDrawCookingRule(const CookingRule& inRule)
 	ImGui::PushID(inRule.mName);
 	defer { ImGui::PopID(); };
 
-	bool clicked = ImGui::Selectable(TempString256("{} ({} Commands)##{}", inRule.mName, inRule.mCommandCount.load(), inRule.mName), 
+	bool clicked = ImGui::Selectable(FixedString256("{} ({} Commands)##{}", inRule.mName, inRule.mCommandCount.load(), inRule.mName), 
 		false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
@@ -668,9 +668,9 @@ void gDrawCookingRule(const CookingRule& inRule)
 void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, FileContext inContext)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
-	ImGui::SetNextItemOpen(inFileIDs.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
+	ImGui::SetNextItemOpen(inFileIDs.Size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
 
-	if (ImGui::TreeNode(inListName.data(), TempString64("{} ({} items)", inListName, inFileIDs.size()).AsCStr()))
+	if (ImGui::TreeNode(inListName.Data(), FixedString64("{} ({} items)", inListName, inFileIDs.Size()).AsCStr()))
 	{
 		for (FileID file_id : inFileIDs)
 		{
@@ -684,9 +684,9 @@ void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, File
 void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
-	ImGui::SetNextItemOpen(inCommandIDs.size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
+	ImGui::SetNextItemOpen(inCommandIDs.Size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
 
-	if (ImGui::TreeNode(inListName.data(), TempString64("{} ({} items)", inListName, inCommandIDs.size()).AsCStr()))
+	if (ImGui::TreeNode(inListName.Data(), FixedString64("{} ({} items)", inListName, inCommandIDs.Size()).AsCStr()))
 	{
 		for (CookingCommandID command_id : inCommandIDs)
 		{
@@ -721,17 +721,17 @@ void gDrawCookingQueue()
 		bool all_empty = true;
 		for (auto& bucket : gCookingSystem.mCommandsDirty.mPrioBuckets)
 		{
-			if (bucket.mCommands.empty())
+			if (bucket.mCommands.Empty())
 				continue;
 
 			all_empty = false;
 
-			ImGui::SeparatorText(TempString64("Priority {} ({} items)", bucket.mPriority, bucket.mCommands.size()));
+			ImGui::SeparatorText(FixedString64("Priority {} ({} items)", bucket.mPriority, bucket.mCommands.Size()));
 
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
 
 			ImGuiListClipper clipper;
-			clipper.Begin((int)bucket.mCommands.size());
+			clipper.Begin(bucket.mCommands.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -770,7 +770,7 @@ void gDrawCookingLog()
 
 	ImGui::SameLine();
 	ImGui::AlignTextToFramePadding();
-	ImGui::TextUnformatted(TempString128("{} items", gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex));
+	ImGui::TextUnformatted(FixedString128("{} items", gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex));
 
 
 	if (!ImGui::BeginTable("CookingLog", 4, ImGuiTableFlags_ScrollY))
@@ -811,7 +811,7 @@ void gDrawCookingLog()
 			ImGui::TableNextColumn();
 			{
 				LocalTime start_time = log_entry.mTimeStart.ToLocalTime();
-				if (ImGui::Selectable(TempString32("[#{} {:02}:{:02}:{:02}]", rule.mPriority, start_time.mHour, start_time.mMinute, start_time.mSecond).AsCStr(), selected, ImGuiSelectableFlags_SpanAllColumns))
+				if (ImGui::Selectable(FixedString32("[#{} {:02}:{:02}:{:02}]", rule.mPriority, start_time.mHour, start_time.mMinute, start_time.mSecond).AsCStr(), selected, ImGuiSelectableFlags_SpanAllColumns))
 				{
 					gSelectCookingLogEntry({ (uint32)i }, false);
 				}
@@ -829,7 +829,7 @@ void gDrawCookingLog()
 
 			ImGui::TableNextColumn();
 			{
-				ImGui::TextUnformatted(TempString512("{}{}", log_entry.mIsCleanup ? "(Cleanup) " : "" ,command.GetMainInput().GetFile()));
+				ImGui::TextUnformatted(FixedString512("{}{}", log_entry.mIsCleanup ? "(Cleanup) " : "" ,command.GetMainInput().GetFile()));
 			}
 
 			ImGui::TableNextColumn();
@@ -864,7 +864,7 @@ void gDrawCookingLog()
 					pop_color++;
 				}
 
-				ImGui::TextUnformatted(TempString32(" {} ", icon));
+				ImGui::TextUnformatted(FixedString32(" {} ", icon));
 
 				if (pop_color)
 					ImGui::PopStyleColor(pop_color);
@@ -904,7 +904,7 @@ void gDrawSelectedCookingLogEntry()
 		if (command_line)
 		{
 			ImGui::LogToClipboard();
-			ImGui::LogText("%s", command_line->c_str());
+			ImGui::LogText("%s", command_line->AsCStr());
 			ImGui::LogFinish();
 		}
 	}
@@ -962,7 +962,7 @@ void gDrawCommandSearch()
 
 	ImGui::SameLine();
 	ImGui::AlignTextToFramePadding();
-	ImGui::TextUnformatted(TempString128("{} items", filter.IsActive() ? filtered_list.size() : gCookingSystem.mCommands.Size()));
+	ImGui::TextUnformatted(FixedString128("{} items", filter.IsActive() ? filtered_list.size() : gCookingSystem.mCommands.Size()));
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
@@ -1024,7 +1024,7 @@ void gDrawFileSearch()
 			}
 	}
 
-	ImGui::TextUnformatted(TempString128("{} items", filter.IsActive() ? filtered_list.size() : gFileSystem.GetFileCount()));
+	ImGui::TextUnformatted(FixedString128("{} items", filter.IsActive() ? filtered_list.size() : gFileSystem.GetFileCount()));
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
@@ -1095,7 +1095,7 @@ void gDrawCookingThreads()
 				const CookingLogEntry& entry_log = gCookingSystem.GetLogEntry(entry_id);
 				const CookingCommand&  command   = gCookingSystem.GetCommand(entry_log.mCommandID);
 
-				ImGui::TextUnformatted(TempString128("{} {}", command.GetRule().mName, command.GetMainInput().GetFile().mPath));
+				ImGui::TextUnformatted(FixedString128("{} {}", command.GetRule().mName, command.GetMainInput().GetFile().mPath));
 
 				if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(0))
 					gSelectCookingLogEntry(entry_id, true);
@@ -1162,10 +1162,10 @@ void gDrawDebugWindow()
 	ImGui::Checkbox("Cause random FileSystem errors", &gDebugFailOpenFileRandomly);
 
 	Span rules = gCookingSystem.GetRules();
-	if (ImGui::CollapsingHeader(TempString64("Rules ({})##Rules", rules.size()).AsCStr()))
+	if (ImGui::CollapsingHeader(FixedString64("Rules ({})##Rules", rules.Size()).AsCStr()))
 	{
 		ImGuiListClipper clipper;
-		clipper.Begin((int)rules.size());
+		clipper.Begin(rules.Size());
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1174,7 +1174,7 @@ void gDrawDebugWindow()
 		clipper.End();
 	}
 
-	if (ImGui::CollapsingHeader(TempString64("Commands ({})##Commands", gCookingSystem.mCommands.Size()).AsCStr()))
+	if (ImGui::CollapsingHeader(FixedString64("Commands ({})##Commands", gCookingSystem.mCommands.Size()).AsCStr()))
 	{
 		ImGuiListClipper clipper;
 		clipper.Begin((int)gCookingSystem.mCommands.Size());
@@ -1189,7 +1189,7 @@ void gDrawDebugWindow()
 	for (FileRepo& repo : gFileSystem.mRepos)
 	{
 		ImGui::PushID(&repo);
-		if (ImGui::CollapsingHeader(TempString128("{} ({}) - {} Files##Repo", repo.mName, repo.mRootPath, repo.mFiles.Size()).AsCStr()))
+		if (ImGui::CollapsingHeader(FixedString128("{} ({}) - {} Files##Repo", repo.mName, repo.mRootPath, repo.mFiles.Size()).AsCStr()))
 		{
 			ImGuiListClipper clipper;
 			clipper.Begin((int)repo.mFiles.Size());
@@ -1256,29 +1256,29 @@ void gDrawStatusBar()
 		}
 		case FileSystem::InitState::LoadingCache: 
 		{
-			ImGui::TextUnformatted(TempString128("{} Loading cache... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
+			ImGui::TextUnformatted(FixedString128("{} Loading cache... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
 			break;
 		}
 		case FileSystem::InitState::Scanning: 
 		{
-			ImGui::TextUnformatted(TempString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
+			ImGui::TextUnformatted(FixedString128("{} Scanning... {:5} files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
 			break;
 		}
 		case FileSystem::InitState::ReadingUSNJournal: 
 		{
-			ImGui::TextUnformatted(TempString32("{} Reading USN journal...", gGetAnimatedHourglass()));
+			ImGui::TextUnformatted(FixedString32("{} Reading USN journal...", gGetAnimatedHourglass()));
 			break;
 		}
 		case FileSystem::InitState::ReadingIndividualUSNs: 
 		{
-			ImGui::TextUnformatted(TempString128("{} Reading individual USNs... {:5}/{}", gGetAnimatedHourglass(),
+			ImGui::TextUnformatted(FixedString128("{} Reading individual USNs... {:5}/{}", gGetAnimatedHourglass(),
 				gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch
 			));
 			break;
 		}
 		case FileSystem::InitState::PreparingCommands: 
 		{
-			ImGui::TextUnformatted(TempString128("{} Preparing commands...", gGetAnimatedHourglass()));
+			ImGui::TextUnformatted(FixedString128("{} Preparing commands...", gGetAnimatedHourglass()));
 			break;
 		}
 		}
@@ -1289,7 +1289,7 @@ void gDrawStatusBar()
 	double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
 	if (seconds_since_ready < 8.0)
 	{
-		ImGui::TextUnformatted(TempString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds. ",	gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
+		ImGui::TextUnformatted(FixedString128(ICON_FK_THUMBS_O_UP " Init complete in {:.2f} seconds. ",	gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
 	}
 	else
 	{
@@ -1312,7 +1312,7 @@ void gDrawStatusBar()
 
 	// Display some stats on the right side of the status bar.
 	{
-		TempString128 cooking_stats("{} Files, {} Repos, {} Commands | ", gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount());
+		FixedString128 cooking_stats("{} Files, {} Repos, {} Commands | ", gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount());
 		float stats_text_size = ImGui::CalcTextSize(cooking_stats).x;
 
 		StringView ui_stats(ICON_FK_TACHOMETER " UI");
@@ -1324,7 +1324,7 @@ void gDrawStatusBar()
 		ImGui::SameLine(0, 0);
 		ImGui::TextUnformatted(ui_stats);
 		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(TempString64("UI CPU:{:4.2f}ms\nUI GPU:{:4.2f}ms", gUILastFrameStats.mCPUMilliseconds, gUILastFrameStats.mGPUMilliseconds).AsCStr());
+			ImGui::SetTooltip(FixedString64("UI CPU:{:4.2f}ms\nUI GPU:{:4.2f}ms", gUILastFrameStats.mCPUMilliseconds, gUILastFrameStats.mGPUMilliseconds).AsCStr());
 	}
 }
 
