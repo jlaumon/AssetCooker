@@ -930,7 +930,7 @@ FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
 void FileSystem::StartMonitoring()
 {
 	// Start the directory monitor thread.
-	mMonitorDirThread = std::jthread(std::bind_front(&FileSystem::MonitorDirectoryThread, this));
+	mMonitorDirThread.Create({ .mName = "Monitor Directory Thread" }, [this](Thread& ioThread) { MonitorDirectoryThread(ioThread); });
 }
 
 
@@ -939,9 +939,9 @@ void FileSystem::StopMonitoring()
 	if (!IsMonitoringStarted())
 		return;
 
-	mMonitorDirThread.request_stop();
+	mMonitorDirThread.RequestStop();
 	KickMonitorDirectoryThread();
-	mMonitorDirThread.join();
+	mMonitorDirThread.Join();
 
 	// Also stop the cooking since we started it.
 	gCookingSystem.StopCooking();
@@ -1092,7 +1092,7 @@ size_t FileSystem::GetFileCount() const
 
 
 
-void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN)
+void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 {
 	// Early out if we have everything from the cache already.
 	{
@@ -1149,7 +1149,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 
 					repo.ScanDirectory(dir_id, scan_queue, buffer_scan);
 
-					if (inStopToken.stop_requested())
+					if (inThread.IsStopRequested())
 						return;
 				}
 			});
@@ -1159,7 +1159,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		for (auto& thread : scan_threads)
 			thread.join();
 
-		if (inStopToken.stop_requested())
+		if (inThread.IsStopRequested())
 			return;
 	}
 
@@ -1224,7 +1224,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		}
 	}
 
-	if (inStopToken.stop_requested())
+	if (inThread.IsStopRequested())
 		return;
 
 	mInitStats.mIndividualUSNToFetch = (int)files_without_usn.size();
@@ -1262,7 +1262,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 
 					mInitStats.mIndividualUSNFetched++;
 
-					if (inStopToken.stop_requested())
+					if (inThread.IsStopRequested())
 						return;
 				}
 			});
@@ -1272,7 +1272,7 @@ void FileSystem::InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUS
 		for (auto& thread : usn_threads)
 			thread.join();
 
-		if (inStopToken.stop_requested())
+		if (inThread.IsStopRequested())
 			return;
 
 		gApp.Log("Done. Fetched {} individual USNs in {:.2f} seconds.", 
@@ -1288,9 +1288,8 @@ void FileSystem::KickMonitorDirectoryThread()
 
 
 // TODO this is doing a bit more than monitoring the filesystem, give it a more general name and move to app?
-void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
+void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 {
-	gSetCurrentThreadName("Monitor Directory Thread");
 	using namespace std::chrono_literals;
 
 	// Start not idle.
@@ -1320,16 +1319,16 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 		// Process the queue.
 		while (drive.ProcessMonitorDirectory(buffer_usn, scan_queue, buffer_scan))
 		{
-			if (inStopToken.stop_requested())
+			if (inThread.IsStopRequested())
 				break;
 		}
 
-		if (inStopToken.stop_requested())
+		if (inThread.IsStopRequested())
 			break;
 	}
 	
 	// Scan the drives that were not intialized from the cache.
-	InitialScan(inStopToken, buffer_usn);
+	InitialScan(inThread, buffer_usn);
 	
 	mInitState = InitState::PreparingCommands;
 
@@ -1347,7 +1346,7 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 	// Once the scan is finished, start cooking.
 	gCookingSystem.StartCooking();
 
-	while (!inStopToken.stop_requested())
+	while (!inThread.IsStopRequested())
 	{
 		bool any_work_done = false;
 
@@ -1397,11 +1396,11 @@ void FileSystem::MonitorDirectoryThread(std::stop_token inStopToken)
 			{
 				any_work_done = true;
 
-				if (inStopToken.stop_requested())
+				if (inThread.IsStopRequested())
 					break;
 			}
 
-			if (inStopToken.stop_requested())
+			if (inThread.IsStopRequested())
 				break;
 		}
 

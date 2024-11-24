@@ -13,8 +13,8 @@
 #include "FileTime.h"
 
 #include <Bedrock/Vector.h>
+#include <Bedrock/Thread.h>
 
-#include <thread>
 #include <semaphore>
 #include <optional>
 
@@ -312,7 +312,7 @@ struct FileSystem : NoCopy
 	void            StartMonitoring(); // Only call after adding all repos.
 	void            StopMonitoring();
 
-	bool            IsMonitoringStarted() const			{ return mMonitorDirThread.joinable(); }
+	bool            IsMonitoringStarted() const			{ return mMonitorDirThread.IsJoinable(); }
 	bool            IsMonitoringIdle() const			{ return mIsMonitorDirThreadIdle; }
 
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
@@ -349,8 +349,8 @@ struct FileSystem : NoCopy
 	void            LoadCache();
 
 private:
-	void            InitialScan(std::stop_token inStopToken, Span<uint8> ioBufferUSN);
-	void			MonitorDirectoryThread(std::stop_token inStopToken);
+	void            InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN);
+	void			MonitorDirectoryThread(const Thread& ioThread);
 
 	void            RescanLater(FileID inFileID);
 
@@ -376,7 +376,7 @@ private:
 	std::mutex                 mChangedFilesMutex;
 	SegmentedHashSet<FileID>   mChangedFiles;
 
-	std::jthread               mMonitorDirThread;
+	Thread                     mMonitorDirThread;
 	SyncSignal                 mMonitorDirThreadSignal;
 	std::atomic<bool>          mIsMonitorDirThreadIdle = true;
 
