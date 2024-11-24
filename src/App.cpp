@@ -186,7 +186,7 @@ void App::OpenLogFile()
 		constexpr int        max_log_files   = 5;
 
 		// List all the log files.
-		std::vector<std::string> log_files;
+		Vector<String> log_files;
 		{
 			WIN32_FIND_DATAA find_file_data;
 			HANDLE find_handle = FindFirstFileA(FixedString256("{}\\*", mLogDirectory).AsCStr(), &find_file_data);
@@ -202,7 +202,7 @@ void App::OpenLogFile()
 					if (gStartsWith(find_file_data.cFileName, log_file_prefix) &&
 						gEndsWith(find_file_data.cFileName, log_file_ext))
 					{
-						log_files.push_back(find_file_data.cFileName);
+						log_files.PushBack(find_file_data.cFileName);
 					}
 					
 				} while (FindNextFileA(find_handle, &find_file_data) != 0);
@@ -210,13 +210,13 @@ void App::OpenLogFile()
 			FindClose(find_handle);
 		}
 		
-		if (log_files.size() > max_log_files)
+		if (log_files.Size() > max_log_files)
 		{
 			// Sort to make sure the oldest ones are first (because the date is in the name).
 			std::sort(log_files.begin(), log_files.end());
 
 			// Delete the files.
-			int num_to_delete = (int)log_files.size() - max_log_files;
+			int num_to_delete = log_files.Size() - max_log_files;
 			for (int i = 0; i < num_to_delete; ++i)
 			{
 				FixedString256 path("{}\\{}", mLogDirectory, log_files[i]);
