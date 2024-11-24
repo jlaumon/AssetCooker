@@ -659,8 +659,7 @@ bool CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* 
 	}
 	else
 	{
-		std::swap(*it, bucket_it->mCommands.Back());
-		bucket_it->mCommands.PopBack();
+		gSwapErase(bucket_it->mCommands, it);
 	}
 
 	mTotalSize--;
