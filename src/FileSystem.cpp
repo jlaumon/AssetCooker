@@ -1138,7 +1138,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 		Thread scan_threads[cMaxScanThreadCount];
 		for (auto& thread : Span(scan_threads, scan_thread_count))
 		{
-			thread.Create({ .mName = "Scan Directory Thread" }, [&](Thread& inThread) 
+			thread.Create({ .mName = "Scan Directory Thread" }, [&](Thread&) 
 			{
 				uint8 buffer_scan[32 * 1024];
 
@@ -1150,7 +1150,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 					repo.ScanDirectory(dir_id, scan_queue, buffer_scan);
 
-					if (inThread.IsStopRequested())
+					if (inInitialScanThread.IsStopRequested())
 						return;
 				}
 			});
@@ -1238,21 +1238,19 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 		// Don't create too many threads because they'll get stuck in locks in OpenFileByRefNumber if the cache is warm,
 		// or they'll be bottlenecked by IO otherwise.
-		const int usn_thread_count = gMin((int)std::thread::hardware_concurrency(), 4);
+		constexpr int cMaxUSNThreadCount = 4;
+		const int     usn_thread_count   = gMin((int)std::thread::hardware_concurrency(), cMaxUSNThreadCount);
 
 		// Create temporary worker threads to get all the missing USNs.
-		std::vector<std::thread> usn_threads;
-		usn_threads.resize(usn_thread_count);
-		std::atomic_int current_index = 0;
-		for (auto& thread : usn_threads)
+		Thread usn_threads[cMaxUSNThreadCount];
+		AtomicInt32 current_index = 0;
+		for (auto& thread : Span(usn_threads, usn_thread_count))
 		{
-			thread = std::thread([&]() 
+			thread.Create({ .mName = "USN Read Thread" }, [&](Thread&)
 			{
-				gSetCurrentThreadName("USN Read Thread");
-
 				// Note: Could do better than having all threads hammer the same atomic, but the cost is negligible compared to OpenFileByRefNumber.
 				int index;
-				while ((index = current_index++) < files_without_usn.Size())
+				while ((index = current_index.Add(1)) < files_without_usn.Size())
 				{
 					FileID      file_id     = files_without_usn[index];
 					FileRepo&   repo        = file_id.GetRepo();
@@ -1271,7 +1269,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 		// Wait for the threads to finish their work.
 		for (auto& thread : usn_threads)
-			thread.join();
+			thread.Join();
 
 		if (inInitialScanThread.IsStopRequested())
 			return;
