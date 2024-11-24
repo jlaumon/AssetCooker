@@ -1120,7 +1120,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 	// Prepare a scan queue that can be used by multiple threads.
 	ScanQueue scan_queue;
-	scan_queue.mDirectories.reserve(1024);
+	scan_queue.mDirectories.Reserve(1024);
 	scan_queue.mThreadsBusy = scan_thread_count; // All threads start busy.
 
 	// Put the root dir of each repo in the queue.
@@ -1164,7 +1164,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 			return;
 	}
 
-	gAssert(scan_queue.mDirectories.empty());
+	gAssert(scan_queue.mDirectories.Empty());
 	gAssert(scan_queue.mThreadsBusy == 0);
 
 	size_t total_files = 0;
@@ -1510,7 +1510,7 @@ void FileSystem::LoadCache()
 		return;
 	}
 
-	std::vector<StringView> all_valid_repos;
+	Vector<StringView> all_valid_repos;
 	int total_repo_count = 0;
 
 	// Read all drives and repos.
@@ -1562,7 +1562,7 @@ void FileSystem::LoadCache()
 		bin.Read(repo_count);
 		total_repo_count += repo_count;
 
-		std::vector<StringView> valid_repos;
+		TempVector<StringView> valid_repos;
 
 		for (int repo_index = 0; repo_index < (int)repo_count; ++repo_index)
 		{
@@ -1592,11 +1592,11 @@ void FileSystem::LoadCache()
 			}
 
 			if (drive_valid && repo_valid)
-				valid_repos.push_back(repo->mName);
+				valid_repos.PushBack(repo->mName);
 		}
 
 		// If all repos for this drive are valid, we can use the cached state.
-		if (drive_valid && valid_repos.size() == drive->mRepos.size())
+		if (drive_valid && valid_repos.Size() == (int)drive->mRepos.size())
 		{
 			// Set the next USN we should read.
 			drive->mNextUSN = next_usn;
@@ -1605,7 +1605,7 @@ void FileSystem::LoadCache()
 			drive->mLoadedFromCache = true;
 
 			// Add the repos names to the list of valid repos so that we read their content later.
-			all_valid_repos.insert(all_valid_repos.end(), valid_repos.begin(), valid_repos.end());
+			all_valid_repos.Insert(all_valid_repos.Size(), valid_repos);
 		}
 	}
 
@@ -1678,7 +1678,7 @@ void FileSystem::LoadCache()
 		CookingCommandID mCommandID;
 		StringView       mLastCookOutput;
 	};
-	std::vector<ErroredCommand> errored_commands;
+	TempVector<ErroredCommand> errored_commands;
 
 	// Read the commands.
 	size_t total_commands = 0;
@@ -1740,7 +1740,7 @@ void FileSystem::LoadCache()
 			{
 				// If the rule/command are valid, also read the last cooking log output, otherwise skip it.
 				if (command)
-					errored_commands.push_back({ command->mID, bin.Read(gCookingSystem.GetStringPool()) });
+					errored_commands.PushBack({ command->mID, bin.Read(gCookingSystem.GetStringPool()) });
 				else
 					bin.SkipString();
 			}
@@ -1838,9 +1838,6 @@ void FileSystem::SaveCache()
 
 	bin.WriteLabel("VERSION");
 	bin.Write(cCacheFormatVersion);
-
-	std::vector<StringView> valid_repos;
-	int total_repo_count = 0;
 
 	// Write all drives and repos.
 	bin.Write((uint16)mDrives.Size());

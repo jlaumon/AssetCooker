@@ -191,7 +191,7 @@ struct ScanQueue
 	{
 		{
 			std::lock_guard lock(mMutex);
-			mDirectories.push_back(inDirID);
+			mDirectories.PushBack(inDirID);
 		}
 
 		// Wake up any waiting thread.
@@ -203,7 +203,7 @@ struct ScanQueue
 		std::unique_lock lock(mMutex);
 
 		// When the queue appears empty, we need to wait until all the other workers are also idle, because they may add more work to the queue.
-		if (mDirectories.empty())
+		if (mDirectories.Empty())
 		{
 			if (mThreadsBusy-- == 1)
 			{
@@ -216,23 +216,23 @@ struct ScanQueue
 			{
 				// Wait until more work is pushed into the queue, or all other threads are also idle.
 				// Note: while loop needed because there can be spurious wake ups.
-				while (mDirectories.empty() && mThreadsBusy > 0)
+				while (mDirectories.Empty() && mThreadsBusy > 0)
 					mConditionVariable.wait(lock);
 
 				// If the queue is indeed empty, exit.
-				if (mDirectories.empty())
+				if (mDirectories.Empty())
 					return FileID::cInvalid();
 				else
 					mThreadsBusy++; // Otherwise this thread is busy again.
 			}
 		}
 
-		FileID dir = mDirectories.back();
-		mDirectories.pop_back();
+		FileID dir = mDirectories.Back();
+		mDirectories.PopBack();
 		return dir;
 	}
 
-	std::vector<FileID>     mDirectories;
+	Vector<FileID>          mDirectories;
 	std::mutex              mMutex;
 	std::condition_variable mConditionVariable;
 	int                     mThreadsBusy = 1;
