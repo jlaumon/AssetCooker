@@ -7,8 +7,10 @@
 
 #include "Core.h"
 
+#include <Bedrock/Vector.h>
+
 // Segmented double ended queue.
-template <typename taType, size_t taSegmentSizeInElements = 1024>
+template <typename taType, int taSegmentSizeInElements = 1024>
 struct Queue : NoCopy // Copy not implemented yet
 {
 	static_assert(gIsPow2(taSegmentSizeInElements));
@@ -23,11 +25,11 @@ struct Queue : NoCopy // Copy not implemented yet
 	{
 		mFirstSegmentBeginOffset = ioOtherQueue.mFirstSegmentBeginOffset;
 		mLastSegmentEndOffset    = ioOtherQueue.mLastSegmentEndOffset;
-		mSegments                = std::move(ioOtherQueue.mSegments);
+		mSegments                = gMove(ioOtherQueue.mSegments);
 		
 		ioOtherQueue.mFirstSegmentBeginOffset = 0;
 		ioOtherQueue.mLastSegmentEndOffset    = taSegmentSizeInElements;
-		ioOtherQueue.mSegments.clear();
+		ioOtherQueue.mSegments.Clear();
 	}
 
 	void PushBack(const taType& inElement)
@@ -35,8 +37,8 @@ struct Queue : NoCopy // Copy not implemented yet
 		// If last segment is full, add a new one.
 		if (mLastSegmentEndOffset == taSegmentSizeInElements)
 		{
-			taType* new_segment = (taType*)malloc(taSegmentSizeInElements * sizeof(taType));
-			mSegments.push_back(new_segment);
+			taType* new_segment = (taType*)gMemAlloc(taSegmentSizeInElements * sizeof(taType)).mPtr;
+			mSegments.PushBack(new_segment);
 			mLastSegmentEndOffset = 0;
 		}
 		
@@ -44,7 +46,7 @@ struct Queue : NoCopy // Copy not implemented yet
 		mLastSegmentEndOffset++;
 
 		// Copy-construct the new element.
-		new (&Back()) taType(inElement);
+		gPlacementNew(Back(), inElement);
 	}
 
 	void PushFront(const taType& inElement)
@@ -52,8 +54,8 @@ struct Queue : NoCopy // Copy not implemented yet
 		// If first segment is full, add a new one. 
 		if (mFirstSegmentBeginOffset == 0)
 		{
-			taType* new_segment = (taType*)malloc(taSegmentSizeInElements * sizeof(taType));
-			mSegments.insert(mSegments.begin(), new_segment);
+			taType* new_segment = (taType*)gMemAlloc(taSegmentSizeInElements * sizeof(taType)).mPtr;
+			mSegments.Insert(mSegments.begin(), new_segment);
 			mFirstSegmentBeginOffset = taSegmentSizeInElements;
 		}
 		
@@ -61,7 +63,7 @@ struct Queue : NoCopy // Copy not implemented yet
 		mFirstSegmentBeginOffset--;
 
 		// Copy-construct the new element.
-		new (&Front()) taType(inElement);
+		gPlacementNew(Front(), inElement);
 	}
 
 	void PopFront()
@@ -73,7 +75,7 @@ struct Queue : NoCopy // Copy not implemented yet
 		mFirstSegmentBeginOffset++;
 
 		// Special case when there is a single segment, we don't want to free it even it it's empty.
-		if (mSegments.size() == 1)
+		if (mSegments.Size() == 1)
 		{
 			// If that was the last element, just reset the offsets.
 			if (mFirstSegmentBeginOffset == mLastSegmentEndOffset)
@@ -87,8 +89,8 @@ struct Queue : NoCopy // Copy not implemented yet
 			// If that was the last element, but not the last segment, remove the segment.
 			if (mFirstSegmentBeginOffset == taSegmentSizeInElements)
 			{
-				free(mSegments.front());
-				mSegments.erase(mSegments.begin());
+				gMemFree({ (uint8*)mSegments.Front(), taSegmentSizeInElements * sizeof(taType) });
+				mSegments.Erase(0);
 			}
 		}
 	}
@@ -97,25 +99,25 @@ struct Queue : NoCopy // Copy not implemented yet
 	{
 		gAssert(GetSize() > 0);
 
-		return mSegments.front()[mFirstSegmentBeginOffset];
+		return mSegments.Front()[mFirstSegmentBeginOffset];
 	}
 
 	taType& Back()
 	{
 		gAssert(GetSize() > 0);
 
-		return mSegments.back()[mLastSegmentEndOffset - 1];
+		return mSegments.Back()[mLastSegmentEndOffset - 1];
 	}
 
 	void Clear()
 	{
-		for (size_t i = 0, n = GetSize(); i < n; ++i)
+		for (int i = 0, n = GetSize(); i < n; ++i)
 			PopFront();
 	}
 
-	size_t GetSize() const
+	int GetSize() const
 	{
-		return mSegments.size() * taSegmentSizeInElements           // Total size of the segments.
+		return mSegments.Size() * taSegmentSizeInElements           // Total size of the segments.
 			   - mFirstSegmentBeginOffset                           // Number of elements not used in the first segment.
 			   - (taSegmentSizeInElements - mLastSegmentEndOffset); // Number of elements not used in the last segment.
 	}
@@ -127,7 +129,7 @@ struct Queue : NoCopy // Copy not implemented yet
 
 private:
 
-	size_t               mFirstSegmentBeginOffset = 0;                       // Offset of the first valid element in the first segment.
-	size_t               mLastSegmentEndOffset    = taSegmentSizeInElements; // Offset after the last valid element in the last segment.
-	std::vector<taType*> mSegments;
+	int             mFirstSegmentBeginOffset = 0;                       // Offset of the first valid element in the first segment.
+	int             mLastSegmentEndOffset    = taSegmentSizeInElements; // Offset after the last valid element in the last segment.
+	Vector<taType*> mSegments;
 };
