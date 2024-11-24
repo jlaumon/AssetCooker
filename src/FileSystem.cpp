@@ -930,7 +930,10 @@ FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
 void FileSystem::StartMonitoring()
 {
 	// Start the directory monitor thread.
-	mMonitorDirThread.Create({ .mName = "Monitor Directory Thread" }, [this](Thread& ioThread) { MonitorDirectoryThread(ioThread); });
+	mMonitorDirThread.Create({ 
+		.mName = "Monitor Directory Thread",
+		.mTempMemSize = 1_MiB,
+	}, [this](Thread& ioThread) { MonitorDirectoryThread(ioThread); });
 }
 
 
@@ -1092,7 +1095,7 @@ size_t FileSystem::GetFileCount() const
 
 
 
-void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
+void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBufferUSN)
 {
 	// Early out if we have everything from the cache already.
 	{
@@ -1112,7 +1115,8 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 
 	// Don't use too many threads otherwise they'll just spend their time on the hashmap mutex.
 	// TODO this could be improved
-	const int scan_thread_count = gMin((int)std::thread::hardware_concurrency(), 4);
+	constexpr int cMaxScanThreadCount = 4;
+	const int scan_thread_count = gMin((int)std::thread::hardware_concurrency(), cMaxScanThreadCount);
 
 	// Prepare a scan queue that can be used by multiple threads.
 	ScanQueue scan_queue;
@@ -1131,14 +1135,11 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 
 	// Create temporary worker threads to scan directories.
 	{
-		std::vector<std::thread> scan_threads;
-		scan_threads.resize(scan_thread_count);
-		for (auto& thread : scan_threads)
+		Thread scan_threads[cMaxScanThreadCount];
+		for (auto& thread : Span(scan_threads, scan_thread_count))
 		{
-			thread = std::thread([&]() 
+			thread.Create({ .mName = "Scan Directory Thread" }, [&](Thread& inThread) 
 			{
-				gSetCurrentThreadName("Scan Directory Thread");
-
 				uint8 buffer_scan[32 * 1024];
 
 				// Process the queue until it's empty.
@@ -1157,9 +1158,9 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 
 		// Wait for the threads to finish their work.
 		for (auto& thread : scan_threads)
-			thread.join();
+			thread.Join();
 
-		if (inThread.IsStopRequested())
+		if (inInitialScanThread.IsStopRequested())
 			return;
 	}
 
@@ -1206,7 +1207,7 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 
 	// Files that haven't been touched in a while might not be referenced in the USN journal anymore.
 	// For these, we'll need to fetch the last USN manually.
-	SegmentedVector<FileID> files_without_usn;
+	TempVector<FileID> files_without_usn;
 	for (auto& repo : mRepos)
 	{
 		// Skip repos that were loaded from the cache.
@@ -1220,20 +1221,20 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 
 			// Already got a USN?
 			if (file.mLastChangeUSN == 0)
-				files_without_usn.emplace_back(file.mID);
+				files_without_usn.PushBack(file.mID);
 		}
 	}
 
-	if (inThread.IsStopRequested())
+	if (inInitialScanThread.IsStopRequested())
 		return;
 
-	mInitStats.mIndividualUSNToFetch = (int)files_without_usn.size();
+	mInitStats.mIndividualUSNToFetch = files_without_usn.Size();
 	mInitStats.mIndividualUSNFetched.Store(0);
 	mInitState = InitState::ReadingIndividualUSNs;
 
-	if (!files_without_usn.empty())
+	if (!files_without_usn.Empty())
 	{
-		gApp.Log("{} files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.size());
+		gApp.Log("{} files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.Size());
 
 		// Don't create too many threads because they'll get stuck in locks in OpenFileByRefNumber if the cache is warm,
 		// or they'll be bottlenecked by IO otherwise.
@@ -1251,7 +1252,7 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 
 				// Note: Could do better than having all threads hammer the same atomic, but the cost is negligible compared to OpenFileByRefNumber.
 				int index;
-				while ((index = current_index++) < (int)files_without_usn.size())
+				while ((index = current_index++) < files_without_usn.Size())
 				{
 					FileID      file_id     = files_without_usn[index];
 					FileRepo&   repo        = file_id.GetRepo();
@@ -1262,7 +1263,7 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 
 					mInitStats.mIndividualUSNFetched.Add(1);
 
-					if (inThread.IsStopRequested())
+					if (inInitialScanThread.IsStopRequested())
 						return;
 				}
 			});
@@ -1272,11 +1273,11 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 		for (auto& thread : usn_threads)
 			thread.join();
 
-		if (inThread.IsStopRequested())
+		if (inInitialScanThread.IsStopRequested())
 			return;
 
 		gApp.Log("Done. Fetched {} individual USNs in {:.2f} seconds.", 
-			files_without_usn.size(), gTicksToSeconds(timer.GetTicks()));
+			files_without_usn.Size(), gTicksToSeconds(timer.GetTicks()));
 	}
 }
 
