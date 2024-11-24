@@ -270,13 +270,15 @@ bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& ou
 		return false;
 	}
 
+	gAssert(buffer[buffer.Size() - 1] == 0); // Should be null terminated.
+
 	if (inFormat == DepFileFormat::AssetCooker)
 	{
 		gApp.FatalError("TODO");
 	}
 	else if (inFormat == DepFileFormat::Make)
 	{
-		return sParseMakeDepFile(inDepFileID, StringView((const char*)buffer.Begin(), buffer.Size()), outInputs);
+		return sParseMakeDepFile(inDepFileID, StringView((const char*)buffer.Begin(), buffer.Size() - 1), outInputs); // -1 to exclude the null terminator
 	}
 	else
 	{

@@ -1559,6 +1559,10 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 {
 	using namespace std::chrono_literals;
 
+	// Init some temp memory.
+	gThreadInitTempMemory(gMemAlloc(256_KiB));
+	defer { gMemFree(gThreadExitTempMemory()); };
+
 	gSetCurrentThreadName("TimeOut Update Thread");
 
 	// The logic in this loop is a bit weird, but the idea is to wait *at least* this amount of time before declaring a command is in error.
@@ -1699,6 +1703,10 @@ void CookingSystem::ForceCook(CookingCommandID inCommandID)
 
 void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken)
 {
+	// Init some temp memory.
+	gThreadInitTempMemory(gMemAlloc(256_KiB));
+	defer { gMemFree(gThreadExitTempMemory()); };
+
 	gSetCurrentThreadName("CookingThread");
 
 	while (true)

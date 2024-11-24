@@ -1053,8 +1053,8 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 	const FileInfo& file = GetFile(inFileID);
 	const FileRepo& repo = GetRepo(inFileID);
 
-	PathBufferUTF8 abs_path_buffer;
-	StringView abs_path = gConcat(abs_path_buffer, repo.mRootPath, file.GetDirectory());
+	TempString abs_path = repo.mRootPath;
+	abs_path += file.GetDirectory();
 
 	bool success = gCreateDirectoryRecursive(abs_path);
 
@@ -1070,8 +1070,8 @@ bool FileSystem::DeleteFile(FileID inFileID)
 	const FileInfo& file = GetFile(inFileID);
 	const FileRepo& repo = GetRepo(inFileID);
 
-	PathBufferUTF8 abs_path_buffer;
-	StringView abs_path = gConcat(abs_path_buffer, repo.mRootPath, file.mPath);
+	TempString abs_path = repo.mRootPath;
+	abs_path += file.mPath;
 
 	bool success = DeleteFileA(abs_path.AsCStr());
 

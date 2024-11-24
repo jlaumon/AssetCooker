@@ -192,6 +192,10 @@ int WinMain(
 		return (gRunTests() == TestResult::Success) ? 0 : 1;
 	}
 
+	// Init some temp memory.
+	gThreadInitTempMemory(gMemAlloc(1_MiB));
+	defer { gMemFree(gThreadExitTempMemory()); };
+
 	gSetCurrentThreadName("Main Thread");
 
 	ImGui_ImplWin32_EnableDpiAwareness();

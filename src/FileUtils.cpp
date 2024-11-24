@@ -63,8 +63,8 @@ static bool sCreateDirectory(StringView inPath)
 
 static bool sCreateDirectoryRecursive(TempPath& ioPath)
 {
-	gAssert(ioPath[ioPath.Size() - 1] == 0);
-	gAssert(ioPath[ioPath.Size() - 2] != L'\\');
+	gAssert(ioPath[ioPath.Size()    ] == 0);
+	gAssert(ioPath[ioPath.Size() - 1] != L'\\');
 	gAssert(ioPath.Size() > 2 && ioPath[1] == L':'); // We expect an absolute path, first two characters should be the drive (ioPath might be the drive itself without trailing slash).
 
 	// Early out if the directory already exists.

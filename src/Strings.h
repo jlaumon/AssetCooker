@@ -29,13 +29,11 @@ struct MutStringView : Span<char>
 
 	operator StringView() const
 	{
-		StringView string_view(Data(), Size());
-
 		// Don't include the null terminator if there's one.
-		if (!string_view.Empty() && string_view.Back() == 0)
-			string_view.RemoveSuffix(1);
-
-		return string_view;
+		if (!Empty() && Back() == 0)
+			return StringView(Data(), Size() - 1);
+		else
+			return StringView(Data(), Size());
 	}
 };
 
@@ -167,7 +165,8 @@ constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr)
 {
 	MutStringView remaining_buffer = gAppend(ioDest, inStr);
 
-	return { ioDest.Data(), remaining_buffer.Data() };
+	// Note: + 1 as we want to include the null terminator. Not sure how the old code worked (but it did). Burn this code.
+	return { ioDest.Data(), remaining_buffer.Data() + 1 };
 }
 
 // Copy multiple string into a potentially larger one, and return a MutStringView of what was written.
@@ -177,7 +176,8 @@ constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr, ta
 {
 	MutStringView concatenated_str = gConcat(gAppend(ioDest, inStr), inArgs...);
 
-	return { ioDest.Data(), concatenated_str.End() };
+	// Note: + 1 as we want to include the null terminator. The old code did that implicitly with gEndPtr. Burn this code.
+	return { ioDest.Data(), concatenated_str.End() + 1 }; 
 }
 
 // Return true if this string view is null-terminated.
@@ -207,10 +207,10 @@ struct fmt::formatter<FixedString<taSize>> : fmt::formatter<fmt::string_view>
 	}
 };
 
-// Formatter for String.
-template <> struct fmt::formatter<String> : fmt::formatter<fmt::string_view>
+// Formatter for String & TempString.
+template <class taAllocator> struct fmt::formatter<StringBase<taAllocator>> : fmt::formatter<fmt::string_view>
 {
-	auto format(const String& inString, format_context& ioCtx) const
+	auto format(const StringBase<taAllocator>& inString, format_context& ioCtx) const
 	{
 		return fmt::formatter<fmt::string_view>::format(fmt::string_view(inString.Data(), inString.Size()), ioCtx);
 	}
@@ -298,8 +298,8 @@ void FixedString<taSize>::AppendFormat(StringView inFmt, fmt::format_args inArgs
 template <int taSize>
 void FixedString<taSize>::Set(StringView inString)
 {
-	MutStringView str_view = gConcat(mBuffer, inString);
-	mSize                  = str_view.Size();
+	StringView str_view = gConcat(mBuffer, inString);
+	mSize               = str_view.Size();
 }
 
 template <int taSize>
