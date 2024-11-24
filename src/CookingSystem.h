@@ -11,6 +11,7 @@
 #include "CookingSystemIDs.h"
 
 #include <Bedrock/String.h>
+#include <Bedrock/Thread.h>
 
 #include <vector>
 
@@ -342,11 +343,11 @@ private:
 	friend void gDrawDebugWindow();
 	struct CookingThread;
 
-	void                                  CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken);
+	void                                  CookingThreadFunction(CookingThread& ioThread);
 	void                                  CookCommand(CookingCommand& ioCommand, CookingThread& ioThread);
 	void                                  CleanupCommand(CookingCommand& ioCommand, CookingThread& ioThread); // Delete all outputs.
 	void                                  AddTimeOut(CookingLogEntry* inLogEntry);
-	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
+	void                                  TimeOutUpdateThread();
 	void                                  QueueDirtyCommands();
 	void                                  QueueErroredCommands();
 
@@ -362,7 +363,7 @@ private:
 
 	struct CookingThread
 	{
-		std::jthread                   mThread;
+		Thread                         mThread;
 		StringPool                     mStringPool;
 		std::atomic<CookingLogEntryID> mCurrentLogEntry;
 	};
@@ -383,7 +384,7 @@ private:
 	HashSet<CookingLogEntry*>                mTimeOutCurrentBatch;
 	HashSet<CookingLogEntry*>                mTimeOutNextBatch;
 	mutable std::mutex                       mTimeOutMutex;
-	std::jthread                             mTimeOutUpdateThread;
+	Thread                                   mTimeOutUpdateThread;
 	std::condition_variable                  mTimeOutAddedSignal;
 	std::binary_semaphore                    mTimeOutTimerSignal = std::binary_semaphore(0);
 

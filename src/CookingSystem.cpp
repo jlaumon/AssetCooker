@@ -1104,11 +1104,16 @@ void CookingSystem::StartCooking()
 	for (int i = 0; i < thread_count; ++i)
 	{
 		auto& thread = mCookingThreads.emplace_back();
-		thread.mThread = std::jthread(std::bind_front(&CookingSystem::CookingThreadFunction, this, &thread));
+		thread.mThread.Create({ 
+			.mName = "CookingThread",
+			.mTempMemSize = 128_KiB,
+		}, [this, &thread](Thread&) { CookingThreadFunction(thread); });
 	}
 
 	// Start the thread updating the time outs.
-	mTimeOutUpdateThread = std::jthread(std::bind_front(&CookingSystem::TimeOutUpdateThread, this));
+	mTimeOutUpdateThread.Create({ 
+			.mName = "TimeOut Update Thread",
+		}, [this](Thread&) { TimeOutUpdateThread(); });
 
 	// Initialize cooking paused bool.
 	mCookingPaused = mCookingStartPaused;
@@ -1122,19 +1127,19 @@ void CookingSystem::StartCooking()
 void CookingSystem::StopCooking()
 {
 	for (auto& thread : mCookingThreads)
-		thread.mThread.request_stop();
+		thread.mThread.RequestStop();
 
 	mCommandsToCook.RequestStop();
 
 	for (auto& thread : mCookingThreads)
-		thread.mThread.join();
+		thread.mThread.Join();
 
 	mJobObject = {};
 
-	mTimeOutUpdateThread.request_stop();
+	mTimeOutUpdateThread.RequestStop();
 	mTimeOutAddedSignal.notify_one();
 	mTimeOutTimerSignal.release();
-	mTimeOutUpdateThread.join();
+	mTimeOutUpdateThread.Join();
 }
 
 
@@ -1142,7 +1147,7 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 {
 	// If cooking isn't started yet, only change the start paused bool.
 	// Setting mCookingPaused to true before starting the cooking would cause dirty commands to be queued twice.
-	if (!mTimeOutUpdateThread.joinable())
+	if (!mTimeOutUpdateThread.IsJoinable())
 	{
 		mCookingStartPaused = inPaused;
 		return;
@@ -1555,15 +1560,9 @@ void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 }
 
 
-void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
+void CookingSystem::TimeOutUpdateThread()
 {
 	using namespace std::chrono_literals;
-
-	// Init some temp memory.
-	gThreadInitTempMemory(gMemAlloc(256_KiB));
-	defer { gMemFree(gThreadExitTempMemory()); };
-
-	gSetCurrentThreadName("TimeOut Update Thread");
 
 	// The logic in this loop is a bit weird, but the idea is to wait *at least* this amount of time before declaring a command is in error.
 	// Many commands will wait twice as much because they won't be in the first batch to be processed, but that's okay.
@@ -1579,7 +1578,7 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 			{
 				mTimeOutAddedSignal.wait(lock);
 
-				if (inStopToken.stop_requested())
+				if (mTimeOutUpdateThread.IsStopRequested())
 					return;
 			}
 
@@ -1592,7 +1591,7 @@ void CookingSystem::TimeOutUpdateThread(std::stop_token inStopToken)
 			// Wait for the time out.
 			(void)mTimeOutTimerSignal.try_acquire_for(cTimeout);
 
-			if (inStopToken.stop_requested())
+			if (mTimeOutUpdateThread.IsStopRequested())
 				return;
 
 			// If the file system is still busy, wait more. Otherwise we might incorrectly declare some commands are errors.
@@ -1701,28 +1700,22 @@ void CookingSystem::ForceCook(CookingCommandID inCommandID)
 }
 
 
-void CookingSystem::CookingThreadFunction(CookingThread* ioThread, std::stop_token inStopToken)
+void CookingSystem::CookingThreadFunction(CookingThread& ioThread)
 {
-	// Init some temp memory.
-	gThreadInitTempMemory(gMemAlloc(256_KiB));
-	defer { gMemFree(gThreadExitTempMemory()); };
-
-	gSetCurrentThreadName("CookingThread");
-
 	while (true)
 	{
 		CookingCommandID command_id = mCommandsToCook.Pop();
 
-		if (inStopToken.stop_requested())
+		if (ioThread.mThread.IsStopRequested())
 			return;
 
 		if (command_id.IsValid())
 		{
 			auto& command = GetCommand(command_id);
 			if (command.mDirtyState & CookingCommand::AllStaticInputsMissing)
-				CleanupCommand(command, *ioThread);
+				CleanupCommand(command, ioThread);
 			else
-				CookCommand(command, *ioThread);
+				CookCommand(command, ioThread);
 
 			// Update the total count of errors.
 			if (command.GetCookingState() == CookingState::Error)
