@@ -30,7 +30,7 @@ TempPath gGetAbsolutePath(StringView inPath)
 
 
 // Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
-StringView gConvertToLargePath(StringView inPath, TempPath& ioBuffer)
+StringView gConvertToLargePath(StringView inPath, TempString& ioBuffer)
 {
 	// Note1: > (MAX_PATH - 13) because the doc says actual max for directories is MAX_PATH - 12, and that includes the null terminator (so + 1).
 	// CreateDirectory worked up to MAX_PATH - 2 when I tried, but better stay on the cautious side.
@@ -52,7 +52,7 @@ static bool sCreateDirectory(StringView inPath)
 {
 	gAssert(!gEndsWith(inPath, "\\"));
 
-	TempPath buffer;
+	TempString buffer;
 	inPath = gConvertToLargePath(inPath, buffer);
 
 	BOOL success = CreateDirectoryA(inPath.AsCStr(), nullptr);
@@ -61,10 +61,10 @@ static bool sCreateDirectory(StringView inPath)
 }
 
 
-static bool sCreateDirectoryRecursive(TempPath& ioPath)
+static bool sCreateDirectoryRecursive(TempString& ioPath)
 {
-	gAssert(ioPath[ioPath.Size()    ] == 0);
-	gAssert(ioPath[ioPath.Size() - 1] != L'\\');
+	gAssert(*ioPath.End() == 0);
+	gAssert(ioPath.Back() != L'\\');
 	gAssert(ioPath.Size() > 2 && ioPath[1] == L':'); // We expect an absolute path, first two characters should be the drive (ioPath might be the drive itself without trailing slash).
 
 	// Early out if the directory already exists.
@@ -72,8 +72,8 @@ static bool sCreateDirectoryRecursive(TempPath& ioPath)
 		return true;
 
 	// Otherwise try to create every parent directory.
-	char* p_begin = ioPath.Data();
-	char* p_end   = ioPath.Data() + ioPath.Size() - 1; // Just before the null-terminator.
+	char* p_begin = ioPath.Begin();
+	char* p_end   = ioPath.End();
 	char* p       = p_begin + 3;
 	while(p != p_end)
 	{
@@ -102,14 +102,11 @@ bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 {
 	gAssert(gIsNormalized(inAbsolutePath) && gIsAbsolute(inAbsolutePath));
 
-	TempPath path_copy = inAbsolutePath;
+	TempString path_copy = inAbsolutePath;
 
 	// If the path ends with a slash, remove it, because that's what the other functions expect.
-	if (gEndsWith(path_copy, "\\"))
-	{
-		path_copy.mSize--;
-		path_copy.mBuffer[path_copy.mSize] = 0;
-	}
+	if (path_copy.EndsWith("\\"))
+		path_copy.RemoveSuffix(1);
 
 	return sCreateDirectoryRecursive(path_copy);
 }

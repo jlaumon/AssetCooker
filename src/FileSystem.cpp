@@ -797,12 +797,11 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 				// If it's a directory, also mark all the file inside as deleted.
 				if (deleted_file.IsDirectory())
 				{
-					PathBufferUTF8 dir_path_buffer;
-					StringView     dir_path;
+					TempString dir_path = deleted_file.mPath;
 
 					// Root dir has an empty path, in this case don't add the slash.
-					if (!deleted_file.mPath.Empty())
-						dir_path = gConcat(dir_path_buffer, deleted_file.mPath, "\\");
+					if (!dir_path.Empty())
+						dir_path += "\\";
 
 					for (FileInfo& file : repo.mFiles)
 					{
