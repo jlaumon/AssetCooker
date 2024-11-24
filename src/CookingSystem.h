@@ -131,7 +131,7 @@ struct CookingRule : NoCopy
 	Vector<StringView>       mInputPaths;
 	Vector<StringView>       mOutputPaths;
 
-	mutable std::atomic<int> mCommandCount = 0;
+	mutable AtomicInt32      mCommandCount = 0;
 
 	bool                     UseDepFile() const { return !mDepFilePath.Empty(); }
 };
@@ -376,8 +376,8 @@ private:
 	friend void                              gDrawSelectedCookingLogEntry();
 	VMemArray<CookingLogEntry>               mCookingLog;
 
-	std::atomic<size_t>                      mCookingErrors           = 0;	// Total number of commands that ended in error.
-	size_t                                   mLastNotifCookingErrors  = 0;
+	AtomicInt32                              mCookingErrors           = 0; // Total number of commands that ended in error.
+	int                                      mLastNotifCookingErrors  = 0;
 	size_t                                   mLastNotifCookingLogSize = 0;
 	int64                                    mLastNotifTicks          = 0;
 

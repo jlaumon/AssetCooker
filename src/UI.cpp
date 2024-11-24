@@ -580,7 +580,7 @@ void gDrawCookingRulePopup(const CookingRule& inRule)
 
 	if (!ImGui::BeginPopupWithTitle("Popup", FixedString128(ICON_FK_COG " {} ({} Commands)",
 		inRule.mName,
-		inRule.mCommandCount.load())))
+		inRule.mCommandCount.Load())))
 		return;
 
 	defer { ImGui::EndPopup(); };
@@ -654,7 +654,7 @@ void gDrawCookingRule(const CookingRule& inRule)
 	ImGui::PushID(inRule.mName);
 	defer { ImGui::PopID(); };
 
-	bool clicked = ImGui::Selectable(FixedString256("{} ({} Commands)##{}", inRule.mName, inRule.mCommandCount.load(), inRule.mName), 
+	bool clicked = ImGui::Selectable(FixedString256("{} ({} Commands)##{}", inRule.mName, inRule.mCommandCount.Load(), inRule.mName), 
 		false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
@@ -1272,7 +1272,7 @@ void gDrawStatusBar()
 		case FileSystem::InitState::ReadingIndividualUSNs: 
 		{
 			ImGui::TextUnformatted(FixedString128("{} Reading individual USNs... {:5}/{}", gGetAnimatedHourglass(),
-				gFileSystem.mInitStats.mIndividualUSNFetched.load(), gFileSystem.mInitStats.mIndividualUSNToFetch
+				gFileSystem.mInitStats.mIndividualUSNFetched.Load(), gFileSystem.mInitStats.mIndividualUSNToFetch
 			));
 			break;
 		}

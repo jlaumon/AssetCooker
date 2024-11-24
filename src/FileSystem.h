@@ -313,7 +313,7 @@ struct FileSystem : NoCopy
 	void            StopMonitoring();
 
 	bool            IsMonitoringStarted() const			{ return mMonitorDirThread.IsJoinable(); }
-	bool            IsMonitoringIdle() const			{ return mIsMonitorDirThreadIdle; }
+	bool            IsMonitoringIdle() const			{ return mIsMonitorDirThreadIdle.Load(); }
 
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
@@ -368,7 +368,7 @@ private:
 	struct InitStats
 	{
 		int             mIndividualUSNToFetch = 0;
-		std::atomic_int mIndividualUSNFetched = 0;
+		AtomicInt32		mIndividualUSNFetched = 0;
 		int64           mReadyTicks           = 0; // Tick count when the Ready state was reached.
 	};
 	InitStats                  mInitStats;
@@ -378,7 +378,7 @@ private:
 
 	Thread                     mMonitorDirThread;
 	SyncSignal                 mMonitorDirThreadSignal;
-	std::atomic<bool>          mIsMonitorDirThreadIdle = true;
+	AtomicBool                 mIsMonitorDirThreadIdle = true;
 
 	struct FileToRescan
 	{

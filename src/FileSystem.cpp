@@ -1228,7 +1228,7 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 		return;
 
 	mInitStats.mIndividualUSNToFetch = (int)files_without_usn.size();
-	mInitStats.mIndividualUSNFetched = 0;
+	mInitStats.mIndividualUSNFetched.Store(0);
 	mInitState = InitState::ReadingIndividualUSNs;
 
 	if (!files_without_usn.empty())
@@ -1260,7 +1260,7 @@ void FileSystem::InitialScan(const Thread& inThread, Span<uint8> ioBufferUSN)
 					// Get the USN.
 					repo.ScanFile(file, FileRepo::RequestedAttributes::USNOnly);
 
-					mInitStats.mIndividualUSNFetched++;
+					mInitStats.mIndividualUSNFetched.Add(1);
 
 					if (inThread.IsStopRequested())
 						return;
@@ -1293,7 +1293,7 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 	using namespace std::chrono_literals;
 
 	// Start not idle.
-	mIsMonitorDirThreadIdle = false;
+	mIsMonitorDirThreadIdle.Store(false);
 
 	// Allocate a working buffer for querying the USN journal and scanning directories.
 	static constexpr size_t cBufferSize = 64 * 1024ull;
@@ -1415,13 +1415,13 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 			&& mMonitorDirThreadSignal.WaitFor(0) == SyncSignal::WaitResult::Timeout)	// Check if the signal is already set without waiting.
 		{
 			// Going idle here.
-			mIsMonitorDirThreadIdle = true;
+			mIsMonitorDirThreadIdle.Store(true);
 
 			// Wait for some time before checking the USN journals again (unless we're being signaled).
 			std::ignore = mMonitorDirThreadSignal.WaitFor(gSecondsToTicks(1.0));
 
 			// Not idle anymore.
-			mIsMonitorDirThreadIdle = false;
+			mIsMonitorDirThreadIdle.Store(false);
 		}
 	}
 

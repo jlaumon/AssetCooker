@@ -915,7 +915,7 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 			}
 
 			// Update stats.
-			rule.mCommandCount++;
+			rule.mCommandCount.Add(1);
 		}
 
 		// Let all the input and ouputs know that they are referenced by this command.
@@ -1610,7 +1610,7 @@ void CookingSystem::TimeOutUpdateThread()
 					log_entry->mCookingState = CookingState::Error;
 
 					// Update the total count of errors.
-					mCookingErrors++;
+					mCookingErrors.Add(1);
 
 					// Update the dirty state so that it's set to Error.
 					QueueUpdateDirtyState(log_entry->mCommandID);
@@ -1719,7 +1719,7 @@ void CookingSystem::CookingThreadFunction(CookingThread& ioThread)
 
 			// Update the total count of errors.
 			if (command.GetCookingState() == CookingState::Error)
-				mCookingErrors++;
+				mCookingErrors.Add(1);
 
 			// TODO is this ok or should we actually wait until the command is in success/error state rather than waiting state?
 			mCommandsToCook.FinishedCooking(command_id);
@@ -1795,13 +1795,13 @@ void CookingSystem::UpdateNotifications()
 		mLastNotifCookingLogSize = cooking_log_size;
 		// Also update the number of cooking errors. It does mean that some errors will never get notified, but it
 		// subjectively seems better than reporting potentially very old errors after a new command succeeded.
-		mLastNotifCookingErrors  = mCookingErrors;
+		mLastNotifCookingErrors  = mCookingErrors.Load();
 		return;
 	}
 
 	// Cooking system being idle is equivalent to cooking being finished.
-	bool   cooking_is_finished = IsIdle();
-	size_t error_count         = mCookingErrors - mLastNotifCookingErrors;
+	bool cooking_is_finished = IsIdle();
+	int  error_count         = mCookingErrors.Load() - mLastNotifCookingErrors;
 
 	if (cooking_is_finished)
 	{
@@ -1819,7 +1819,7 @@ void CookingSystem::UpdateNotifications()
 
 		// Update the last notif values even if we didn't actually display a notif,
 		// because we want the number of cooked commands to be correct if we re-enable the notifs.
-		mLastNotifCookingErrors  = mCookingErrors;
+		mLastNotifCookingErrors  = mCookingErrors.Load();
 		mLastNotifCookingLogSize = cooking_log_size;
 		mLastNotifTicks          = current_ticks;
 	}
@@ -1831,7 +1831,7 @@ void CookingSystem::UpdateNotifications()
 
 			// Here however only update the last notif values if we actually display a notif,
 			// because otherwise it might cause the next cooking finished notif to be skipped.
-			mLastNotifCookingErrors  = mCookingErrors;
+			mLastNotifCookingErrors  = mCookingErrors.Load();
 			mLastNotifCookingLogSize = cooking_log_size;
 			mLastNotifTicks          = current_ticks;
 		}
