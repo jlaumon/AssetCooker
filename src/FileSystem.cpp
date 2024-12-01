@@ -19,7 +19,6 @@
 
 #include "xxHash/xxh3.h"
 
-#include <array>
 #include <algorithm> // for std::sort, sad!
 
 // Debug toggle to fake files failing to open, to test error handling.
@@ -152,7 +151,7 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 	mRootPath = mStringPool.AllocateCopy(inRootPath);
 
 	// Add this repo to the repo list in the drive.
-	mDrive.mRepos.push_back(this);
+	mDrive.mRepos.PushBack(this);
 
 	// Make sure the root path exists.
 	gCreateDirectoryRecursive(mRootPath);
@@ -198,7 +197,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		// Try to insert it to the path hash map.
 		{
 			// TODO: not great to access these internals, maybe find a better way?
-			std::unique_lock map_lock(gFileSystem.mFilesByPathHashMutex);
+			LockGuard map_lock(gFileSystem.mFilesByPathHashMutex);
 
 			auto [it, inserted] = gFileSystem.mFilesByPathHash.insert({ path_hash, new_file_id });
 			if (!inserted)
@@ -229,7 +228,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		if (inRefNumber.IsValid())
 		{
 			// TODO: not great to access these internals, maybe find a better way?
-			std::unique_lock map_lock(mDrive.mFilesByRefNumberMutex);
+			LockGuard map_lock(mDrive.mFilesByRefNumberMutex);
 
 			auto [it, inserted] = mDrive.mFilesByRefNumber.insert({ inRefNumber, actual_file_id });
 			if (!inserted)
@@ -284,14 +283,14 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp)
 {
 	// TODO: not great to access these internals, maybe find a better way?
-	std::unique_lock lock(mDrive.mFilesByRefNumberMutex);
+	LockGuard lock(mDrive.mFilesByRefNumberMutex);
 
 	MarkFileDeleted(ioFile, inTimeStamp, lock);
 }
 
-void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std::unique_lock<std::mutex>& inLock)
+void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const LockGuard<Mutex>& inLock)
 {
-	gAssert(inLock.mutex() == &mDrive.mFilesByRefNumberMutex);
+	gAssert(inLock.GetMutex() == &mDrive.mFilesByRefNumberMutex);
 
 	mDrive.mFilesByRefNumber.erase(ioFile.mRefNumber);
 	ioFile.mRefNumber      = FileRefNumber::cInvalid();
@@ -916,7 +915,7 @@ FileRepo* FileDrive::FindRepoForPath(StringView inFullPath)
 
 FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
 {
-	std::lock_guard lock(mFilesByRefNumberMutex);
+	LockGuard lock(mFilesByRefNumberMutex);
 
 	auto it = mFilesByRefNumber.find(inRefNumber);
 	if (it != mFilesByRefNumber.end())
@@ -988,7 +987,7 @@ FileID FileSystem::FindFileIDByPath(StringView inAbsolutePath) const
 
 FileID FileSystem::FindFileIDByPathHash(PathHash inPathHash) const
 {
-	std::lock_guard lock(mFilesByPathHashMutex);
+	LockGuard lock(mFilesByPathHashMutex);
 
 	auto it = mFilesByPathHash.find(inPathHash);
 	if (it != mFilesByPathHash.end())
@@ -1355,7 +1354,7 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 			FileID file_to_rescan;
 			{
 				// Check if there's an item in the queue, and if it's time to scan it again.
-				std::lock_guard lock(mFilesToRescanMutex);
+				LockGuard lock(mFilesToRescanMutex);
 				if (!mFilesToRescan.IsEmpty() && mFilesToRescan.Front().mWaitUntilTicks <= current_time)
 				{
 					file_to_rescan = mFilesToRescan.Front().mFileID;
@@ -1433,7 +1432,7 @@ void FileSystem::RescanLater(FileID inFileID)
 {
 	constexpr double cFileRescanDelayMS = 300.0; // In milliseconds.
 
-	std::lock_guard lock(mFilesToRescanMutex);
+	LockGuard lock(mFilesToRescanMutex);
 	mFilesToRescan.PushBack({ inFileID, gGetTickCount() + gMillisecondsToTicks(cFileRescanDelayMS) });
 }
 
@@ -1595,7 +1594,7 @@ void FileSystem::LoadCache()
 		}
 
 		// If all repos for this drive are valid, we can use the cached state.
-		if (drive_valid && valid_repos.Size() == (int)drive->mRepos.size())
+		if (drive_valid && valid_repos.Size() == drive->mRepos.Size())
 		{
 			// Set the next USN we should read.
 			drive->mNextUSN = next_usn;
@@ -1848,7 +1847,7 @@ void FileSystem::SaveCache()
 		bin.Write(drive.mUSNJournalID);
 		bin.Write(drive.mNextUSN);
 
-		bin.Write((uint16)drive.mRepos.size());
+		bin.Write((uint16)drive.mRepos.Size());
 		for (const FileRepo* repo : drive.mRepos)
 		{
 			bin.WriteLabel("REPO");

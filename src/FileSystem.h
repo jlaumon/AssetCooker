@@ -14,6 +14,8 @@
 
 #include <Bedrock/Vector.h>
 #include <Bedrock/Thread.h>
+#include <Bedrock/Mutex.h>
+#include <Bedrock/ConditionVariable.h>
 
 #include <semaphore>
 #include <optional>
@@ -59,7 +61,7 @@ struct HandleOrError
 	HandleOrError(OwnedHandle&& ioHandle)
 	{
 		gAssert(ioHandle.IsValid());
-		mHandle = std::move(ioHandle);
+		mHandle = gMove(ioHandle);
 	}
 	HandleOrError(OpenFileError inError)  { mError = inError; }
 	bool          IsValid() const { return mHandle.IsValid(); }
@@ -190,17 +192,17 @@ struct ScanQueue
 	void Push(FileID inDirID)
 	{
 		{
-			std::lock_guard lock(mMutex);
+			LockGuard lock(mMutex);
 			mDirectories.PushBack(inDirID);
 		}
 
 		// Wake up any waiting thread.
-		mConditionVariable.notify_one();
+		mConditionVariable.NotifyOne();
 	}
 
 	FileID Pop()
 	{
-		std::unique_lock lock(mMutex);
+		LockGuard lock(mMutex);
 
 		// When the queue appears empty, we need to wait until all the other workers are also idle, because they may add more work to the queue.
 		if (mDirectories.Empty())
@@ -209,7 +211,7 @@ struct ScanQueue
 			{
 				// This is the last thread, all the others are already idle/waiting.
 				// Wake them up and exit.
-				mConditionVariable.notify_all();
+				mConditionVariable.NotifyAll();
 				return FileID::cInvalid();
 			}
 			else
@@ -217,7 +219,7 @@ struct ScanQueue
 				// Wait until more work is pushed into the queue, or all other threads are also idle.
 				// Note: while loop needed because there can be spurious wake ups.
 				while (mDirectories.Empty() && mThreadsBusy > 0)
-					mConditionVariable.wait(lock);
+					mConditionVariable.Wait(lock);
 
 				// If the queue is indeed empty, exit.
 				if (mDirectories.Empty())
@@ -232,10 +234,10 @@ struct ScanQueue
 		return dir;
 	}
 
-	Vector<FileID>          mDirectories;
-	std::mutex              mMutex;
-	std::condition_variable mConditionVariable;
-	int                     mThreadsBusy = 1;
+	Vector<FileID>    mDirectories;
+	Mutex             mMutex;
+	ConditionVariable mConditionVariable;
+	int               mThreadsBusy = 1;
 };
 
 
@@ -249,7 +251,7 @@ struct FileRepo : NoCopy
 	const FileInfo&		GetFile(FileID inFileID) const	{ gAssert(inFileID.mRepoIndex == mIndex); return mFiles[inFileID.mFileIndex]; }
 	FileInfo&           GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber);
 	void                MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp);
-	void                MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const std::unique_lock<std::mutex>& inLock);
+	void                MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const LockGuard<Mutex>& inLock);
 
 	StringView          RemoveRootPath(StringView inFullPath);
 
@@ -295,12 +297,12 @@ struct FileDrive : NoCopy
 	USN                    mFirstUSN     = 0;
 	USN                    mNextUSN      = 0;
 	bool                   mLoadedFromCache = false;
-	std::vector<FileRepo*> mRepos;
+	Vector<FileRepo*>      mRepos;
 
 	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
 
 	FilesByRefNumberMap    mFilesByRefNumber;      // Map to find files by ref number.
-	mutable std::mutex     mFilesByRefNumberMutex; // Mutex to protect access to the map.
+	mutable Mutex          mFilesByRefNumberMutex; // Mutex to protect access to the map.
 };
 
 
@@ -373,7 +375,7 @@ private:
 	};
 	InitStats                  mInitStats;
 
-	std::mutex                 mChangedFilesMutex;
+	Mutex                      mChangedFilesMutex;
 	SegmentedHashSet<FileID>   mChangedFiles;
 
 	Thread                     mMonitorDirThread;
@@ -387,11 +389,11 @@ private:
 	};
 
 	Queue<FileToRescan> mFilesToRescan;
-	std::mutex          mFilesToRescanMutex;
+	Mutex               mFilesToRescanMutex;
 
 	using FilesByPathHash = SegmentedHashMap<PathHash, FileID>;
-	FilesByPathHash     mFilesByPathHash;      // Map to find files by path hash.
-	mutable std::mutex  mFilesByPathHashMutex; // Mutex to protect access to the map.
+	FilesByPathHash mFilesByPathHash;      // Map to find files by path hash.
+	mutable Mutex   mFilesByPathHashMutex; // Mutex to protect access to the map.
 };
 
 
