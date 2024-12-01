@@ -14,6 +14,7 @@
 #include <Bedrock/Thread.h>
 #include <Bedrock/Mutex.h>
 #include <Bedrock/ConditionVariable.h>
+#include <Bedrock/Semaphore.h>
 
 
 enum class CommandVariables : uint8
@@ -387,7 +388,7 @@ private:
 	mutable Mutex                            mTimeOutMutex;
 	Thread                                   mTimeOutUpdateThread;
 	ConditionVariable						 mTimeOutAddedSignal;
-	std::binary_semaphore                    mTimeOutTimerSignal = std::binary_semaphore(0);
+	Semaphore                                mTimeOutTimerSignal = Semaphore(0, 1);
 
 	OwnedHandle                              mJobObject; // JobObject used to make sure child processes are killed if this process ends.
 };

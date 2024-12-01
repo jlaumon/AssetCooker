@@ -7,7 +7,6 @@
 
 
 #include <Bedrock/Core.h>
-#include <Bedrock/Random.h> // TODO: remove and add where needed
 
 
 // Basic containers.
@@ -78,9 +77,6 @@ template <class T> class reference_wrapper;
 
 // TODO: remove and add only where needed
 #include <Bedrock/Span.h> 
-
-// TODO: remove once we got rid of std::vector
-template<class T> inline constexpr bool cIsContiguous<std::vector<T>> = true;
 
 // Typedef for Optional, until we have a custom version.
 template <typename taType>

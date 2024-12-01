@@ -11,6 +11,8 @@
 #include <optional>
 #include <functional>
 
+#include <Bedrock/Mutex.h>
+
 struct VMemBlock
 {
 	uint8* mBegin = nullptr;
@@ -25,7 +27,7 @@ VMemBlock gVMemReserve(size_t inSize);		// Reserve some memory. inSize will be r
 void      gVMemFree(VMemBlock inBlock);		// Free previously reserved memory.
 VMemBlock gVMemCommit(VMemBlock inBlock);	// Commit some reserved memory.
 
-using VMemArrayLock = std::unique_lock<std::mutex>;
+using VMemArrayLock = LockGuard<Mutex>;
 
 // Minimalistic ever-growing dynamic array backed by virtual memory. Can grow without relocating to a different address.
 // Adding needs to be protected by a mutex, but reading from multiple threads is allowed without lock since they're always valid once added.
@@ -152,12 +154,12 @@ struct VMemArray : NoCopy
 	const taType*        end()		const					{ return mEnd; }
 
 private:
-	void                 ValidateLock(const VMemArrayLock& inLock) const { gAssert(inLock && inLock.mutex() == &mMutex); }
+	void                 ValidateLock(const VMemArrayLock& inLock) const { gAssert(inLock.GetMutex() == &mMutex); }
 
 	taType*              mBegin         = nullptr;
 	std::atomic<taType*> mEnd           = nullptr;
 	uint8*               mEndCommitted  = nullptr;
-	std::mutex           mMutex;
+	Mutex                mMutex;
 	size_t               mSizeToReserve = 1024ull * 1024 * 1024;
 	size_t               mMinCommitSize = 256ull * 1024;			// Minimum size to commit at once, to avoid calling gVMemCommit too often.
 };

@@ -57,16 +57,16 @@ struct TomlReader
 	template <typename taType>
 	static constexpr StringView sTypeName()
 	{
-		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, FixedString32>
-			|| std::is_same_v<taType, FixedString64>
-			|| std::is_same_v<taType, FixedString128>
-			|| std::is_same_v<taType, FixedString256>
-			|| std::is_same_v<taType, FixedString512>
-			|| std::is_same_v<taType, TempPath>
-			|| std::is_same_v<taType, String>)
+		if constexpr (cIsSame<taType, StringView> 
+			|| cIsSame<taType, FixedString32>
+			|| cIsSame<taType, FixedString64>
+			|| cIsSame<taType, FixedString128>
+			|| cIsSame<taType, FixedString256>
+			|| cIsSame<taType, FixedString512>
+			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, String>)
 			return "string";
-		else if constexpr (std::is_same_v<taType, bool>)
+		else if constexpr (cIsSame<taType, bool>)
 			return "boolean";
 		else if constexpr (std::is_floating_point_v<taType>)
 			return "floating_point";
@@ -108,16 +108,16 @@ struct TomlReader
 
 		// If the variable exists but is of the wrong type, that's an error.
 		bool is_right_type;
-		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, FixedString32>
-			|| std::is_same_v<taType, FixedString64>
-			|| std::is_same_v<taType, FixedString128>
-			|| std::is_same_v<taType, FixedString256>
-			|| std::is_same_v<taType, FixedString512>
-			|| std::is_same_v<taType, TempPath>
-			|| std::is_same_v<taType, String>)
+		if constexpr (cIsSame<taType, StringView> 
+			|| cIsSame<taType, FixedString32>
+			|| cIsSame<taType, FixedString64>
+			|| cIsSame<taType, FixedString128>
+			|| cIsSame<taType, FixedString256>
+			|| cIsSame<taType, FixedString512>
+			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, String>)
 			is_right_type = node->is_string();
-		else if constexpr (std::is_same_v<taType, bool>)
+		else if constexpr (cIsSame<taType, bool>)
 			is_right_type = node->is_boolean();
 		else if constexpr (std::is_floating_point_v<taType>)
 			is_right_type = node->is_floating_point();
@@ -133,25 +133,25 @@ struct TomlReader
 			return false;
 		}
 
-		if constexpr (std::is_same_v<taType, StringView>)
+		if constexpr (cIsSame<taType, StringView>)
 		{
 			std::string_view std_view = *node->value<std::string_view>();
 			// For StringView allocate a copy into the StringPool
 			outVar = mStringPool->AllocateCopy(StringView(std_view.data(), (int)std_view.size()));
 		}
-		else if constexpr (std::is_same_v<taType, FixedString32>
-			|| std::is_same_v<taType, FixedString64>
-			|| std::is_same_v<taType, FixedString128>
-			|| std::is_same_v<taType, FixedString256>
-			|| std::is_same_v<taType, FixedString512>
-			|| std::is_same_v<taType, TempPath>
-			|| std::is_same_v<taType, String>)
+		else if constexpr (cIsSame<taType, FixedString32>
+			|| cIsSame<taType, FixedString64>
+			|| cIsSame<taType, FixedString128>
+			|| cIsSame<taType, FixedString256>
+			|| cIsSame<taType, FixedString512>
+			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, String>)
 		{
 			std::string_view std_view = *node->value<std::string_view>();
 			// For FixedStrings and String, just copy into it.
 			outVar = StringView(std_view.data(), (int)std_view.size());
 		}
-		else if constexpr (std::is_same_v<taType, bool>)
+		else if constexpr (cIsSame<taType, bool>)
 			outVar = *node->value<bool>();
 		else if constexpr (std::is_floating_point_v<taType>)
 			outVar = *node->value<taType>();

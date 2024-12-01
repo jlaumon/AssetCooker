@@ -13,22 +13,24 @@
 
 #include "minilua.h"
 
+#include <Bedrock/TypeTraits.h>
+
 
 struct LuaReader
 {
 	template <typename taType>
 	static constexpr StringView sTypeName()
 	{
-		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, FixedString32>
-			|| std::is_same_v<taType, FixedString64>
-			|| std::is_same_v<taType, FixedString128>
-			|| std::is_same_v<taType, FixedString256>
-			|| std::is_same_v<taType, FixedString512>
-			|| std::is_same_v<taType, TempPath>
-			|| std::is_same_v<taType, String>)
+		if constexpr (cIsSame<taType, StringView> 
+			|| cIsSame<taType, FixedString32>
+			|| cIsSame<taType, FixedString64>
+			|| cIsSame<taType, FixedString128>
+			|| cIsSame<taType, FixedString256>
+			|| cIsSame<taType, FixedString512>
+			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, String>)
 			return "string";
-		else if constexpr (std::is_same_v<taType, bool>)
+		else if constexpr (cIsSame<taType, bool>)
 			return "boolean";
 		else if constexpr (std::is_floating_point_v<taType>)
 			return "floating_point";
@@ -136,15 +138,15 @@ struct LuaReader
 
 		// If the variable exists but is of the wrong type, that's an error.
 		bool is_right_type = false;
-		if constexpr (std::is_same_v<taType, StringView> 
-			|| std::is_same_v<taType, FixedString32>
-			|| std::is_same_v<taType, FixedString64>
-			|| std::is_same_v<taType, FixedString128>
-			|| std::is_same_v<taType, FixedString256>
-			|| std::is_same_v<taType, FixedString512>
-			|| std::is_same_v<taType, TempPath>)
+		if constexpr (cIsSame<taType, StringView> 
+			|| cIsSame<taType, FixedString32>
+			|| cIsSame<taType, FixedString64>
+			|| cIsSame<taType, FixedString128>
+			|| cIsSame<taType, FixedString256>
+			|| cIsSame<taType, FixedString512>
+			|| cIsSame<taType, TempPath>)
 			is_right_type = (node_type == LuaType::String);
-		else if constexpr (std::is_same_v<taType, bool>)
+		else if constexpr (cIsSame<taType, bool>)
 			is_right_type = (node_type == LuaType::Boolean);
 		else if constexpr (std::is_floating_point_v<taType> || std::is_integral_v<taType>)
 			is_right_type = (node_type == LuaType::Number);
@@ -156,27 +158,27 @@ struct LuaReader
 			return false;
 		}
 
-		if constexpr (std::is_same_v<taType, StringView>)
+		if constexpr (cIsSame<taType, StringView>)
 		{
 			// For StringView allocate a copy into the StringPool
 			size_t      str_len = 0;
 			const char* str     = lua_tolstring(mLuaState, -1, &str_len);
 			outVar = mStringPool->AllocateCopy({ str, (int)str_len });
 		}
-		else if constexpr (std::is_same_v<taType, FixedString32>
-			|| std::is_same_v<taType, FixedString64>
-			|| std::is_same_v<taType, FixedString128>
-			|| std::is_same_v<taType, FixedString256>
-			|| std::is_same_v<taType, FixedString512>
-			|| std::is_same_v<taType, TempPath>
-			|| std::is_same_v<taType, String>)
+		else if constexpr (cIsSame<taType, FixedString32>
+			|| cIsSame<taType, FixedString64>
+			|| cIsSame<taType, FixedString128>
+			|| cIsSame<taType, FixedString256>
+			|| cIsSame<taType, FixedString512>
+			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, String>)
 		{
 			// For FixedStrings and String, just copy into it.
 			size_t      str_len = 0;
 			const char* str     = lua_tolstring(mLuaState, -1, &str_len);
 			outVar = StringView(str, str_len);
 		}
-		else if constexpr (std::is_same_v<taType, bool>)
+		else if constexpr (cIsSame<taType, bool>)
 		{
 			outVar = lua_toboolean(mLuaState, -1);
 		}

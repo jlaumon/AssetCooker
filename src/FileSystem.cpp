@@ -12,6 +12,7 @@
 #include "Strings.h"
 #include <Bedrock/Algorithm.h>
 #include <Bedrock/Ticks.h>
+#include <Bedrock/Random.h>
 
 #include "win32/misc.h"
 #include "win32/file.h"

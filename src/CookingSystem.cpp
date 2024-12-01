@@ -11,6 +11,7 @@
 #include <Bedrock/Test.h>
 #include <Bedrock/Algorithm.h>
 #include <Bedrock/Ticks.h>
+#include <Bedrock/Random.h>
 
 #include "subprocess/subprocess.h"
 #include "win32/file.h"
@@ -1137,7 +1138,7 @@ void CookingSystem::StopCooking()
 
 	mTimeOutUpdateThread.RequestStop();
 	mTimeOutAddedSignal.NotifyOne();
-	mTimeOutTimerSignal.release();
+	mTimeOutTimerSignal.Release();
 	mTimeOutUpdateThread.Join();
 }
 
@@ -1561,11 +1562,9 @@ void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 
 void CookingSystem::TimeOutUpdateThread()
 {
-	using namespace std::chrono_literals;
-
 	// The logic in this loop is a bit weird, but the idea is to wait *at least* this amount of time before declaring a command is in error.
 	// Many commands will wait twice as much because they won't be in the first batch to be processed, but that's okay.
-	constexpr auto cTimeout = 0.3s;
+	constexpr auto cTimeout = 0.3_S;
 
 	while (true)
 	{
@@ -1588,7 +1587,7 @@ void CookingSystem::TimeOutUpdateThread()
 		do
 		{
 			// Wait for the time out.
-			(void)mTimeOutTimerSignal.try_acquire_for(cTimeout);
+			(void)mTimeOutTimerSignal.TryAcquireFor(cTimeout);
 
 			if (mTimeOutUpdateThread.IsStopRequested())
 				return;

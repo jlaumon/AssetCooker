@@ -13,6 +13,7 @@
 #include "imgui_impl_dx11.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Ticks.h>
+#include <Bedrock/Random.h>
 
 #include "win32/misc.h"
 #include "win32/window.h"
