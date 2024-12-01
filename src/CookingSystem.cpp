@@ -585,14 +585,14 @@ void CookingQueue::Push(CookingCommandID inCommandID, PushPosition inPosition/* 
 	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
 	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
 
-	std::unique_lock lock(mMutex);
+	LockGuard lock(mMutex);
 	PushInternal(lock, priority, inCommandID, inPosition);
 }
 
 
-void CookingQueue::PushInternal(std::unique_lock<std::mutex>& ioLock, int inPriority, CookingCommandID inCommandID, PushPosition inPosition)
+void CookingQueue::PushInternal(MutexLockGuard& ioLock, int inPriority, CookingCommandID inCommandID, PushPosition inPosition)
 {
-	gAssert(ioLock.mutex() == &mMutex);
+	gAssert(ioLock.GetMutex() == &mMutex);
 
 	// Find or add the bucket for that cooking priority.
 	PrioBucket& bucket = *gEmplaceSorted(mPrioBuckets, inPriority);
@@ -609,7 +609,7 @@ void CookingQueue::PushInternal(std::unique_lock<std::mutex>& ioLock, int inPrio
 
 CookingCommandID CookingQueue::Pop()
 {
-	std::lock_guard lock(mMutex);
+	LockGuard lock(mMutex);
 
 	// Find the first non-empty bucket.
 	for (PrioBucket& bucket : mPrioBuckets)
@@ -634,7 +634,7 @@ bool CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* 
 	const CookingCommand& command = gCookingSystem.GetCommand(inCommandID);
 	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
 
-	std::lock_guard lock(mMutex);
+	LockGuard lock(mMutex);
 
 	// Find the bucket.
 	auto bucket_it = gFindSorted(mPrioBuckets, priority);
@@ -669,7 +669,7 @@ bool CookingQueue::Remove(CookingCommandID inCommandID, RemoveOption inOption/* 
 
 void CookingQueue::Clear()
 {
-	std::lock_guard lock(mMutex);
+	LockGuard lock(mMutex);
 
 	for (PrioBucket& bucket : mPrioBuckets)
 		bucket.mCommands.Clear();
@@ -680,7 +680,7 @@ void CookingQueue::Clear()
 
 size_t CookingQueue::GetSize() const
 {
-	std::lock_guard lock(mMutex);
+	LockGuard lock(mMutex);
 	return mTotalSize;
 }
 
@@ -691,7 +691,7 @@ void CookingThreadsQueue::Push(CookingCommandID inCommandID, PushPosition inPosi
 	int priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
 
 	{
-		std::unique_lock lock(mMutex);
+		LockGuard lock(mMutex);
 		PushInternal(lock, priority, inCommandID, inPosition);
 
 		// Make sure the data array stays in sync (makes pop simpler).
@@ -699,13 +699,13 @@ void CookingThreadsQueue::Push(CookingCommandID inCommandID, PushPosition inPosi
 	}
 
 	// Wake up one thread to work on this.
-	mBarrier.notify_one();
+	mBarrier.NotifyOne();
 }
 
 
 CookingCommandID CookingThreadsQueue::Pop()
 {
-	std::unique_lock lock(mMutex);
+	LockGuard lock(mMutex);
 	gAssert(mPrioData.Size() == mPrioBuckets.Size());
 
 	int  non_empty_bucket_index = -1;
@@ -718,7 +718,7 @@ CookingCommandID CookingThreadsQueue::Pop()
 			break;
 
 		// Wait for work.
-		mBarrier.wait(lock);
+		mBarrier.Wait(lock);
 
 		// Find the first bucket containing command that can run.
 		for (int prio_index = 0; prio_index < mPrioBuckets.Size(); ++prio_index)
@@ -773,7 +773,7 @@ void CookingThreadsQueue::FinishedCooking(CookingCommandID inCommandID)
 	bool                  notify   = false;
 
 	{
-		std::unique_lock lock(mMutex);
+		LockGuard lock(mMutex);
 
 		// Find the bucket.
 		auto bucket_it = gFindSorted(mPrioBuckets, priority);
@@ -795,17 +795,17 @@ void CookingThreadsQueue::FinishedCooking(CookingCommandID inCommandID)
 
 	// Notify outside of the lock, no reason to wake threads to immediately make them wait for the lock.
 	if (notify)
-		mBarrier.notify_all();
+		mBarrier.NotifyAll();
 }
 
 
 void CookingThreadsQueue::RequestStop()
 {
 	{
-		std::unique_lock lock(mMutex);
+		LockGuard lock(mMutex);
 		mStopRequested = true;
 	}
-	mBarrier.notify_all();
+	mBarrier.NotifyAll();
 }
 
 
@@ -1136,7 +1136,7 @@ void CookingSystem::StopCooking()
 	mJobObject = {};
 
 	mTimeOutUpdateThread.RequestStop();
-	mTimeOutAddedSignal.notify_one();
+	mTimeOutAddedSignal.NotifyOne();
 	mTimeOutTimerSignal.release();
 	mTimeOutUpdateThread.Join();
 }
@@ -1175,7 +1175,7 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 
 void CookingSystem::QueueDirtyCommands()
 {
-	std::lock_guard lock(mCommandsDirty.mMutex);
+	LockGuard lock(mCommandsDirty.mMutex);
 
 	for (auto& bucket : mCommandsDirty.mPrioBuckets)
 	{
@@ -1198,7 +1198,7 @@ void CookingSystem::QueueDirtyCommands()
 
 void CookingSystem::QueueErroredCommands()
 {
-	std::lock_guard lock(mCommandsDirty.mMutex);
+	LockGuard lock(mCommandsDirty.mMutex);
 
 	for (auto& bucket : mCommandsDirty.mPrioBuckets)
 	{
@@ -1550,12 +1550,12 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 {
 	{
-		std::lock_guard lock(mTimeOutMutex);
+		LockGuard lock(mTimeOutMutex);
 		mTimeOutNextBatch.insert(inLogEntry);
 	}
 
 	// Tell the thread there are timeouts to process.
-	mTimeOutAddedSignal.notify_one();
+	mTimeOutAddedSignal.NotifyOne();
 }
 
 
@@ -1570,12 +1570,12 @@ void CookingSystem::TimeOutUpdateThread()
 	while (true)
 	{
 		{
-			std::unique_lock lock(mTimeOutMutex);
+			LockGuard lock(mTimeOutMutex);
 
 			// Wait until there are time outs to update.
 			while (mTimeOutNextBatch.empty())
 			{
-				mTimeOutAddedSignal.wait(lock);
+				mTimeOutAddedSignal.Wait(lock);
 
 				if (mTimeOutUpdateThread.IsStopRequested())
 					return;
@@ -1599,7 +1599,7 @@ void CookingSystem::TimeOutUpdateThread()
 		
 		// Declare all the unfinished commands in the current buffer as errored.
 		{
-			std::lock_guard lock(mTimeOutMutex);
+			LockGuard lock(mTimeOutMutex);
 
 			for (CookingLogEntry* log_entry : mTimeOutCurrentBatch)
 			{
@@ -1634,7 +1634,7 @@ void CookingSystem::QueueUpdateDirtyStates(FileID inFileID)
 	if (file.mInputOf.Empty() && file.mOutputOf.Empty())
 		return; // Early out if we know there will be nothing to do.
 
-	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+	LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
 
 	for (CookingCommandID command_id : file.mInputOf)
 		mCommandsQueuedForUpdateDirtyState.insert(command_id);
@@ -1645,14 +1645,14 @@ void CookingSystem::QueueUpdateDirtyStates(FileID inFileID)
 
 void CookingSystem::QueueUpdateDirtyState(CookingCommandID inCommandID)
 {
-	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+	LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
 	mCommandsQueuedForUpdateDirtyState.insert(inCommandID);
 }
 
 
 bool CookingSystem::ProcessUpdateDirtyStates()
 {
-	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+	LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
 
 	for (auto it = mCommandsQueuedForUpdateDirtyState.begin(); it != mCommandsQueuedForUpdateDirtyState.end();)
 	{
@@ -1676,7 +1676,7 @@ bool CookingSystem::ProcessUpdateDirtyStates()
 
 void CookingSystem::UpdateAllDirtyStates()
 {
-	std::lock_guard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+	LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
 
 	for (CookingCommand& command : mCommands)
 		command.UpdateDirtyState();
@@ -1753,7 +1753,7 @@ bool CookingSystem::IsIdle() const
 
 	// If any command is still waiting for its final status, we're not idle.
 	{
-		std::lock_guard lock(mTimeOutMutex);
+		LockGuard lock(mTimeOutMutex);
 
 		if (!mTimeOutCurrentBatch.empty())
 				return false;

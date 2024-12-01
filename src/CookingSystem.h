@@ -12,8 +12,9 @@
 
 #include <Bedrock/String.h>
 #include <Bedrock/Thread.h>
+#include <Bedrock/Mutex.h>
+#include <Bedrock/ConditionVariable.h>
 
-#include <vector>
 
 enum class CommandVariables : uint8
 {
@@ -254,7 +255,7 @@ struct CookingQueue : NoCopy
 	size_t           GetSize() const;
 	bool             IsEmpty() const { return GetSize() == 0; }
 
-	void             PushInternal(std::unique_lock<std::mutex>& ioLock, int inPriority, CookingCommandID inCommandID, PushPosition inPosition);
+	void             PushInternal(MutexLockGuard& ioLock, int inPriority, CookingCommandID inCommandID, PushPosition inPosition);
 
 	struct PrioBucket
 	{
@@ -268,7 +269,7 @@ struct CookingQueue : NoCopy
 
 	Vector<PrioBucket>      mPrioBuckets;
 	size_t                  mTotalSize = 0;
-	mutable std::mutex      mMutex;
+	mutable Mutex           mMutex;
 };
 
 
@@ -290,7 +291,7 @@ struct CookingThreadsQueue : CookingQueue
 		auto operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
 	};
 	Vector<PrioData>        mPrioData;
-	std::condition_variable mBarrier;
+	ConditionVariable		mBarrier;
 	bool                    mStopRequested = false;
 };
 
@@ -356,7 +357,7 @@ private:
 	VMemArray<CookingCommand>             mCommands;
 
 	SegmentedHashSet<CookingCommandID>    mCommandsQueuedForUpdateDirtyState;
-	std::mutex                            mCommandsQueuedForUpdateDirtyStateMutex;
+	Mutex                                 mCommandsQueuedForUpdateDirtyStateMutex;
 
 	CookingQueue                          mCommandsDirty;	// All dirty commands.
 	CookingThreadsQueue                   mCommandsToCook;	// Commands that will get cooked by the cooking threads.
@@ -383,9 +384,9 @@ private:
 
 	HashSet<CookingLogEntry*>                mTimeOutCurrentBatch;
 	HashSet<CookingLogEntry*>                mTimeOutNextBatch;
-	mutable std::mutex                       mTimeOutMutex;
+	mutable Mutex                            mTimeOutMutex;
 	Thread                                   mTimeOutUpdateThread;
-	std::condition_variable                  mTimeOutAddedSignal;
+	ConditionVariable						 mTimeOutAddedSignal;
 	std::binary_semaphore                    mTimeOutTimerSignal = std::binary_semaphore(0);
 
 	OwnedHandle                              mJobObject; // JobObject used to make sure child processes are killed if this process ends.

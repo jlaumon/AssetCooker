@@ -714,7 +714,7 @@ void gDrawCookingQueue()
 		gCookingSystem.QueueErroredCommands();
 
 	// Lock the dirty command list while we're browsing it.
-	std::lock_guard lock(gCookingSystem.mCommandsDirty.mMutex);
+	LockGuard lock(gCookingSystem.mCommandsDirty.mMutex);
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{

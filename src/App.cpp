@@ -11,6 +11,7 @@
 #include "Debug.h"
 #include "CookingSystem.h"
 #include <Bedrock/Test.h>
+#include <Bedrock/Mutex.h>
 #include "UI.h"
 
 #include "win32/dbghelp.h"
@@ -89,8 +90,8 @@ bool App::IsExitReady()
 void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 {
 	// Make sure a single thread triggers the pop-up.
-	static std::mutex blocker;
-	blocker.lock();
+	static Mutex blocker;
+	blocker.Lock();
 
 	// Log the error first.
 	LogErrorV(inFmt, inArgs);
