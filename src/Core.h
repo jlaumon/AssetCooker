@@ -9,8 +9,6 @@
 #include <Bedrock/Core.h>
 #include <Bedrock/Random.h> // TODO: remove and add where needed
 
-#include <utility> // For std::swap
-
 
 // Basic containers.
 #include "ankerl/unordered_dense.h"

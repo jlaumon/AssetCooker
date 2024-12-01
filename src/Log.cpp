@@ -46,7 +46,7 @@ void Log::FinishLine(LogType inType, StringPool::ResizableStringView& inLine)
 
 StringView Log::Add(LogType inType, StringView inFmt, fmt::format_args inArgs)
 {
-	std::lock_guard lock(mMutex);
+	LockGuard lock(mMutex);
 
 	StringPool::ResizableStringView str = StartLine(inType);
 
@@ -60,7 +60,7 @@ StringView Log::Add(LogType inType, StringView inFmt, fmt::format_args inArgs)
 
 void Log::Clear()
 {
-	std::lock_guard lock(mMutex);
+	LockGuard lock(mMutex);
 	mLines.clear();
 	mStringPool.Clear();
 }
@@ -87,7 +87,7 @@ static void sDrawLine(const Log::Line& inLine)
 void Log::Draw(StringView inName, bool* ioOpen)
 {
 	{
-		std::lock_guard lock(mMutex);
+		LockGuard lock(mMutex);
 
 		ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
 		FixedString32 title("{}", inName);
@@ -102,7 +102,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 	if (ImGui::Button("Clear"))
 		Clear();
 
-	std::lock_guard lock(mMutex);
+	LockGuard lock(mMutex);
 
 	ImGui::Separator();
 	mFilter.Draw(R"(Filter ("incl,-excl") ("error"))", 400);

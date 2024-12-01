@@ -1582,7 +1582,7 @@ void CookingSystem::TimeOutUpdateThread()
 			}
 
 			// Swap the buffers.
-			std::swap(mTimeOutNextBatch, mTimeOutCurrentBatch);
+			gSwap(mTimeOutNextBatch, mTimeOutCurrentBatch);
 		}
 
 		do

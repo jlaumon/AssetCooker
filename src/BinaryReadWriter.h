@@ -27,7 +27,7 @@ struct BinaryWriter : NoCopy
 	template <typename taType>
 	void Write(Span<const taType> inSpan)
 	{
-		static_assert(std::has_unique_object_representations_v<taType>); // Don't write padding into the file.
+		static_assert(cHasUniqueObjectRepresentations<taType>); // Don't write padding into the file.
 
 		int size_bytes = inSpan.SizeInBytes();
 
@@ -81,7 +81,7 @@ struct BinaryReader : NoCopy
 			return;
 		}
 
-		static_assert(std::has_unique_object_representations_v<taType>); // Make sure there's no padding inside that type.
+		static_assert(cHasUniqueObjectRepresentations<taType>); // Make sure there's no padding inside that type.
 
 		memcpy(outSpan.Data(), mBuffer.Begin() + mCurrentOffset, outSpan.SizeInBytes());
 		mCurrentOffset += outSpan.SizeInBytes();

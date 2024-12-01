@@ -164,7 +164,7 @@ void App::OpenLogFile()
 	// Open the log file.
 	{
 		// Do it inside the log lock because we want to dump the current log into the file before more is added.
-		std::lock_guard lock(mLog.mMutex);
+		LockGuard lock(mLog.mMutex);
 
 		mLogFile = fopen(new_log_file.AsCStr(), "wt");
 		

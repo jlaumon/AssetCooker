@@ -8,8 +8,8 @@
 #include "Core.h"
 #include <Bedrock/Ticks.h>
 
-#include <condition_variable>
-#include <mutex>
+#include <Bedrock/Mutex.h>
+#include <Bedrock/ConditionVariable.h>
 
 
 struct SyncSignal : NoCopy
@@ -27,8 +27,8 @@ struct SyncSignal : NoCopy
 	inline void             SetAutoClear(bool inAutoClear) { mAutoClear = inAutoClear; }
 
 private:
-	std::condition_variable mCond;
-	std::mutex              mMutex;
+	ConditionVariable       mCond;
+	Mutex                   mMutex;
 	bool                    mIsSet     = false;
 	bool                    mAutoClear = true;
 };
@@ -37,7 +37,7 @@ private:
 void SyncSignal::Set()
 {
 	{
-		std::unique_lock lock(mMutex);
+		LockGuard lock(mMutex);
 		if (mIsSet == true)
 			return; // Already set, nothing to do.
 
@@ -45,26 +45,26 @@ void SyncSignal::Set()
 	}
 
 	if (mAutoClear)
-		mCond.notify_one();
+		mCond.NotifyOne();
 	else
-		mCond.notify_all();
+		mCond.NotifyAll();
 }
 
 
 void SyncSignal::Clear()
 {
-	std::unique_lock lock(mMutex);
+	LockGuard lock(mMutex);
 	mIsSet = false;
 }
 
 
 void SyncSignal::Wait()
 {
-	std::unique_lock lock(mMutex);
+	LockGuard lock(mMutex);
 
 	while (!mIsSet)
 	{
-		mCond.wait(lock);
+		mCond.Wait(lock);
 	}
 
 	if (mAutoClear)
@@ -74,18 +74,18 @@ void SyncSignal::Wait()
 
 SyncSignal::WaitResult SyncSignal::WaitFor(int64 inTicks)
 {
-	std::unique_lock lock(mMutex);
+	LockGuard lock(mMutex);
 
 	while (!mIsSet)
 	{
 		int64 start_ticks = gGetTickCount();
 
-		if (mCond.wait_for(lock, std::chrono::nanoseconds(gTicksToNanoseconds(inTicks))) == std::cv_status::timeout)
+		if (mCond.Wait(lock, (NanoSeconds)gTicksToNanoseconds(inTicks)) == ConditionVariable::WaitResult::Timeout)
 			return WaitResult::Timeout;
 
 		// Decrease the time to wait in case it was a spurious wake up.
 		int64 elapsed_ticks = gGetTickCount() - start_ticks;
-		inTicks = gMax(inTicks - elapsed_ticks, (int64)0);
+		inTicks -= gMax(inTicks - elapsed_ticks, (int64)0);
 	}
 
 	if (mAutoClear)

@@ -1415,7 +1415,7 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 			mIsMonitorDirThreadIdle.Store(true);
 
 			// Wait for some time before checking the USN journals again (unless we're being signaled).
-			std::ignore = mMonitorDirThreadSignal.WaitFor(gSecondsToTicks(1.0));
+			(void)mMonitorDirThreadSignal.WaitFor(gSecondsToTicks(1.0));
 
 			// Not idle anymore.
 			mIsMonitorDirThreadIdle.Store(false);
@@ -1918,8 +1918,8 @@ void FileSystem::SaveCache()
 	Span rules = gCookingSystem.GetRules();
 
 	// Build the list of commands for each rule.
-	std::vector<SegmentedVector<CookingCommandID>> commands_per_rule;
-	commands_per_rule.resize(rules.Size());
+	Vector<SegmentedVector<CookingCommandID>> commands_per_rule;
+	commands_per_rule.Resize(rules.Size());
 	for (const CookingCommand& command : gCookingSystem.GetCommands())
 	{
 		// Skip cleaned up commands. Their inputs don't exist anymore, we don't need to save anything.

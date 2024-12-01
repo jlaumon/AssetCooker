@@ -7,6 +7,8 @@
 #include "StringPool.h"
 #include "imgui.h"
 
+#include <Bedrock/Mutex.h>
+
 enum class LogType : uint8
 {
 	Normal,
@@ -46,7 +48,7 @@ struct Log
 	
 	SegmentedVector<Line>   mLines;
 	StringPool              mStringPool;
-	std::mutex              mMutex;
+	Mutex                   mMutex;
 	ImGuiTextFilter         mFilter;
 	bool                    mAutoAddErrorTag = false;
 	bool                    mAutoAddTime     = false;
