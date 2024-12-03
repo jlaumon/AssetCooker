@@ -332,10 +332,6 @@ struct CookingSystem : NoCopy
 	CookingLogEntry&                      AllocateCookingLogEntry(CookingCommandID inCommandID);
 
 	bool                                  mSlowMode = false; // Slows down cooking, for debugging.
-
-	// Experimental, used by main.cpp
-	void                                  QueueErroredCommands();
-
 private:
 	friend struct CookingCommand;
 	friend void gDrawCookingQueue();
@@ -350,6 +346,7 @@ private:
 	void                                  AddTimeOut(CookingLogEntry* inLogEntry);
 	void                                  TimeOutUpdateThread(std::stop_token inStopToken);
 	void                                  QueueDirtyCommands();
+	void                                  QueueErroredCommands();
 
 	VMemArray<CookingRule>                mRules      = { 1024ull * 1024, 4096 };
 	StringPool                            mStringPool = { 64ull * 1024 };

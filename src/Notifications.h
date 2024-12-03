@@ -11,7 +11,7 @@ constexpr uint32 cNotifCallbackID = 0x8001; //  ie. WM_APP + 1
 [[maybe_unused]]
 constexpr uint32 cNotifMenuId = 0x8100;
 constexpr uint32 cNotifMenuExit = 0x8101;
-constexpr uint32 cNotifMenuCookErrored = 0x8102;
+constexpr uint32 cNotifMenuPauseCooking = 0x8102;
 
 enum class NotifType
 {

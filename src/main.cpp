@@ -525,8 +525,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_COMMAND:
 		switch (wParam)
 		{
-		case cNotifMenuCookErrored:
-			gCookingSystem.QueueErroredCommands();
+		case cNotifMenuPauseCooking:
+			gCookingSystem.SetCookingPaused(!gCookingSystem.IsCookingPaused());
 			break;
 			// Exit
 		case cNotifMenuExit:
@@ -563,7 +563,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 			HMENU hMenu = CreatePopupMenu();
 			gApp.mNotifMenuHmenu = hMenu;
-			ret = InsertMenu(hMenu, 0, MF_BYPOSITION | MF_STRING, cNotifMenuCookErrored, L"Cook errored");
+			bool isCookingPaused = gCookingSystem.IsCookingPaused(); 
+			ret = InsertMenu(hMenu, 0, MF_BYPOSITION | MF_STRING, cNotifMenuPauseCooking,  isCookingPaused ? L"Resume cooking" : L"Pause cooking");
 			gAssert(ret);
 			ret = InsertMenu(hMenu, -1, MF_BYPOSITION | MF_STRING, cNotifMenuExit, L"Exit");
 			gAssert(ret);
