@@ -522,6 +522,28 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	#endif
 		}
 		break;
+	case WM_COMMAND:
+		switch (wParam)
+		{
+		case cNotifMenuCookErrored:
+			gCookingSystem.QueueErroredCommands();
+			break;
+			// Exit
+		case cNotifMenuExit:
+			gApp.RequestExit();
+			break;
+		default:
+			break;
+		}
+		break;
+	case WM_UNINITMENUPOPUP:
+		// Reset the stored handle to prevent menu recreation.
+		if (wParam == reinterpret_cast<UINT_PTR>(gApp.mNotifMenuHmenu))
+		{
+			gApp.mNotifMenuHmenu = nullptr;
+		}
+		break;
+		
 	case cNotifCallbackID:
 		if (lParam == WM_LBUTTONDOWN ||     // Click on the notif icon
 			lParam == NIN_BALLOONUSERCLICK) // Click on the notif popup
@@ -530,7 +552,26 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			SetFocus(hWnd);                 // Set the focus on the window.
 			SetForegroundWindow(hWnd);      // And bring it to the foreground.
 		}
+		
+		if (lParam ==  WM_RBUTTONDOWN &&     // Right click on notification icon.
+			gApp.mNotifMenuHmenu == nullptr) // Create the menu only if it's not already open.
+		{
+			// Create the menu where the mouse is placed.
+			POINT cursorPosition = {};
+			BOOL ret = GetCursorPos(&cursorPosition);
+			gAssert(ret);
+
+			HMENU hMenu = CreatePopupMenu();
+			gApp.mNotifMenuHmenu = hMenu;
+			ret = InsertMenu(hMenu, 0, MF_BYPOSITION | MF_STRING, cNotifMenuCookErrored, L"Cook errored");
+			gAssert(ret);
+			ret = InsertMenu(hMenu, -1, MF_BYPOSITION | MF_STRING, cNotifMenuExit, L"Exit");
+			gAssert(ret);
+			ret = TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_BOTTOMALIGN, cursorPosition.x, cursorPosition.y, 0, hWnd, nullptr);
+			gAssert(ret);
+		}
 		break;
 	}
+			
 	return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
