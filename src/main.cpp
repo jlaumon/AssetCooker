@@ -564,9 +564,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			HMENU hMenu = CreatePopupMenu();
 			gApp.mNotifMenuHmenu = hMenu;
 			bool isCookingPaused = gCookingSystem.IsCookingPaused(); 
-			ret = InsertMenu(hMenu, 0, MF_BYPOSITION | MF_STRING, cNotifMenuPauseCooking,  isCookingPaused ? L"Resume cooking" : L"Pause cooking");
+			ret = InsertMenuA(hMenu, 0, MF_BYPOSITION | MF_STRING, cNotifMenuPauseCooking,  isCookingPaused ? "Resume cooking" : "Pause cooking");
 			gAssert(ret);
-			ret = InsertMenu(hMenu, -1, MF_BYPOSITION | MF_STRING, cNotifMenuExit, L"Exit");
+			ret = InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_STRING, cNotifMenuExit, "Exit");
 			gAssert(ret);
 			ret = TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_BOTTOMALIGN, cursorPosition.x, cursorPosition.y, 0, hWnd, nullptr);
 			gAssert(ret);
