@@ -7,9 +7,6 @@
 #include "Strings.h"
 
 constexpr uint32 cNotifCallbackID = 0x8001; //  ie. WM_APP + 1
-// Not used yet but could be used as an ID mask to dispatch events.
-[[maybe_unused]]
-constexpr uint32 cNotifMenuId = 0x8100;
 constexpr uint32 cNotifMenuExit = 0x8101;
 constexpr uint32 cNotifMenuPauseCooking = 0x8102;
 
