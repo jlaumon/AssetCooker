@@ -261,7 +261,7 @@ TempPath gFormat(const CookingLogEntry& inLogEntry)
 		start_time.mHour, start_time.mMinute, start_time.mSecond,
 		command.GetRule().mName,
 		inLogEntry.mIsCleanup ? " (Cleanup)" : "",
-		command.GetMainInput().GetFile().mPath, gToStringView(inLogEntry.mCookingState) };
+		command.GetMainInput().GetFile().mPath, gToStringView(inLogEntry.mCookingState.Load()) };
 }
 
 
@@ -845,7 +845,7 @@ void gDrawCookingLog()
 				};
 				static_assert(gElemCount(cIcons) == (size_t)CookingState::_Count);
 
-				auto cooking_state = log_entry.mCookingState.load();
+				auto cooking_state = log_entry.mCookingState.Load();
 				auto icon          = cIcons[(int)cooking_state];
 
 				if (cooking_state == CookingState::Cooking || cooking_state == CookingState::Waiting)
@@ -913,7 +913,7 @@ void gDrawSelectedCookingLogEntry()
 	if (ImGui::BeginChild("ScrollingRegion", {}, ImGuiChildFlags_FrameStyle, ImGuiWindowFlags_HorizontalScrollbar))
 	{
 		// If it's finished cooking, it's safe to read the log output.
-		if (log_entry.mCookingState > CookingState::Cooking)
+		if (log_entry.mCookingState.Load() > CookingState::Cooking)
 		{
 			//ImGui::PushTextWrapPos();
 			ImGui::TextUnformatted(log_entry.mOutput);

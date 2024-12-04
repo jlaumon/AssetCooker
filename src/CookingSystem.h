@@ -15,6 +15,7 @@
 #include <Bedrock/Mutex.h>
 #include <Bedrock/ConditionVariable.h>
 #include <Bedrock/Semaphore.h>
+#include <Bedrock/Atomic.h>
 
 
 enum class CommandVariables : uint8
@@ -170,7 +171,7 @@ struct CookingLogEntry
 {
 	CookingLogEntryID         mID;
 	CookingCommandID          mCommandID;
-	std::atomic<CookingState> mCookingState = CookingState::Unknown;
+	Atomic<CookingState>      mCookingState = CookingState::Unknown;
 	bool                      mIsCleanup    = false;
 	FileTime                  mTimeStart;
 	FileTime                  mTimeEnd;		// Unsafe to read unless CookingState is > Cooking. TODO add getters that assert this
@@ -214,7 +215,7 @@ struct CookingCommand : NoCopy
 	bool                            NeedsCleanup() const { return (mDirtyState & AllStaticInputsMissing) && !IsCleanedUp(); }
 	bool                            IsCleanedUp() const { return (mDirtyState & (AllStaticInputsMissing | AllOutputsMissing)) == (AllStaticInputsMissing | AllOutputsMissing); }
 
-	CookingState                    GetCookingState() const { return mLastCookingLog ? mLastCookingLog->mCookingState.load() : CookingState::Unknown; }
+	CookingState                    GetCookingState() const { return mLastCookingLog ? mLastCookingLog->mCookingState.Load() : CookingState::Unknown; }
 
 	bool                            ReadDepFile();
 

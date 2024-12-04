@@ -1797,7 +1797,7 @@ void FileSystem::LoadCache()
 			CookingLogEntry& log_entry = gCookingSystem.AllocateCookingLogEntry(command_id);
 			log_entry.mTimeStart       = command.mLastCookTime;
 			log_entry.mOutput          = output_log;
-			log_entry.mCookingState    = CookingState::Error;
+			log_entry.mCookingState.Store(CookingState::Error);
 
 			command.mLastCookingLog    = &log_entry;
 		}

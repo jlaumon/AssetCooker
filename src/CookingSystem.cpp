@@ -409,7 +409,7 @@ void CookingCommand::UpdateDirtyState()
 	// TODO there is no dedicated dirty state for the case where an output is outdated (ie. was not written), instead it's just an nondescript error and it's very confusing
 
 	// Dirty state should not be updated while still cooking!
-	gAssert(!mLastCookingLog || mLastCookingLog->mCookingState > CookingState::Cooking);
+	gAssert(!mLastCookingLog || mLastCookingLog->mCookingState.Load() > CookingState::Cooking);
 
 	DirtyState dirty_state = NotDirty;
 
@@ -490,9 +490,9 @@ void CookingCommand::UpdateDirtyState()
 	if (all_output_missing)
 		dirty_state |= AllOutputsMissing;
 
-	bool last_cook_is_waiting = mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting;
+	bool last_cook_is_waiting = mLastCookingLog && mLastCookingLog->mCookingState.Load() == CookingState::Waiting;
 	bool last_cook_is_cleanup = mLastCookingLog && mLastCookingLog->mIsCleanup;
-	bool last_cook_is_error   = mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Error;
+	bool last_cook_is_error   = mLastCookingLog && mLastCookingLog->mCookingState.Load() == CookingState::Error;
 
 	if (last_cook_is_error)
 		dirty_state |= Error;
@@ -503,7 +503,7 @@ void CookingCommand::UpdateDirtyState()
 		if (!last_cook_is_cleanup && all_output_written ||
 			last_cook_is_cleanup && all_output_missing)
 		{
-			mLastCookingLog->mCookingState = CookingState::Success;
+			mLastCookingLog->mCookingState.Store(CookingState::Success);
 			last_cook_is_waiting = false;
 		}
 	}
@@ -566,8 +566,8 @@ bool CookingCommand::ReadDepFile()
 		if (!gReadDepFile(GetRule().mDepFileFormat, GetDepFile(), inputs, outputs))
 		{
 			// If the command was cooking, set its state to error.
-			if (mLastCookingLog && mLastCookingLog->mCookingState == CookingState::Waiting)
-				mLastCookingLog->mCookingState = CookingState::Error;
+			if (mLastCookingLog && mLastCookingLog->mCookingState.Load() == CookingState::Waiting)
+				mLastCookingLog->mCookingState.Store(CookingState::Error);
 
 			// Return failure.
 			return false;
@@ -1342,7 +1342,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		// - its state is updated
 		// That normally happens when the outputs (and the dep file) are written, but that might not happen at all if there is an error.
 		// This is important to then properly detect when the inputs change again and the command can re-cook.
-		if (log_entry.mCookingState == CookingState::Error)
+		if (log_entry.mCookingState.Load() == CookingState::Error)
 		{
 			// If the last cook USN wasn't updated because there's a dep file, do it now with the currently known inputs.
 			if (rule.UseDepFile())
@@ -1382,8 +1382,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 		if (!all_inputs_exist)
 		{
-			log_entry.mOutput       = output_str.AsStringView();
-			log_entry.mCookingState = CookingState::Error;
+			log_entry.mOutput = output_str.AsStringView();
+			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
 	}
@@ -1404,8 +1404,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 		if (!all_dirs_exist)
 		{
-			log_entry.mOutput       = output_str.AsStringView();
-			log_entry.mCookingState = CookingState::Error;
+			log_entry.mOutput = output_str.AsStringView();
+			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
 	}
@@ -1414,8 +1414,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	if (gDebugFailCookingRandomly && (gRand32() % 5) == 0)
 	{
 		output_str.Append("Uh oh! This is a fake failure for debug purpose!\n");
-		log_entry.mOutput       = output_str.AsStringView();
-		log_entry.mCookingState = CookingState::Error;
+		log_entry.mOutput = output_str.AsStringView();
+		log_entry.mCookingState.Store(CookingState::Error);
 		return;
 	}
 
@@ -1428,8 +1428,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		if (!dep_command_line)
 		{
 			output_str.Append("[error] Failed to format dep file command line.\n");
-			log_entry.mOutput       = output_str.AsStringView();
-			log_entry.mCookingState = CookingState::Error;
+			log_entry.mOutput = output_str.AsStringView();
+			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
 	}
@@ -1442,8 +1442,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		if (!command_line)
 		{
 			output_str.Append("[error] Failed to format command line.\n");
-			log_entry.mOutput       = output_str.AsStringView();
-			log_entry.mCookingState = CookingState::Error;
+			log_entry.mOutput = output_str.AsStringView();
+			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
 
@@ -1481,13 +1481,13 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	if (!success)
 	{
-		log_entry.mCookingState = CookingState::Error;
+		log_entry.mCookingState.Store(CookingState::Error);
 	}
 	else
 	{
 
 		// Now we wait for confirmation that the outputs were written (and if yes, it's a success).
-		log_entry.mCookingState = CookingState::Waiting;
+		log_entry.mCookingState.Store(CookingState::Waiting);
 
 		// Any time an output is detected changed, we will try updating the cooking state.
 		// If all outputs were written, cooking is a success.
@@ -1535,11 +1535,11 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 
 	if (error)
 	{
-		log_entry.mCookingState = CookingState::Error;
+		log_entry.mCookingState.Store(CookingState::Error);
 	}
 	else
 	{
-		log_entry.mCookingState = CookingState::Waiting;
+		log_entry.mCookingState.Store(CookingState::Waiting);
 		AddTimeOut(&log_entry);
 
 		// Make sure the file changes are processed as soon as possible.
@@ -1603,9 +1603,9 @@ void CookingSystem::TimeOutUpdateThread()
 			for (CookingLogEntry* log_entry : mTimeOutCurrentBatch)
 			{
 				// At this point if the state is still Waiting, we can consider it a failure: some outputs were not written.
-				if (log_entry->mCookingState == CookingState::Waiting)
+				if (log_entry->mCookingState.Load() == CookingState::Waiting)
 				{
-					log_entry->mCookingState = CookingState::Error;
+					log_entry->mCookingState.Store(CookingState::Error);
 
 					// Update the total count of errors.
 					mCookingErrors.Add(1);
@@ -1657,7 +1657,7 @@ bool CookingSystem::ProcessUpdateDirtyStates()
 	{
 		CookingCommand& command = GetCommand(*it);
 
-		if (command.mLastCookingLog && command.mLastCookingLog->mCookingState == CookingState::Cooking)
+		if (command.mLastCookingLog && command.mLastCookingLog->mCookingState.Load() == CookingState::Cooking)
 		{
 			++it; // Still cooking, check again later.
 		}
@@ -1733,7 +1733,7 @@ CookingLogEntry& CookingSystem::AllocateCookingLogEntry(CookingCommandID inComma
 	CookingLogEntry& log_entry = mCookingLog.Emplace(lock);
 	log_entry.mID              = { (uint32)mCookingLog.SizeRelaxed() - 1 };
 	log_entry.mCommandID       = inCommandID;
-	log_entry.mCookingState    = CookingState::Cooking;
+	log_entry.mCookingState.Store(CookingState::Cooking);
 
 	return log_entry;
 }
