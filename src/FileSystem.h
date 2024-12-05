@@ -17,7 +17,6 @@
 #include <Bedrock/Mutex.h>
 #include <Bedrock/ConditionVariable.h>
 
-#include <semaphore>
 #include <optional>
 
 // Forward declarations.

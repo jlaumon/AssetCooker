@@ -7,9 +7,7 @@
 
 #include "Core.h"
 
-#include <span>
 #include <string_view>
-#include <string>
 #include <optional>
 #include "fmt/format.h"
 
