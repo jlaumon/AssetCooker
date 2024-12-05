@@ -345,7 +345,7 @@ struct FileSystem : NoCopy
 		PreparingCommands,
 		Ready
 	};
-	InitState       GetInitState() const { return mInitState; }
+	InitState       GetInitState() const { return mInitState.Load(); }
 
 	void            SaveCache();
 	void            LoadCache();
@@ -366,7 +366,7 @@ private:
 	VMemArray<FileRepo>        mRepos  = { 10'000'000, gVMemCommitGranularity() };
 	VMemArray<FileDrive>       mDrives = { 10'000'000, gVMemCommitGranularity() };        // All the drives that have at least one repo on them.
 
-	std::atomic<InitState>     mInitState = InitState::NotInitialized;
+	Atomic<InitState>          mInitState = InitState::NotInitialized;
 	struct InitStats
 	{
 		int             mIndividualUSNToFetch = 0;

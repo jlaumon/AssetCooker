@@ -1304,8 +1304,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	// Set the start time.
 	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
 
-	ioThread.mCurrentLogEntry  = log_entry.mID;
-	defer { ioThread.mCurrentLogEntry = CookingLogEntryID::cInvalid(); };
+	ioThread.mCurrentLogEntry.Store(log_entry.mID);
+	defer { ioThread.mCurrentLogEntry.Store(CookingLogEntryID::cInvalid()); };
 
 	// Set the log entry on the command.
 	ioCommand.mLastCookingLog = &log_entry;
@@ -1508,8 +1508,8 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 	// Set the start time.
 	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
 
-	ioThread.mCurrentLogEntry  = log_entry.mID;
-	defer { ioThread.mCurrentLogEntry = CookingLogEntryID::cInvalid(); };
+	ioThread.mCurrentLogEntry.Store(log_entry.mID);
+	defer { ioThread.mCurrentLogEntry.Store(CookingLogEntryID::cInvalid()); };
 
 	// Set the log entry on the command.
 	ioCommand.mLastCookingLog = &log_entry;
@@ -1747,7 +1747,7 @@ bool CookingSystem::IsIdle() const
 
 	// If any worker is busy, we're not idle.
 	for (auto& thread : mCookingThreads)
-		if (thread.mCurrentLogEntry.load() != CookingLogEntryID::cInvalid())
+		if (thread.mCurrentLogEntry.Load() != CookingLogEntryID::cInvalid())
 			return false;
 
 	// If any command is still waiting for its final status, we're not idle.

@@ -1090,7 +1090,7 @@ void gDrawCookingThreads()
 			ImGui::TableNextColumn();
 			ImGui::BeginChild(ImGui::GetID(&thread), ImVec2(0, ImGui::GetFrameHeight()), ImGuiChildFlags_FrameStyle);
 			
-			CookingLogEntryID entry_id = thread.mCurrentLogEntry.load();
+			CookingLogEntryID entry_id = thread.mCurrentLogEntry.Load();
 			if (entry_id.IsValid())
 			{
 				const CookingLogEntry& entry_log = gCookingSystem.GetLogEntry(entry_id);

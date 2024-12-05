@@ -7,11 +7,10 @@
 
 #include "Core.h"
 
-#include <atomic>
 #include <optional>
-#include <functional>
 
 #include <Bedrock/Mutex.h>
+#include <Bedrock/Atomic.h>
 
 struct VMemBlock
 {
@@ -46,8 +45,8 @@ struct VMemArray : NoCopy
 
 		// Reserve backing memory on immediately as we want safe read access without lock.
 		mBegin        = (taType*)gVMemReserve(mSizeToReserve).mBegin;
-		mEnd          = mBegin;
 		mEndCommitted = (uint8*)mBegin;
+		mEnd.Store(mBegin, MemoryOrder::Relaxed);
 	}
 
 	~VMemArray()
@@ -97,7 +96,7 @@ struct VMemArray : NoCopy
 	// Meant to be used with a manual lock: first lock, then reserve, then construct elements manually, then set size.
 	void IncreaseSize(size_t inSizeIncreaseInElements, const VMemArrayLock& inLock)
 	{
-		mEnd += inSizeIncreaseInElements;
+		mEnd.Store(mEnd.Load(MemoryOrder::Relaxed) + inSizeIncreaseInElements, MemoryOrder::Relaxed);
 	}
 
 	// Make sure enough memory is committed for that many more elements.
@@ -106,7 +105,7 @@ struct VMemArray : NoCopy
 	{
 		ValidateLock(inLock);
 
-		taType* cur_end = mEnd.load(std::memory_order::relaxed);
+		taType* cur_end = mEnd.Load(MemoryOrder::Relaxed);
 		taType* new_end = cur_end + inExtraCapacityInElements;
 
 		// Do we need to commit more memory?
@@ -130,7 +129,7 @@ struct VMemArray : NoCopy
 		(void)lock;
 
 		Span elements = *this;
-		mEnd          = mBegin;
+		mEnd.Store(mBegin);
 
 		for (taType& element : elements)
 			element.~taType();
@@ -139,26 +138,26 @@ struct VMemArray : NoCopy
 	taType&              operator[](size_t inIndex)			{ gAssert(inIndex < Size()); return mBegin[inIndex]; }
 	const taType&        operator[](size_t inIndex) const	{ gAssert(inIndex < Size()); return mBegin[inIndex]; }
 					     
-	size_t               Size() const						{ return mEnd - mBegin; }
-	size_t               SizeRelaxed() const				{ return mEnd.load(std::memory_order::relaxed) - mBegin; }	// To use inside lock scope.
+	size_t               Size() const						{ return mEnd.Load() - mBegin; }
+	size_t               SizeRelaxed() const				{ return mEnd.Load(MemoryOrder::Relaxed) - mBegin; }	// To use inside lock scope.
 	size_t               CapacityInBytes() const			{ return (uint8*)mBegin - mEndCommitted; }
 	size_t               MaxCapacityInBytes() const			{ return mSizeToReserve; }
 
 	taType*              Begin()							{ return mBegin; }
-	taType*              End()								{ return mEnd; }
+	taType*              End()								{ return mEnd.Load(); }
 	taType*              begin()							{ return mBegin; }
-	taType*              end()								{ return mEnd; }
+	taType*              end()								{ return mEnd.Load(); }
 	const taType*        Begin()	const					{ return mBegin; }
-	const taType*        End()		const					{ return mEnd; }
+	const taType*        End()		const					{ return mEnd.Load(); }
 	const taType*        begin()	const					{ return mBegin; }
-	const taType*        end()		const					{ return mEnd; }
+	const taType*        end()		const					{ return mEnd.Load(); }
 
 private:
 	void                 ValidateLock(const VMemArrayLock& inLock) const { gAssert(inLock.GetMutex() == &mMutex); }
 
-	taType*              mBegin         = nullptr;
-	std::atomic<taType*> mEnd           = nullptr;
-	uint8*               mEndCommitted  = nullptr;
+	taType*              mBegin        = nullptr;
+	Atomic<taType*>      mEnd          = nullptr;
+	uint8*               mEndCommitted = nullptr;
 	Mutex                mMutex;
 	size_t               mSizeToReserve = 1024ull * 1024 * 1024;
 	size_t               mMinCommitSize = 256ull * 1024;			// Minimum size to commit at once, to avoid calling gVMemCommit too often.

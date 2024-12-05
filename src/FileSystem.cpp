@@ -1110,7 +1110,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 	gApp.Log("Starting initial scan.");
 	Timer timer;
-	mInitState = InitState::Scanning;
+	mInitState.Store(InitState::Scanning);
 
 	// Don't use too many threads otherwise they'll just spend their time on the hashmap mutex.
 	// TODO this could be improved
@@ -1174,7 +1174,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
 		total_files, gTicksToSeconds(timer.GetTicks()));
 
-	mInitState = InitState::ReadingUSNJournal;
+	mInitState.Store(InitState::ReadingUSNJournal);
 
 	for (FileDrive& drive : mDrives)
 	{
@@ -1229,7 +1229,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 	mInitStats.mIndividualUSNToFetch = files_without_usn.Size();
 	mInitStats.mIndividualUSNFetched.Store(0);
-	mInitState = InitState::ReadingIndividualUSNs;
+	mInitState.Store(InitState::ReadingIndividualUSNs);
 
 	if (!files_without_usn.Empty())
 	{
@@ -1328,7 +1328,7 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 	// Scan the drives that were not intialized from the cache.
 	InitialScan(inThread, buffer_usn);
 	
-	mInitState = InitState::PreparingCommands;
+	mInitState.Store(InitState::PreparingCommands);
 
 	// Create the commands for all the files.
 	for (auto& repo : mRepos)
@@ -1339,7 +1339,7 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 	gCookingSystem.UpdateAllDirtyStates();
 
 	mInitStats.mReadyTicks = gGetTickCount();
-	mInitState = InitState::Ready;
+	mInitState.Store(InitState::Ready);
 
 	// Once the scan is finished, start cooking.
 	gCookingSystem.StartCooking();
@@ -1478,7 +1478,7 @@ void FileSystem::LoadCache()
 {
 	gApp.Log("Loading cached state.");
 	Timer timer;
-	mInitState = InitState::LoadingCache;
+	mInitState.Store(InitState::LoadingCache);
 
 	FixedString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
 	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "rb");

@@ -368,7 +368,7 @@ private:
 	{
 		Thread                         mThread;
 		StringPool                     mStringPool;
-		std::atomic<CookingLogEntryID> mCurrentLogEntry;
+		Atomic<CookingLogEntryID>      mCurrentLogEntry;
 	};
 	SegmentedVector<CookingThread, 64>       mCookingThreads;
 	bool                                     mCookingStartPaused     = false;
