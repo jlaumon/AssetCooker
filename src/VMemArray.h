@@ -11,6 +11,7 @@
 
 #include <Bedrock/Mutex.h>
 #include <Bedrock/Atomic.h>
+#include <Bedrock/PlacementNew.h>
 
 struct VMemBlock
 {
@@ -81,15 +82,15 @@ struct VMemArray : NoCopy
 		// If no lock was provided, make a new one.
 		const VMemArrayLock& lock = inLock ? (const VMemArrayLock&)*inLock : (const VMemArrayLock&)Lock();
 
-		taType* new_element = &EnsureCapacity(1, lock)[0];
+		taType& new_element = EnsureCapacity(1, lock)[0];
 
 		// Call constructor.
-		new (new_element) taType(std::forward<taArgs>(inArgs)...);
+		gPlacementNew(new_element, gForward<taArgs>(inArgs)...);
 
 		// Update mEnd last to let readers see the new element only when it's ready.
 		IncreaseSize(1, lock);
 
-		return *new_element;
+		return new_element;
 	}
 
 	// Increase the current size. This is not like resize, elements are not constructed.
