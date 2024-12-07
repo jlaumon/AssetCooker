@@ -18,6 +18,8 @@
 #include "win32/misc.h"
 #include "win32/process.h"
 
+#include <Bedrock/StringFormat.h>
+
 // Debug toggle to fake cooking failures, to test error handling.
 bool gDebugFailCookingRandomly = false;
 
@@ -1807,12 +1809,12 @@ void CookingSystem::UpdateNotifications()
 		{
 			size_t command_count = cooking_log_size - mLastNotifCookingLogSize;
 			if (gShouldNotify(gApp.mEnableNotifOnCookingFinish))
-				gNotifAdd(NotifType::Info, "Cooking finished!", FixedString128("{} {}.", command_count, command_count > 1 ? "commands" : "command"));
+				gNotifAdd(NotifType::Info, "Cooking finished!", gTempFormat("%d %s.", (int)command_count, command_count > 1 ? "commands" : "command"));
 		}
 		else
 		{
 			if (gShouldNotify(gApp.mEnableNotifOnCookingFinish) || gShouldNotify(gApp.mEnableNotifOnCookingError))
-				gNotifAdd(NotifType::Error, "Cooking finished with errors.", FixedString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
+				gNotifAdd(NotifType::Error, "Cooking finished with errors.", gTempFormat("%d %s.", error_count, error_count > 1 ? "errors" : "error"));
 		}
 
 		// Update the last notif values even if we didn't actually display a notif,
@@ -1825,7 +1827,7 @@ void CookingSystem::UpdateNotifications()
 	{
 		if (gShouldNotify(gApp.mEnableNotifOnCookingError))
 		{
-			gNotifAdd(NotifType::Error, "Oh la la!", FixedString128("{} {}.", error_count, error_count > 1 ? "errors" : "error"));
+			gNotifAdd(NotifType::Error, "Oh la la!", gTempFormat("%d %s.", error_count, error_count > 1 ? "errors" : "error"));
 
 			// Here however only update the last notif values if we actually display a notif,
 			// because otherwise it might cause the next cooking finished notif to be skipped.

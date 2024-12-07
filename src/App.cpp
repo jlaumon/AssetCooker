@@ -12,6 +12,8 @@
 #include "CookingSystem.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Mutex.h>
+#include <Bedrock/StringFormat.h>
+#include <Bedrock/String.h>
 #include "UI.h"
 
 #include "win32/dbghelp.h"
@@ -45,7 +47,7 @@ void App::Init()
 	// Lock a system-wide mutex to prevent multiple instances of the app from running at the same time.
 	// The name of the mutex is what matters, so make sure it's unique by including a UUID
 	// and the configurable window title (to allow multiple instances if they are cooking different projects).
-	mSingleInstanceMutex = CreateMutexA(nullptr, FALSE, FixedString256("Asset Cooker eb835e40-e91e-4cfb-8e71-a68d3367bb7e {}", mMainWindowTitle).AsCStr());
+	mSingleInstanceMutex = CreateMutexA(nullptr, FALSE, gTempFormat("Asset Cooker eb835e40-e91e-4cfb-8e71-a68d3367bb7e %s", mMainWindowTitle.AsCStr()).AsCStr());
 	if (GetLastError() == ERROR_ALREADY_EXISTS)
 		FatalError("An instance of Asset Cooker is already running. Too many Cooks!");
 
@@ -103,7 +105,12 @@ void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 		// Don't make popups when running tests.
 		// TODO: also if running in command line mode/no UI mode
 		if (!gIsRunningTest())
-			MessageBoxA(nullptr, FixedString512(inFmt, inArgs).AsCStr(), FixedString512("{} - Fatal Error!", mMainWindowTitle).AsCStr(), MB_OK | MB_ICONERROR | MB_APPLMODAL);
+		{
+			MessageBoxA(nullptr, 
+				FixedString512(inFmt, inArgs).AsCStr(), 
+				gTempFormat("%s - Fatal Error!", mMainWindowTitle.AsCStr()).AsCStr(), 
+				MB_OK | MB_ICONERROR | MB_APPLMODAL);
+		}
 	}
 
 	LogError("Fatal error, exiting now.");
@@ -154,12 +161,12 @@ void App::OpenLogFile()
 	CreateDirectoryA(mLogDirectory.AsCStr(), nullptr);
 
 	// Build the log file name.
-	LocalTime     current_time = gGetLocalTime();
-	FixedString256 new_log_file("{}\\{}{:04}-{:02}-{:02}_{:02}-{:02}-{:02}{}",
-		mLogDirectory, log_file_prefix,
+	LocalTime  current_time = gGetLocalTime();
+	TempString new_log_file = gTempFormat("%s\\%s%04u-%02u-%02u_%02u-%02u-%02u%s",
+		mLogDirectory.AsCStr(), log_file_prefix.AsCStr(),
 		current_time.mYear, current_time.mMonth, current_time.mDay,
 		current_time.mHour, current_time.mMinute, current_time.mSecond,
-		log_file_ext);
+		log_file_ext.AsCStr());
 
 	// Open the log file.
 	{
@@ -190,7 +197,7 @@ void App::OpenLogFile()
 		Vector<String> log_files;
 		{
 			WIN32_FIND_DATAA find_file_data;
-			HANDLE find_handle = FindFirstFileA(FixedString256("{}\\*", mLogDirectory).AsCStr(), &find_file_data);
+			HANDLE find_handle = FindFirstFileA(gTempFormat("%s\\*", mLogDirectory.AsCStr()).AsCStr(), &find_file_data);
 			if (find_handle != INVALID_HANDLE_VALUE)
 			{
 				do
@@ -220,7 +227,7 @@ void App::OpenLogFile()
 			int num_to_delete = log_files.Size() - max_log_files;
 			for (int i = 0; i < num_to_delete; ++i)
 			{
-				FixedString256 path("{}\\{}", mLogDirectory, log_files[i]);
+				TempString path = gTempFormat("%s\\%s", mLogDirectory.AsCStr(), log_files[i].AsCStr());
 				DeleteFileA(path.AsCStr());
 			}
 		}

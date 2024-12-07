@@ -242,7 +242,7 @@ void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, File
 void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs);
 
 
-TempPath gFormat(const CookingCommand& inCommand)
+TempPath gFormat2(const CookingCommand& inCommand)
 {
 	return { "{}{} {}",
 		inCommand.GetRule().mName,
@@ -251,7 +251,7 @@ TempPath gFormat(const CookingCommand& inCommand)
 }
 
 
-TempPath gFormat(const CookingLogEntry& inLogEntry)
+TempPath gFormat2(const CookingLogEntry& inLogEntry)
 {
 	const CookingCommand& command    = gCookingSystem.GetCommand(inLogEntry.mCommandID);
 	const CookingRule&    rule       = gCookingSystem.GetRule(command.mRuleID);
@@ -265,7 +265,7 @@ TempPath gFormat(const CookingLogEntry& inLogEntry)
 }
 
 
-TempPath gFormat(const FileInfo& inFile)
+TempPath gFormat2(const FileInfo& inFile)
 {
 	return { "{}", inFile };
 }
@@ -337,7 +337,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 	if (file_state != None)
 		ImGui::PushStyleColor(ImGuiCol_Text, cFileStateData[file_state].mColor);
 
-	bool clicked = ImGui::Selectable(gFormat(inFile).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
+	bool clicked = ImGui::Selectable(gFormat2(inFile).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (file_state != None && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
@@ -363,7 +363,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		// TODO auto wrapping is kind of incompatible with window auto resizing, need to provide a wrap position, or maybe make sure it isn't the first item drawn?
 		// https://github.com/ocornut/imgui/issues/778#issuecomment-239696811
 		//ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextUnformatted(gFormat(inFile));
+		ImGui::TextUnformatted(gFormat2(inFile));
 		//ImGui::PopTextWrapPos();
 		ImGui::Spacing();
 
@@ -558,7 +558,7 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 		pop_color++;
 	}
 
-	bool clicked = ImGui::Selectable(gFormat(inCommand).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
+	bool clicked = ImGui::Selectable(gFormat2(inCommand).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (clicked && inCommand.mLastCookingLog)
@@ -895,7 +895,7 @@ void gDrawSelectedCookingLogEntry()
 	const CookingLogEntry& log_entry = gCookingSystem.GetLogEntry(gSelectedCookingLogEntry);
 
 	ImGui::PushTextWrapPos();
-	ImGui::TextUnformatted(gFormat(log_entry));
+	ImGui::TextUnformatted(gFormat2(log_entry));
 	ImGui::PopTextWrapPos();
 	if (ImGui::Button("Copy Command Line"))
 	{
@@ -941,7 +941,7 @@ void gDrawCommandSearch()
 		filtered_list.clear();
 		for (const CookingCommand& command : gCookingSystem.mCommands)
 		{
-			auto command_str = gFormat(command);
+			auto command_str = gFormat2(command);
 			if (filter.PassFilter(command_str))
 				filtered_list.emplace_back(command.mID);
 		}
@@ -1019,7 +1019,7 @@ void gDrawFileSearch()
 		for (const FileRepo& repo : gFileSystem.mRepos)
 			for (const FileInfo& file : repo.mFiles)
 			{
-				auto file_str = gFormat(file);
+				auto file_str = gFormat2(file);
 				if (filter.PassFilter(file_str))
 					filtered_list.emplace_back(file.mID);
 			}

@@ -255,7 +255,7 @@ inline StringView gFormatV(MutStringView ioBuffer, StringView inFmt, fmt::format
 }
 
 template<typename... taArgs>
-StringView gFormat(MutStringView ioBuffer, fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
+StringView gFormat2(MutStringView ioBuffer, fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
 {
 	return gFormatV(ioBuffer, StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...));
 }
@@ -264,7 +264,7 @@ StringView gFormat(MutStringView ioBuffer, fmt::format_string<taArgs...> inFmt, 
 template <int taSize>
 template <typename... taArgs> void FixedString<taSize>::Format(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
 {
-	StringView str_view = gFormat(mBuffer, inFmt, std::forward<taArgs>(inArgs)...);
+	StringView str_view = gFormat2(mBuffer, inFmt, std::forward<taArgs>(inArgs)...);
 	mSize               = str_view.Size();
 }
 
@@ -272,7 +272,7 @@ template <typename... taArgs> void FixedString<taSize>::Format(fmt::format_strin
 template <int taSize>
 template <typename... taArgs> void FixedString<taSize>::AppendFormat(fmt::format_string<taArgs...> inFmt, taArgs&&... inArgs)
 {
-	StringView str_view = gFormat(Span(mBuffer).SubSpan(mSize), inFmt, std::forward<taArgs>(inArgs)...);
+	StringView str_view = gFormat2(Span(mBuffer).SubSpan(mSize), inFmt, std::forward<taArgs>(inArgs)...);
 	mSize               += str_view.Size();
 }
 
