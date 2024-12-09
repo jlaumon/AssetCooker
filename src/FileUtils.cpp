@@ -20,7 +20,7 @@ OwnedHandle::~OwnedHandle()
 TempString gGetAbsolutePath(StringView inPath)
 {
 	TempString abs_path;
-	abs_path.Reserve(23); // Should be enough for everyone.
+	abs_path.Reserve(4096); // Should be enough for everyone.
 
 	// Note: if size is < capacity then it doesn't contain the null term
 	//       if size is > capacity then it's the capacity needed (including null term)
