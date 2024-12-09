@@ -180,11 +180,11 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumber inRefNumber)
 {
 	// Make sure the path is normalized.
-	TempPath path = inPath;
-	gNormalizePath(path.AsSpan());
+	TempString path = inPath;
+	gNormalizePath(path);
 
 	// Calculate the case insensitive path hash that will be used to identify the file.
-	PathHash  path_hash = gHashPath(TempPath("{}{}", mRootPath, path));
+	PathHash  path_hash = gHashPath(gConcat(mRootPath, path));
 
 	FileInfo* file      = nullptr;
 
@@ -323,8 +323,8 @@ static OptionalStringView sBuildFilePath(StringView inParentDirPath, WStringView
 	// Add the parent dir if there's one (can be empty for the root dir).
 	if (!inParentDirPath.Empty())
 	{
-		ioBuffer = gAppend(ioBuffer, inParentDirPath);
-		ioBuffer = gAppend(ioBuffer, "\\");
+		ioBuffer = gAppend2(ioBuffer, inParentDirPath);
+		ioBuffer = gAppend2(ioBuffer, "\\");
 	}
 
 	OptionalStringView file_name = gWideCharToUtf8(inFileNameW, ioBuffer);
@@ -1011,7 +1011,7 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 	}
 
 	// Get the absolute path (in case it's relative).
-	TempPath root_path = gGetAbsolutePath(inRootPath);
+	TempString root_path = gGetAbsolutePath(inRootPath);
 
 	gAssert(gIsNormalized(root_path));
 
@@ -1958,7 +1958,7 @@ void FileSystem::SaveCache()
 			// Write the base command data.
 			SerializedCommand     serialized_command;
 			const FileInfo&       main_input      = command.GetMainInput().GetFile();
-			serialized_command.mMainInputPathHash = gHashPath(TempPath("{}{}", main_input.GetRepo().mRootPath, main_input.mPath));
+			serialized_command.mMainInputPathHash = gHashPath(gConcat(main_input.GetRepo().mRootPath, main_input.mPath));
 			serialized_command.mLastCookUSN       = command.mLastCookUSN;
 			serialized_command.mLastCookIsError   = (command.mDirtyState & CookingCommand::Error) != 0;
 			serialized_command.mLastCookTime      = command.mLastCookTime;
@@ -1985,14 +1985,14 @@ void FileSystem::SaveCache()
 				for (FileID file_id : command.mDepFileInputs)
 				{
 					const FileInfo& file = file_id.GetFile();
-					PathHash path_hash = gHashPath(TempPath("{}{}", file.GetRepo().mRootPath, file.mPath));
+					PathHash path_hash = gHashPath(gConcat(file.GetRepo().mRootPath, file.mPath));
 					bin.Write(path_hash);
 				}
 
 				for (FileID file_id : command.mDepFileOutputs)
 				{
 					const FileInfo& file = file_id.GetFile();
-					PathHash path_hash = gHashPath(TempPath("{}{}", file.GetRepo().mRootPath, file.mPath));
+					PathHash path_hash = gHashPath(gConcat(file.GetRepo().mRootPath, file.mPath));
 					bin.Write(path_hash);
 				}
 			}

@@ -16,13 +16,8 @@
 
 bool gReadFile(StringView inPath, VMemArray<uint8>& outFileData)
 {
-	TempPath long_path;
-	if (inPath.Size() >= MAX_PATH && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
-	{
-		long_path.Append(R"(\\?\)");
-		long_path.Append(inPath);
-		inPath = long_path.AsStringView();
-	}
+	TempString long_path;
+	inPath = gConvertToLargePath(inPath, long_path);
 
 	OwnedHandle handle = CreateFileA(inPath.AsCStr(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (handle == INVALID_HANDLE_VALUE)
@@ -261,8 +256,9 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, V
 
 bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& outInputs, Vector<FileID>& outOutputs)
 {
-	TempPath full_path("{}{}", inDepFileID.GetRepo().mRootPath, inDepFileID.GetFile().mPath);
+	TempString full_path = gConcat(inDepFileID.GetRepo().mRootPath, inDepFileID.GetFile().mPath);
 
+	// TODO virtual memory is probably overkill and slower than heap here
 	VMemArray<uint8> buffer(4ull * 1024 * 1024, 4096);
 	if (!gReadFile(full_path, buffer))
 	{

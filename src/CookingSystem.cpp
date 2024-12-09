@@ -1296,8 +1296,8 @@ bool sRunCopyFile(const CookingCommand& inCommand, StringPool::ResizableStringVi
 
 	ioOutput.AppendFormat("Copying {} to {}\n", inCommand.mInputs[0].GetFile(), inCommand.mOutputs[0].GetFile());
 
-	TempPath input (R"(\\?\{}{})", inCommand.mInputs [0].GetRepo().mRootPath, inCommand.mInputs [0].GetFile().mPath);
-	TempPath output(R"(\\?\{}{})", inCommand.mOutputs[0].GetRepo().mRootPath, inCommand.mOutputs[0].GetFile().mPath);
+	TempString input  = gConcat(R"(\\?\)", inCommand.mInputs [0].GetRepo().mRootPath, inCommand.mInputs [0].GetFile().mPath);
+	TempString output = gConcat(R"(\\?\)", inCommand.mOutputs[0].GetRepo().mRootPath, inCommand.mOutputs[0].GetFile().mPath);
 	return CopyFileA(input.AsCStr(), output.AsCStr(), FALSE) != 0;
 }
 

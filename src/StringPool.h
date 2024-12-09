@@ -45,7 +45,7 @@ struct StringPool
 	{
 		auto storage = Allocate(inString.Size(), inLock);
 
-		gAppend(storage, inString);
+		gAppend2(storage, inString);
 
 		return storage;
 	}

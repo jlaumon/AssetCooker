@@ -26,28 +26,21 @@ struct OwnedHandle : NoCopy
 };
 
 
-// Arbitrary max path size that Asset Cooker decides to support for its files.
-// Some code in the FileSystem monitoring actually supports longer paths, because it might get notifications about files outside repos.
-constexpr size_t cMaxPathSizeUTF8  = 4096ull;
+constexpr MutStringView  gNormalizePath(MutStringView ioPath); // Replace / by \.
+constexpr bool           gIsNormalized(StringView inPath);     // Return true if path only contains backslashes.
+TempString               gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
+constexpr bool           gIsAbsolute(StringView inPath);       // Return true if the path is absolute and canonical.
+constexpr StringView     gGetFileNamePart(StringView inPath);  // Get the filename part of a path.
+constexpr StringView     gNoTrailingSlash(StringView inPath);  // Remove the trailing slash if there is one.
 
-using TempPath = FixedString<cMaxPathSizeUTF8>;
+bool                     gCreateDirectoryRecursive(StringView inAbsolutePath);
 
+bool                     gDirectoryExists(StringView inPath);
+bool                     gFileExists(StringView inPath);
 
-constexpr MutStringView gNormalizePath(MutStringView ioPath); // Replace / by \.
-constexpr bool          gIsNormalized(StringView inPath);     // Return true if path only contains backslashes.
-TempString              gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
-constexpr bool          gIsAbsolute(StringView inPath);       // Return true if the path is absolute and canonical.
-constexpr StringView    gGetFileNamePart(StringView inPath);  // Get the filename part of a path.
-constexpr StringView    gNoTrailingSlash(StringView inPath);  // Remove the trailing slash if there is one.
+[[nodiscard]] StringView gConvertToLargePath(StringView inPath, TempString& ioBuffer); // Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
 
-bool                    gCreateDirectoryRecursive(StringView inAbsolutePath);
-
-bool                    gDirectoryExists(StringView inPath);
-bool                    gFileExists(StringView inPath);
-
-StringView              gConvertToLargePath(StringView inPath, TempString& ioBuffer); // Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
-
-constexpr MutStringView gNormalizePath(MutStringView ioPath)
+constexpr MutStringView  gNormalizePath(MutStringView ioPath)
 {
 	for (char& c : ioPath)
 	{

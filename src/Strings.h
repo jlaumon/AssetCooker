@@ -139,7 +139,7 @@ template <class taString> void gToLowercase(taString& ioString) { Details::ToLow
 // TODO: rename to gStringCopy? gAppend is misleading since it writes at the beginning, not the end
 // Copy a string into a potentially larger one, and return a MutStringView for what remains.
 // eg. next = gAppend(buffer, "hello") will write "hello" into buffer, and next will point after "hello".
-constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr)
+constexpr MutStringView gAppend2(MutStringView ioDest, const StringView inStr)
 {
 	// Assert if destination isn't large enough, but still make sure we don't overflow.
 	int dest_available_size = ioDest.Size() - 1; // Keep 1 for null terminator.
@@ -154,11 +154,26 @@ constexpr MutStringView gAppend(MutStringView ioDest, const StringView inStr)
 
 	return { ioDest.Data() + copy_size, ioDest.Size() - copy_size };
 }
-constexpr MutStringView gStringCopy(MutStringView ioDest, const StringView inStr) { return gAppend(ioDest, inStr); }
+constexpr MutStringView gStringCopy(MutStringView ioDest, const StringView inStr) { return gAppend2(ioDest, inStr); }
+
+
+template <class ...taArgs>
+void gAppend(TempString& outString, taArgs&&... inArgs)
+{
+	(outString.Append(gForward<taArgs>(inArgs)), ...);
+}
+
+template <class ...taArgs>
+TempString gConcat(taArgs&&... inArgs)
+{
+	TempString str;
+	gAppend(str, gForward<taArgs>(inArgs)...);
+	return str;
+}
 
 constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr)
 {
-	MutStringView remaining_buffer = gAppend(ioDest, inStr);
+	MutStringView remaining_buffer = gAppend2(ioDest, inStr);
 
 	// Note: + 1 as we want to include the null terminator. Not sure how the old code worked (but it did). Burn this code.
 	return { ioDest.Data(), remaining_buffer.Data() + 1 };
@@ -167,9 +182,9 @@ constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr)
 // Copy multiple string into a potentially larger one, and return a MutStringView of what was written.
 // eg. gConcat(buffer, "hello", "world") will write "helloworld" into buffer.
 template <class ...taArgs>
-constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr, taArgs... inArgs)
+constexpr MutStringView gConcat2(MutStringView ioDest, const StringView inStr, taArgs... inArgs)
 {
-	MutStringView concatenated_str = gConcat(gAppend(ioDest, inStr), inArgs...);
+	MutStringView concatenated_str = gConcat2(gAppend2(ioDest, inStr), inArgs...);
 
 	// Note: + 1 as we want to include the null terminator. The old code did that implicitly with gEndPtr. Burn this code.
 	return { ioDest.Data(), concatenated_str.End() + 1 }; 
