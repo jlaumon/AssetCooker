@@ -58,12 +58,7 @@ struct TomlReader
 	static constexpr StringView sTypeName()
 	{
 		if constexpr (cIsSame<taType, StringView> 
-			|| cIsSame<taType, FixedString32>
-			|| cIsSame<taType, FixedString64>
-			|| cIsSame<taType, FixedString128>
-			|| cIsSame<taType, FixedString256>
-			|| cIsSame<taType, FixedString512>
-			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, TempString>
 			|| cIsSame<taType, String>)
 			return "string";
 		else if constexpr (cIsSame<taType, bool>)
@@ -92,7 +87,7 @@ struct TomlReader
 	{
 		const Element& current = mStack.Back();
 		if (current.mNode->is_array())
-			return mPath + FixedString32("[{}]", current.mIndex).AsStringView();
+			return mPath + gTempFormat("[%d]", current.mIndex);
 		else
 			return mPath + inVarName;
 	}
@@ -109,12 +104,7 @@ struct TomlReader
 		// If the variable exists but is of the wrong type, that's an error.
 		bool is_right_type;
 		if constexpr (cIsSame<taType, StringView> 
-			|| cIsSame<taType, FixedString32>
-			|| cIsSame<taType, FixedString64>
-			|| cIsSame<taType, FixedString128>
-			|| cIsSame<taType, FixedString256>
-			|| cIsSame<taType, FixedString512>
-			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, TempString>
 			|| cIsSame<taType, String>)
 			is_right_type = node->is_string();
 		else if constexpr (cIsSame<taType, bool>)
@@ -139,16 +129,11 @@ struct TomlReader
 			// For StringView allocate a copy into the StringPool
 			outVar = mStringPool->AllocateCopy(StringView(std_view.data(), (int)std_view.size()));
 		}
-		else if constexpr (cIsSame<taType, FixedString32>
-			|| cIsSame<taType, FixedString64>
-			|| cIsSame<taType, FixedString128>
-			|| cIsSame<taType, FixedString256>
-			|| cIsSame<taType, FixedString512>
-			|| cIsSame<taType, TempPath>
+		else if constexpr (cIsSame<taType, TempString>
 			|| cIsSame<taType, String>)
 		{
 			std::string_view std_view = *node->value<std::string_view>();
-			// For FixedStrings and String, just copy into it.
+			// For TempString and String, just copy into it.
 			outVar = StringView(std_view.data(), (int)std_view.size());
 		}
 		else if constexpr (cIsSame<taType, bool>)

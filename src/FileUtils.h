@@ -58,6 +58,18 @@ constexpr MutStringView gNormalizePath(MutStringView ioPath)
 	return ioPath;
 }
 
+template <class taString>
+constexpr StringView gNormalizePath(taString& ioPath)
+{
+	for (char& c : ioPath)
+	{
+		if (c == '/')
+			c = '\\';
+	}
+
+	return ioPath;
+}
+
 constexpr bool gIsNormalized(StringView inPath)
 {
 	for (char c : inPath)

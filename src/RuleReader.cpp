@@ -19,7 +19,7 @@ static void sReadRuleFile(StringView inPath)
 	taReaderType reader;
 	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.SetInitError(FixedString512(R"(Failed to parse Rule file "{}". See log for details.)", inPath).AsStringView());
+		gApp.SetInitError(gTempFormat(R"(Failed to parse Rule file "%s". See log for details.)", inPath.AsCStr()));
 		return;
 	}
 
@@ -58,14 +58,14 @@ static void sReadRuleFile(StringView inPath)
 
 				InputFilter& input_filter = rule.mInputFilters.EmplaceBack();
 
-				FixedString512 repo_name;
+				TempString repo_name;
 				if (reader.Read("Repo", repo_name))
 				{
 					// Try to find the repo from the name.
-					FileRepo* repo = gFileSystem.FindRepo(repo_name.AsStringView());
+					FileRepo* repo = gFileSystem.FindRepo(repo_name);
 					if (repo == nullptr)
 					{
-						gApp.LogError(R"(Repo "{}" not found.)", repo_name.AsStringView());
+						gApp.LogError(R"(Repo "{}" not found.)", repo_name.AsCStr());
 						reader.mErrorCount++;
 					}
 					else
@@ -74,11 +74,11 @@ static void sReadRuleFile(StringView inPath)
 					}
 				}
 
-				TempPath path_pattern;
+				TempString path_pattern;
 				if (reader.Read("PathPattern", path_pattern))
 				{
 					// Normalize the path to get rid of any forward slash.
-					gNormalizePath(path_pattern.AsSpan());
+					gNormalizePath(path_pattern);
 
 					input_filter.mPathPattern = reader.mStringPool->AllocateCopy(path_pattern);
 				}
@@ -87,7 +87,7 @@ static void sReadRuleFile(StringView inPath)
 
 		// Check the type of command (either command line or a built-in command).
 		{
-			FixedString64 cmd_type;
+			TempString cmd_type;
 			reader.TryRead("CommandType", cmd_type);
 			gStringViewToEnum(cmd_type,			rule.mCommandType);
 		}
@@ -112,7 +112,7 @@ static void sReadRuleFile(StringView inPath)
 		{
 			reader.Read    ("Path",				rule.mDepFilePath);
 
-			FixedString64 format;
+			TempString format;
 			reader.Read("Format", format);
 			gStringViewToEnum(format,			rule.mDepFileFormat);
 			

@@ -21,7 +21,7 @@ void gReadUserPreferencesFile(StringView inPath)
 	TomlReader reader;
 	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.SetInitError(FixedString512(R"(Failed to parse User Preferences file "{}". See log for details.)", inPath).AsStringView());
+		gApp.SetInitError(gTempFormat(R"(Failed to parse User Preferences file "%s". See log for details.)", inPath.AsCStr()));
 		return;
 	}
 
@@ -48,7 +48,7 @@ void gReadUserPreferencesFile(StringView inPath)
 
 	// Filesystem log verbosity.
 	{
-		FixedString64 log_level_str;
+		TempString log_level_str;
 		if (reader.TryRead("LogFSActivity", log_level_str))
 			gStringViewToEnum(log_level_str, gApp.mLogFSActivity);
 	}
@@ -64,22 +64,22 @@ void gReadUserPreferencesFile(StringView inPath)
 
 	// Notifications.
 	{
-		FixedString64 enable_str;
+		TempString enable_str;
 		if (reader.TryRead("EnableNotifOnHideWindow", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifOnHideWindow);
 	}
 	{
-		FixedString64 enable_str;
+		TempString enable_str;
 		if (reader.TryRead("EnableNotifOnCookingError", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifOnCookingError);
 	}
 	{
-		FixedString64 enable_str;
+		TempString enable_str;
 		if (reader.TryRead("EnableNotifOnCookingFinish", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifOnCookingFinish);
 	}
 	{
-		FixedString64 enable_str;
+		TempString enable_str;
 		if (reader.TryRead("EnableNotifSound", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifSound);
 	}

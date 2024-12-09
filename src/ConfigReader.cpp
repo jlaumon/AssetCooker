@@ -17,7 +17,7 @@ void gReadConfigFile(StringView inPath)
 	TomlReader reader;
 	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.SetInitError(FixedString512(R"(Failed to parse Config file "{}". See log for details.)", inPath).AsStringView());
+		gApp.SetInitError(gTempFormat(R"(Failed to parse Config file "%s". See log for details.)", inPath.AsCStr()));
 		return;
 	}
 
@@ -41,59 +41,53 @@ void gReadConfigFile(StringView inPath)
 
 			defer { reader.CloseTable(); };
 
-			FixedString512 name;
+			TempString name;
 			reader.Read("Name", name);
 
-			FixedString512 path;
+			TempString path;
 			reader.Read("Path", path);
 
-			if (name.mSize && path.mSize)
-				gFileSystem.AddRepo(name.AsStringView(), path.AsStringView());
+			if (!name.Empty() && !path.Empty())
+				gFileSystem.AddRepo(name, path);
 		}
 	}
 
 	// Read the Rule File path.
 	{
-		FixedString512 rule_file_path;
+		TempString rule_file_path;
 		if (reader.TryRead("RuleFile", rule_file_path))
-			gApp.mRuleFilePath = rule_file_path.AsStringView();
+			gApp.mRuleFilePath = rule_file_path;
 	}
 
 	// Log directory path
 	{
-		FixedString512 log_dir;
+		TempString log_dir;
 		if (reader.TryRead("LogDirectory", log_dir))
 		{
 			// Normalize the path.
-			gNormalizePath({ log_dir.mBuffer, log_dir.mSize });
+			gNormalizePath(log_dir);
 
 			// If there's a trailing slash, remove it.
-			if (gEndsWith(log_dir, "\\"))
-			{
-				log_dir.mSize--;
-				log_dir.mBuffer[log_dir.mSize] = 0;
-			}
+			if (log_dir.EndsWith("\\"))
+				log_dir.RemoveSuffix(1);
 
-			gApp.mLogDirectory = log_dir.AsStringView();
+			gApp.mLogDirectory = log_dir;
 		}
 	}
 
 	// Cache directory path
 	{
-		FixedString512 cache_dir;
+		TempString cache_dir;
 		if (reader.TryRead("CacheDirectory", cache_dir))
 		{
 			// Normalize the path.
-			gNormalizePath({ cache_dir.mBuffer, cache_dir.mSize });
+			gNormalizePath(cache_dir);
 
 			// If there's a trailing slash, remove it.
-			if (gEndsWith(cache_dir, "\\"))
-			{
-				cache_dir.mSize--;
-				cache_dir.mBuffer[cache_dir.mSize] = 0;
-			}
+			if (cache_dir.EndsWith("\\"))
+				cache_dir.RemoveSuffix(1);
 
-			gApp.mCacheDirectory = cache_dir.AsStringView();
+			gApp.mCacheDirectory = cache_dir;
 		}
 	}
 

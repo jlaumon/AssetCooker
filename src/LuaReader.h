@@ -22,12 +22,7 @@ struct LuaReader
 	static constexpr StringView sTypeName()
 	{
 		if constexpr (cIsSame<taType, StringView> 
-			|| cIsSame<taType, FixedString32>
-			|| cIsSame<taType, FixedString64>
-			|| cIsSame<taType, FixedString128>
-			|| cIsSame<taType, FixedString256>
-			|| cIsSame<taType, FixedString512>
-			|| cIsSame<taType, TempPath>
+			|| cIsSame<taType, TempString>
 			|| cIsSame<taType, String>)
 			return "string";
 		else if constexpr (cIsSame<taType, bool>)
@@ -99,9 +94,9 @@ struct LuaReader
 	}
 
 	// Helper to get the path to a node based on its name if currently in a table, or based on current index if currently in an array.
-	FixedString512 GetPath(StringView inVarName) const
+	TempString GetPath(StringView inVarName) const
 	{
-		FixedString512 path;
+		TempString path;
 		for (const Element& elem : mStack)
 		{
 			if (path.Size() != 0 && !gEndsWith(path, "."))
@@ -110,14 +105,14 @@ struct LuaReader
 			path.Append(elem.mName);
 
 			if (elem.mIndex != -1)
-				path.AppendFormat("[{}]", elem.mIndex + 1);
+				gAppendFormat(path, "[%d]", elem.mIndex + 1);
 		}
 
 		// Name can be empty if current node is an element in a sequence.
 		// In that case the parent node added the index to the path already.
 		if (!inVarName.Empty())
 		{
-			if (path.Size() != 0 && !gEndsWith(path, "."))
+			if (path.Size() != 0 && !path.EndsWith("."))
 				path.Append(".");
 
 			path.Append(inVarName);
@@ -139,12 +134,8 @@ struct LuaReader
 		// If the variable exists but is of the wrong type, that's an error.
 		bool is_right_type = false;
 		if constexpr (cIsSame<taType, StringView> 
-			|| cIsSame<taType, FixedString32>
-			|| cIsSame<taType, FixedString64>
-			|| cIsSame<taType, FixedString128>
-			|| cIsSame<taType, FixedString256>
-			|| cIsSame<taType, FixedString512>
-			|| cIsSame<taType, TempPath>)
+			|| cIsSame<taType, TempString>
+			|| cIsSame<taType, String>)
 			is_right_type = (node_type == LuaType::String);
 		else if constexpr (cIsSame<taType, bool>)
 			is_right_type = (node_type == LuaType::Boolean);
@@ -165,15 +156,10 @@ struct LuaReader
 			const char* str     = lua_tolstring(mLuaState, -1, &str_len);
 			outVar = mStringPool->AllocateCopy({ str, (int)str_len });
 		}
-		else if constexpr (cIsSame<taType, FixedString32>
-			|| cIsSame<taType, FixedString64>
-			|| cIsSame<taType, FixedString128>
-			|| cIsSame<taType, FixedString256>
-			|| cIsSame<taType, FixedString512>
-			|| cIsSame<taType, TempPath>
+		else if constexpr (cIsSame<taType, TempString>
 			|| cIsSame<taType, String>)
 		{
-			// For FixedStrings and String, just copy into it.
+			// For TempString and String, just copy into it.
 			size_t      str_len = 0;
 			const char* str     = lua_tolstring(mLuaState, -1, &str_len);
 			outVar = StringView(str, str_len);
