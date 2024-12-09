@@ -104,9 +104,7 @@
 */
 
 #define IM_STRV_CLASS_EXTRA                                                         \
-	ImStrv(StringView inStr) : ImStrv(inStr.Begin(), inStr.End()) {} \
-	template <size_t taSize> ImStrv(const FixedString<taSize>& inStr) : ImStrv(inStr.AsStringView()) {}
-
+	ImStrv(StringView inStr) : ImStrv(inStr.Begin(), inStr.End()) {}
 //---- ...Or use Dear ImGui's own very basic math operators.
 //#define IMGUI_DEFINE_MATH_OPERATORS
 

@@ -243,32 +243,27 @@ void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, File
 void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs);
 
 
-TempPath gFormat2(const CookingCommand& inCommand)
+TempString gToString(const CookingCommand& inCommand)
 {
-	return { "{}{} {}",
-		inCommand.GetRule().mName,
+	return gTempFormat("%s%s %s",
+		inCommand.GetRule().mName.AsCStr(),
 		inCommand.NeedsCleanup() ? " (Cleanup)" : "",
-		inCommand.GetMainInput().GetFile() };
+		gToString(inCommand.GetMainInput().GetFile()).AsCStr());
 }
 
 
-TempPath gFormat2(const CookingLogEntry& inLogEntry)
+TempString gToString(const CookingLogEntry& inLogEntry)
 {
 	const CookingCommand& command    = gCookingSystem.GetCommand(inLogEntry.mCommandID);
 	const CookingRule&    rule       = gCookingSystem.GetRule(command.mRuleID);
 	LocalTime             start_time = inLogEntry.mTimeStart.ToLocalTime();
-	return { "[#{} {:02}:{:02}:{:02}] {}{} {} - {}",
+	return gTempFormat("[#%d %02u:%02u:%02u] %s%s %s - %s",
 		rule.mPriority,
 		start_time.mHour, start_time.mMinute, start_time.mSecond,
-		command.GetRule().mName,
+		command.GetRule().mName.AsCStr(),
 		inLogEntry.mIsCleanup ? " (Cleanup)" : "",
-		command.GetMainInput().GetFile().mPath, gToStringView(inLogEntry.mCookingState.Load()) };
-}
-
-
-TempPath gFormat2(const FileInfo& inFile)
-{
-	return { "{}", inFile };
+		command.GetMainInput().GetFile().mPath.AsCStr(), 
+		gToStringView(inLogEntry.mCookingState.Load()).AsCStr());
 }
 
 
@@ -397,7 +392,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 	if (file_state != None)
 		ImGui::PushStyleColor(ImGuiCol_Text, cFileStateData[file_state].mColor);
 
-	bool clicked = ImGui::Selectable(gFormat2(inFile).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
+	bool clicked = ImGui::Selectable(gToString(inFile), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (file_state != None && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
@@ -424,7 +419,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		// TODO auto wrapping is kind of incompatible with window auto resizing, need to provide a wrap position, or maybe make sure it isn't the first item drawn?
 		// https://github.com/ocornut/imgui/issues/778#issuecomment-239696811
 		//ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextUnformatted(gFormat2(inFile));
+		ImGui::TextUnformatted(gToString(inFile));
 		//ImGui::PopTextWrapPos();
 		ImGui::Spacing();
 
@@ -627,7 +622,7 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 		pop_color++;
 	}
 
-	bool clicked = ImGui::Selectable(gFormat2(inCommand).AsCStr(), false, ImGuiSelectableFlags_DontClosePopups);
+	bool clicked = ImGui::Selectable(gToString(inCommand), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (clicked && inCommand.mLastCookingLog)
@@ -964,7 +959,7 @@ void gDrawSelectedCookingLogEntry()
 	const CookingLogEntry& log_entry = gCookingSystem.GetLogEntry(gSelectedCookingLogEntry);
 
 	ImGui::PushTextWrapPos();
-	ImGui::TextUnformatted(gFormat2(log_entry));
+	ImGui::TextUnformatted(gToString(log_entry));
 	ImGui::PopTextWrapPos();
 	if (ImGui::Button("Copy Command Line"))
 	{
@@ -1010,7 +1005,7 @@ void gDrawCommandSearch()
 		filtered_list.clear();
 		for (const CookingCommand& command : gCookingSystem.mCommands)
 		{
-			auto command_str = gFormat2(command);
+			auto command_str = gToString(command);
 			if (filter.PassFilter(command_str))
 				filtered_list.emplace_back(command.mID);
 		}
@@ -1088,7 +1083,7 @@ void gDrawFileSearch()
 		for (const FileRepo& repo : gFileSystem.mRepos)
 			for (const FileInfo& file : repo.mFiles)
 			{
-				auto file_str = gFormat2(file);
+				auto file_str = gToString(file);
 				if (filter.PassFilter(file_str))
 					filtered_list.emplace_back(file.mID);
 			}

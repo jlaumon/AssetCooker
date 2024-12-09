@@ -202,7 +202,7 @@ int WinMain(
 
 	gApp.Init();
 
-	FixedString256 window_title("{} - Build: {} {}", gApp.mMainWindowTitle, __DATE__, __TIME__);
+	TempString window_title = gTempFormat("%s - Build: %s %s", gApp.mMainWindowTitle.AsCStr(), __DATE__, __TIME__);
 
 	wchar_t     window_title_wchar_buffer[256];
 	auto        window_title_wchar = gUtf8ToWideChar(window_title, window_title_wchar_buffer).value_or(L"Asset Cooker");

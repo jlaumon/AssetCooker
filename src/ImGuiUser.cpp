@@ -7,6 +7,8 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h"
 
+#include <Bedrock/StringFormat.h>
+
 
 bool ImGui::BeginPopupWithTitle(const char* str_id, StringView inTitle, ImGuiWindowFlags flags)
 {
@@ -19,7 +21,7 @@ bool ImGui::BeginPopupWithTitle(const char* str_id, StringView inTitle, ImGuiWin
     }
 
     flags |= ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse;
-    bool is_open = Begin(FixedString256("{}##{:08x}", inTitle, id).AsCStr(), NULL, flags);
+    bool is_open = Begin(gTempFormat("%s##%08x", inTitle.AsCStr(), id), NULL, flags);
     if (!is_open) // NB: Begin can return false when the popup is completely clipped (e.g. zero size display)
         EndPopup();
 
