@@ -286,7 +286,7 @@ struct FileDrive : NoCopy
 	FileRepo*              FindRepoForPath(StringView inFullPath);                                        // Return nullptr if not in any repo.
 
 	HandleOrError          OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFileAccess inDesiredAccess, FileID inFileID) const;
-	OptionalStringView     GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const;    // Get the full path of this file, including the drive letter part.
+	[[nodiscard]] bool     GetFullPath(const OwnedHandle& inFileHandle, TempString& outFullPath) const;   // Get the full path of this file, including the drive letter part. Return true on succes.
 	USN                    GetUSN(const OwnedHandle& inFileHandle) const;
 
 	FileID                 FindFileID(FileRefNumber inRefNumber) const;                                   // Return an invalid FileID if not found.

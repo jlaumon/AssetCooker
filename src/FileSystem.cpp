@@ -316,27 +316,29 @@ StringView FileRepo::RemoveRootPath(StringView inFullPath)
 
 
 
-static OptionalStringView sBuildFilePath(StringView inParentDirPath, WStringView inFileNameW, MutStringView ioBuffer)
+static TempString sBuildFilePath(StringView inParentDirPath, WStringView inFileNameW, MutStringView ioBuffer)
 {
-	MutStringView file_path = ioBuffer;
+	TempString path;
 
 	// Add the parent dir if there's one (can be empty for the root dir).
 	if (!inParentDirPath.Empty())
 	{
-		ioBuffer = gAppend2(ioBuffer, inParentDirPath);
-		ioBuffer = gAppend2(ioBuffer, "\\");
+		path += inParentDirPath;
+		path += "\\";
 	}
 
-	OptionalStringView file_name = gWideCharToUtf8(inFileNameW, ioBuffer);
-	if (!file_name)
+	TempString file_name = gWideCharToUtf8(inFileNameW);
+	if (file_name.Empty())
 	{
-		// Failed for some reason. Buffer too small?
+		// Failed for some reason.
 		gAssert(false); // Investigate.
 
 		return {};
 	}
 
-	return StringView{ file_path.Data(), file_name->End() };
+	path += file_name;
+
+	return path;
 }
 
 
@@ -584,27 +586,31 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 }
 
 
-OptionalStringView FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutStringView ioBuffer) const
+bool FileDrive::GetFullPath(const OwnedHandle& inFileHandle, TempString& outFullPath) const
 {
 	// Get the full path as utf16.
 	// PFILE_NAME_INFO contains the filename without the drive letter and column in front (ie. without the C:).
 	PathBufferUTF16 wpath_buffer;
 	PFILE_NAME_INFO file_name_info = (PFILE_NAME_INFO)wpath_buffer;
 	if (!GetFileInformationByHandleEx(inFileHandle, FileNameInfo, file_name_info, gElemCount(wpath_buffer) * sizeof(wpath_buffer[0])))
-		return {};
+		return false;
 
 	WStringView wpath = { file_name_info->FileName, file_name_info->FileNameLength / 2 };
 
+	// Get the path part.
+	TempString path_part = gWideCharToUtf8(wpath);
+	if (path_part.Empty())
+		return false;
+
 	// Write the drive part.
-	ioBuffer[0] = mLetter;
-	ioBuffer[1] = ':';
+	outFullPath.Resize(2);
+	outFullPath[0] = mLetter;
+	outFullPath[1] = ':';
 
-	// Write the path part.
-	OptionalStringView path_part = gWideCharToUtf8(wpath, ioBuffer.SubSpan(2));
-	if (!path_part)
-		return {};
+	// Add the path part.
+	outFullPath += path_part;
 
-	return StringView{ ioBuffer.Data(), path_part->End() };
+	return true;
 }
 
 
@@ -832,9 +838,8 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 			}
 
 			// Get its path.
-			PathBufferUTF8     buffer;
-			OptionalStringView full_path = GetFullPath(*file_handle, buffer);
-			if (!full_path)
+			TempString full_path;
+			if (!GetFullPath(*file_handle, full_path))
 			{
 				// TODO: same remark as failing to open
 				gApp.LogError("Failed to get path for newly created file {} - {}", FileRefNumber(inRecord.FileReferenceNumber), GetLastErrorString());
@@ -842,11 +847,11 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 			}
 
 			// Check if it's in a repo, otherwise ignore.
-			FileRepo* repo = FindRepoForPath(*full_path);
+			FileRepo* repo = FindRepoForPath(full_path);
 			if (repo)
 			{
 				// Get the file path relative to the repo root.
-				StringView file_path = repo->RemoveRootPath(*full_path);
+				StringView file_path = repo->RemoveRootPath(full_path);
 
 				// Add the file.
 				FileInfo& file = repo->GetOrAddFile(file_path, is_directory ? FileType::Directory : FileType::File, inRecord.FileReferenceNumber);

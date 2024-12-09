@@ -247,7 +247,7 @@ template <> struct fmt::formatter<SizeInBytes> : fmt::formatter<fmt::string_view
 
 
 // Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
-OptionalStringView gWideCharToUtf8(std::wstring_view inWString, MutStringView ioBuffer);
+TempString gWideCharToUtf8(WStringView inWString);
 
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
 OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer);

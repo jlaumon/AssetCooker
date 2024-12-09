@@ -22,7 +22,7 @@ struct StringPool
 		mBuffer.Clear();
 	}
 
-	MutStringView Allocate(size_t inSize, const OptionalRef<const VMemArrayLock>& inLock = {})
+	Span<char> Allocate(size_t inSize, const OptionalRef<const VMemArrayLock>& inLock = {})
 	{
 		// If no lock was provided, make a new one.
 		const VMemArrayLock& lock = inLock ? (const VMemArrayLock&)*inLock : (const VMemArrayLock&)mBuffer.Lock();
@@ -30,7 +30,7 @@ struct StringPool
 		// Add one for the null terminator.
 		size_t alloc_size = inSize + 1;
 
-		MutStringView str = mBuffer.EnsureCapacity(alloc_size, lock);
+		Span<char> str = mBuffer.EnsureCapacity(alloc_size, lock);
 
 		// Put the null terminator preemptively.
 		str[inSize] = 0;
@@ -43,9 +43,9 @@ struct StringPool
 
 	MutStringView AllocateCopy(StringView inString, const OptionalRef<const VMemArrayLock>& inLock = {})
 	{
-		auto storage = Allocate(inString.Size(), inLock);
+		Span storage = Allocate(inString.Size(), inLock);
 
-		gAppend2(storage, inString);
+		gMemCopy(storage.Data(), inString.Data(), inString.Size() + 1);
 
 		return storage;
 	}
@@ -66,7 +66,6 @@ struct StringPool
 		StringPool&     mPool;
 		VMemArrayLock   mPoolLock;	// Pool is locked while we have one resizable string being used.
 
-		MutStringView	AsMutStringView()		{ return { mData, mSize }; }
 		StringView		AsStringView() const	{ return { mData, mSize - 1 }; }
 
 

@@ -46,19 +46,16 @@ void Details::ToLowercase(Span<char> ioString)
 
 
 // Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.
-OptionalStringView gWideCharToUtf8(WStringView inWString, MutStringView ioBuffer)
+TempString gWideCharToUtf8(WStringView inWString)
 {
-	// If a null terminator is included in the source, WideCharToMultiByte will also add it in the destination.
-	// Otherwise we'll need to add it manually.
-	bool source_is_null_terminated = (!inWString.empty() && inWString.back() == 0);
+	TempString out_str;
 
-	int available_bytes = (int)ioBuffer.Size();
+	// Reserve enough buffer. 4 char per wchar should be enough in all cases. But make it at least 4K just in case.
+	out_str.Reserve(gMin((int)inWString.size() * 4, 4096));
 
-	// If we need to add a null terminator, reserve 1 byte for it.
-	if (source_is_null_terminated)
-		available_bytes--;
+	int available_bytes = out_str.Capacity() - 1;
 
-	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), ioBuffer.Data(), available_bytes, nullptr, nullptr);
+	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), out_str.Data(), available_bytes, nullptr, nullptr);
 
 	if (written_bytes == 0 && !inWString.empty())
 		return {}; // Failed to convert.
@@ -66,17 +63,17 @@ OptionalStringView gWideCharToUtf8(WStringView inWString, MutStringView ioBuffer
 	if (written_bytes == available_bytes)
 		return {}; // Might be cropped, consider failed.
 
-	// If there isn't a null terminator, add it.
-	if (!source_is_null_terminated)
-		ioBuffer[written_bytes] = 0;
-	else
-	{
-		gAssert(ioBuffer[written_bytes - 1] == 0); // Should already have a null terminator.
-		written_bytes--; // Don't count the null terminator in the returned string view.
-	}
+	// If there's already a null terminator, don't count it in the size.
+	if (out_str.Begin()[written_bytes - 1] == 0)
+		written_bytes--;
 
-	return StringView(ioBuffer.Data(), written_bytes);
+	// Set the correct size and null terminate.
+	out_str.Resize(written_bytes);
+	out_str.ShrinkToFit();
+	
+	return out_str;
 }
+
 
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
 OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
