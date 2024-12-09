@@ -1569,10 +1569,10 @@ void FileSystem::LoadCache()
 			if (!bin.ExpectLabel("REPO"))
 				break; // Early out if reading is failing.
 
-			FixedString128 repo_name;
+			TempString repo_name;
 			bin.Read(repo_name);
 
-			TempPath repo_path;
+			TempString repo_path;
 			bin.Read(repo_path);
 
 			FileRepo* repo       = FindRepo(repo_name);
@@ -1614,7 +1614,7 @@ void FileSystem::LoadCache()
 		if (!bin.ExpectLabel("REPO_CONTENT"))
 			break;
 
-		FixedString128 repo_name;
+		TempString repo_name;
 		bin.Read(repo_name);
 
 		uint32 file_count = 0;
@@ -1623,7 +1623,7 @@ void FileSystem::LoadCache()
 		uint32 string_pool_bytes = 0;
 		bin.Read(string_pool_bytes);
 
-		bool repo_valid = gContains(all_valid_repos, repo_name.AsStringView());
+		bool repo_valid = gContains(all_valid_repos, repo_name);
 		
 		// We found it earlier, so this shouldn't fail.
 		FileRepo* repo = FindRepo(repo_name);
@@ -1689,7 +1689,7 @@ void FileSystem::LoadCache()
 		if (!bin.ExpectLabel("RULE"))
 			break; // Early out if reading is failing.
 
-		FixedString128 rule_name;
+		TempString rule_name;
 		bin.Read(rule_name);
 
 		// This info is also in the CookingRule but we serialize it to be able to

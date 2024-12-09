@@ -93,27 +93,18 @@ struct BinaryReader : NoCopy
 		Read(Span(&outValue, 1));
 	}
 
-	template <size_t taSize>
-	void Read(FixedString<taSize>& outStr)
+	void Read(TempString& outStr)
 	{
 		uint32 size = 0;
 		Read(size);
 
-		if (size > outStr.cCapacity - 1)
-		{
-			gAssert(false);
-			gApp.LogError("BinaryReader tried to read a string of size {} in a FixedString{}, it does not fit!", size, outStr.cCapacity);
-			mError = true;
+		// Reserve enough space (and null terminate).
+		outStr.Resize(size);
 
-			// Skip the string instead of reading it.
-			Skip(size);
-		}
-		else
-		{
-			outStr.mSize = size;
-			outStr.mBuffer[size] = 0;
-			Read(Span(outStr.mBuffer, size));
-		}
+		// Read the string.
+		Read(Span(outStr.Data(), size));
+
+		gAssert(*outStr.End() == 0);
 	}
 
 	[[nodiscard]] StringView Read(StringPool& ioStringPool)
