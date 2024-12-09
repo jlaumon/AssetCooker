@@ -35,7 +35,7 @@ using TempPath = FixedString<cMaxPathSizeUTF8>;
 
 constexpr MutStringView gNormalizePath(MutStringView ioPath); // Replace / by \.
 constexpr bool          gIsNormalized(StringView inPath);     // Return true if path only contains backslashes.
-TempPath                gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
+TempString              gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
 constexpr bool          gIsAbsolute(StringView inPath);       // Return true if the path is absolute and canonical.
 constexpr StringView    gGetFileNamePart(StringView inPath);  // Get the filename part of a path.
 constexpr StringView    gNoTrailingSlash(StringView inPath);  // Remove the trailing slash if there is one.
@@ -45,7 +45,7 @@ bool                    gCreateDirectoryRecursive(StringView inAbsolutePath);
 bool                    gDirectoryExists(StringView inPath);
 bool                    gFileExists(StringView inPath);
 
-StringView              gConvertToLargePath(StringView inPath, TempPath& ioBuffer); // Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
+StringView              gConvertToLargePath(StringView inPath, TempString& ioBuffer); // Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
 
 constexpr MutStringView gNormalizePath(MutStringView ioPath)
 {

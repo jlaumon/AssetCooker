@@ -111,9 +111,9 @@ REGISTER_TEST("ExtractFirstPath")
 
 // Some make rule generators tend to produce absolute paths with all special characters escaped.
 // Some example of such path: C\:\\Bogus\\Path\ \\with\\too_many\\Backsla.sh
-static TempPath sCleanupPath(StringView line)
+static TempString sCleanupPath(StringView line)
 { 
-	TempPath cleaned_path;
+	TempString cleaned_path;
 	for (auto it = line.begin(); it != line.end(); ++it)
 	{
 		auto next_character = it + 1;
@@ -133,41 +133,41 @@ static TempPath sCleanupPath(StringView line)
 
 REGISTER_TEST("CleanupPath")
 {
-	TEST_TRUE(sCleanupPath("./file.txt").AsStringView() == "./file.txt");
+	TEST_TRUE(sCleanupPath("./file.txt") == "./file.txt");
 
 	// Handling proper Windows-style path escaping.
-	TEST_TRUE(sCleanupPath(R"(C\:\\some\\escaped\\path)").AsStringView() == R"(C:\some\escaped\path)");
-	TEST_TRUE(sCleanupPath(R"(C:\\path\ with\ spaces\\should\ work.txt)").AsStringView() == R"(C:\path with spaces\should work.txt)");
+	TEST_TRUE(sCleanupPath(R"(C\:\\some\\escaped\\path)") == R"(C:\some\escaped\path)");
+	TEST_TRUE(sCleanupPath(R"(C:\\path\ with\ spaces\\should\ work.txt)") == R"(C:\path with spaces\should work.txt)");
 	// but handling those shouldn't break perfectly valid paths.
-	TEST_TRUE(sCleanupPath(R"(C:\Windows\path32\command.com)").AsStringView() == R"(C:\Windows\path32\command.com)");
-	TEST_TRUE(sCleanupPath(R"(C:\Windows\)").AsStringView() == R"(C:\Windows\)");
+	TEST_TRUE(sCleanupPath(R"(C:\Windows\path32\command.com)") == R"(C:\Windows\path32\command.com)");
+	TEST_TRUE(sCleanupPath(R"(C:\Windows\)") == R"(C:\Windows\)");
 
 
 
 	// GNU Make escape characters induced from the documentation
 	
 	// Mentioned in https://www.gnu.org/software/make/manual/make.html#What-Makefiles-Contain
-	TEST_TRUE(sCleanupPath(R"(\#sharp.glsl)").AsStringView() == R"(#sharp.glsl)");
+	TEST_TRUE(sCleanupPath(R"(\#sharp.glsl)") == R"(#sharp.glsl)");
 
 	// See also https://www.gnu.org/software/make/manual/make.html#Rule-Syntax-1 for an explicit mention of having
 	// to escape $ to avoid variable expansion.
 	// Also, https://www.gnu.org/software/make/manual/make.html#Splitting-Long-Lines shows a corner case where $
 	// can be used to remove the space resulting of scaffolding the newline.
-	TEST_TRUE(sCleanupPath(R"($$currency.glsl)").AsStringView() == R"($currency.glsl)");
+	TEST_TRUE(sCleanupPath(R"($$currency.glsl)") == R"($currency.glsl)");
 
 	// Given make's $() evaluation syntax, one might consider escaping parentheses but they don't have to be.
-	TEST_TRUE(sCleanupPath(R"=((parens).glsl)=").AsStringView() == R"=((parens).glsl)=");
+	TEST_TRUE(sCleanupPath(R"=((parens).glsl)=") == R"=((parens).glsl)=");
 
 	// https://www.gnu.org/software/make/manual/make.html#Using-Wildcard-Characters-in-File-Names
 	// mentions that wildcard characters can be escaped in order to use them verbatim.
-	TEST_TRUE(sCleanupPath(R"(\[brackets\].glsl)").AsStringView() == R"([brackets].glsl)");
+	TEST_TRUE(sCleanupPath(R"(\[brackets\].glsl)") == R"([brackets].glsl)");
 
 	// No explicit mention of having to escape spaces but given that prerequisites are split by spaces,
 	// it sounds logical to escape them to inhibit that mechanism.
-	TEST_TRUE(sCleanupPath(R"(space\ file.glsl)").AsStringView() == R"(space file.glsl)");
+	TEST_TRUE(sCleanupPath(R"(space\ file.glsl)") == R"(space file.glsl)");
 
 	// Given the role of % in Makefiles, one might consider escaping them but it doesn't happen.
-	TEST_TRUE(sCleanupPath(R"(%percent%.glsl)").AsStringView() == R"(%percent%.glsl)");
+	TEST_TRUE(sCleanupPath(R"(%percent%.glsl)") == R"(%percent%.glsl)");
 };
 
 // Barebones GNU Make-like dependency file parser. 
@@ -227,10 +227,10 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, V
 			current_line = current_line.SubStr(dep_file_path.Data() + dep_file_path.Size() - current_line.Data());
 
 			// Make a copy because we need a null terminated string.
-			TempPath  path = sCleanupPath(dep_file_path);
+			TempString path = sCleanupPath(dep_file_path);
 
 			// Get a proper absolute path, in case some relative parts are involved (might happen when doing #include "../something.h").
-			TempPath  abs_path = gGetAbsolutePath(path);
+			TempString abs_path = gGetAbsolutePath(path);
 
 			// Find the repo.
 			FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
@@ -241,7 +241,7 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, V
 			}
 
 			// Skip the repo path to get the file part.
-			StringView file_path = abs_path.AsStringView().SubStr(repo->mRootPath.Size());
+			StringView file_path = abs_path.SubStr(repo->mRootPath.Size());
 
 			// Find or add the file.
 			// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).

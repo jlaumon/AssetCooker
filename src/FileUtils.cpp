@@ -17,13 +17,29 @@ OwnedHandle::~OwnedHandle()
 }
 
 
-TempPath gGetAbsolutePath(StringView inPath)
+TempString gGetAbsolutePath(StringView inPath)
 {
-	TempPath abs_path;
-	abs_path.mSize = GetFullPathNameA(inPath.AsCStr(), abs_path.cCapacity, abs_path.mBuffer, nullptr);
+	TempString abs_path;
+	abs_path.Reserve(23); // Should be enough for everyone.
 
-	if (abs_path.mSize == 0 || abs_path.mSize > abs_path.cCapacity)
+	// Note: if size is < capacity then it doesn't contain the null term
+	//       if size is > capacity then it's the capacity needed (including null term)
+	//       size == capacity cannot happen ¯\_(ツ)_/¯
+	int size = GetFullPathNameA(inPath.AsCStr(), abs_path.Capacity(), abs_path.Data(), nullptr);
+
+	if (size > abs_path.Capacity())
+	{
+		// Reserve as needed and try again.
+		abs_path.Reserve(size);
+		size = GetFullPathNameA(inPath.AsCStr(), abs_path.Capacity(), abs_path.Data(), nullptr);
+	}
+
+	if (size == 0 || size > abs_path.Capacity())
 		gApp.FatalError(R"(Failed get absolute path for "{}")", inPath);
+
+	gAssert(size < abs_path.Capacity()); // Don't think that can happen, but if it does it means we might be missing the last char?
+	abs_path.Resize(size);
+	abs_path.ShrinkToFit();	// Return some of the large buffer we reserved.
 
 	return abs_path;
 }
@@ -32,12 +48,18 @@ TempPath gGetAbsolutePath(StringView inPath)
 // Prepend "\\?\" if necessary, to allow going over the MAX_PATH limit.
 StringView gConvertToLargePath(StringView inPath, TempString& ioBuffer)
 {
-	// Note1: > (MAX_PATH - 13) because the doc says actual max for directories is MAX_PATH - 12, and that includes the null terminator (so + 1).
+	// Note: > (MAX_PATH - 13) because the doc says actual max for directories is MAX_PATH - 12, and that includes the null terminator (so + 1).
 	// CreateDirectory worked up to MAX_PATH - 2 when I tried, but better stay on the cautious side.
-	// Note2: Can't prepend relative paths, but also can't convert them to absolute if they're too long
-	// with the current implementation of gGetAbsolutePath. So that case will fail if it ever happens.
-	if (inPath.Size() > (MAX_PATH - 13) && !gStartsWith(inPath, R"(\\?\)") && gIsAbsolute(inPath))
+	if (inPath.Size() > (MAX_PATH - 13) && !gStartsWith(inPath, R"(\\?\)"))
 	{
+		// Can't prepend a relative path, so convert to an absolute path first.
+		TempString abs_path;
+		if (!gIsAbsolute(inPath))
+		{
+			abs_path = gGetAbsolutePath(inPath);
+			inPath   = abs_path;
+		}
+
 		ioBuffer = R"(\\?\)";
 		ioBuffer.Append(inPath);
 		return ioBuffer;
@@ -115,10 +137,10 @@ bool gCreateDirectoryRecursive(StringView inAbsolutePath)
 bool gDirectoryExists(StringView inPath)
 {
 	StringView path = inPath;
-	TempPath   path_copy;
+	TempString path_copy;
 
 	// If the path ends with a backslash, make a copy and remove it. The Win32 function doesn't like that.
-	if (gEndsWith(inPath, "\\"))
+	if (inPath.EndsWith("\\"))
 	{
 		path_copy = path.SubStr(0, path.Size() - 1);
 		path      = path_copy;
