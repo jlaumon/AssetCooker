@@ -336,7 +336,7 @@ static OptionalStringView sBuildFilePath(StringView inParentDirPath, WStringView
 		return {};
 	}
 
-	return StringView{ file_path.Data(), gEndPtr(*file_name) };
+	return StringView{ file_path.Data(), file_name->End() };
 }
 
 
@@ -604,7 +604,7 @@ OptionalStringView FileDrive::GetFullPath(const OwnedHandle& inFileHandle, MutSt
 	if (!path_part)
 		return {};
 
-	return StringView{ ioBuffer.Data(), gEndPtr(*path_part) };
+	return StringView{ ioBuffer.Data(), path_part->End() };
 }
 
 

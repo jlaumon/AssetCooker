@@ -127,16 +127,13 @@ bool gEndsWithNoCase(StringView inString, StringView inEnd);
 constexpr bool gIsAlpha(char inChar) { return inChar >= 'A' && inChar < 'z'; }
 
 
-// Return a pointer to the end of a string view. StringView::end returns an iterator, and that's often annoying.
-// TODO: replace by call to End(), it's not an iterator anymore
-constexpr const char* gEndPtr(StringView inString)
+namespace Details
 {
-	return inString.End();
+	void ToLowercase(Span<char> ioString);	// Needs to include the null terminator.
 }
 
-
 // Transform the string to lower case in place.
-void gToLowercase(MutStringView ioString);
+template <class taString> void gToLowercase(taString& ioString) { Details::ToLowercase(Span(ioString.Data(), ioString.Size() + 1)); }
 
 
 // TODO: rename to gStringCopy? gAppend is misleading since it writes at the beginning, not the end
@@ -182,7 +179,7 @@ constexpr MutStringView gConcat(MutStringView ioDest, const StringView inStr, ta
 // All strings allocated should ALWAYS be null-terminated, this is just checking if this is a sub-string view.
 constexpr bool gIsNullTerminated(StringView inString)
 {
-	return *gEndPtr(inString) == 0;
+	return *inString.End() == 0;
 }
 
 // Formatter for StringView.

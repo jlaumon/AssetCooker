@@ -39,7 +39,7 @@ bool gEndsWithNoCase(StringView inString, StringView inEnd)
 
 
 // Transform the string to lower case in place.
-void gToLowercase(MutStringView ioString)
+void Details::ToLowercase(Span<char> ioString)
 {
 	_mbslwr_s((unsigned char*)ioString.Data(), ioString.Size());
 }

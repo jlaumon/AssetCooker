@@ -81,7 +81,7 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 {
 	String str;
 	const char* p_begin = inFormatStr.Data();
-	const char* p_end   = gEndPtr(inFormatStr);
+	const char* p_end   = inFormatStr.End();
 	const char* p       = p_begin;
 
 	while (p != p_end)
@@ -267,10 +267,10 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 	gAssert(gIsNormalized(inPath) && gIsNormalized(inPattern));
 
 	// Convert the path and pattern to lowercase to make sure the search is case-insensitive.
-	TempPath path_lowercase = inPath;
-	gToLowercase(path_lowercase.AsSpan());
-	TempPath pattern_lowercase = inPattern;
-	gToLowercase(pattern_lowercase.AsSpan());
+	TempString path_lowercase = inPath;
+	gToLowercase(path_lowercase);
+	TempString pattern_lowercase = inPattern;
+	gToLowercase(pattern_lowercase);
 
 	StringView str          = path_lowercase;
 	StringView pattern      = pattern_lowercase;
