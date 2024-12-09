@@ -62,6 +62,7 @@ struct App
 
 	String                          mMainWindowTitle       = "Asset Cooker";
 	void*                           mMainWindowHwnd        = nullptr;
+	void*                           mNotifMenuHmenu        = nullptr;
 	bool                            mMainWindowIsMinimized = false;
 	bool                            mExitRequested         = false;
 	bool                            mExitReady             = false;

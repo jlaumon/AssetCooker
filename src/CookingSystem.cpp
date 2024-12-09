@@ -292,7 +292,8 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 				return true;
 
 			// Find where the string starts matching the pattern again.
-			int next_match = str.Find(pattern[0]);
+			StringView pattern_until_next_wildcard = pattern.SubStr(0, pattern.FindFirstOf("?*"));
+			int next_match = str.Find(pattern_until_next_wildcard);
 
 			// Never? Then it's a fail.
 			if (next_match == -1)
@@ -352,7 +353,8 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 			pending_star = false;
 
 			// Find where the string starts matching the pattern again.
-			int next_match = str.Find(pattern[0]);
+			StringView pattern_until_next_wildcard = pattern.SubStr(0, pattern.FindFirstOf("?*"));
+			int next_match = str.Find(pattern_until_next_wildcard);
 
 			// Never? Then it's a fail.
 			if (next_match == -1)
@@ -382,6 +384,7 @@ REGISTER_TEST("MatchPath")
 	TEST_TRUE(gMatchPath ("YOYO.txt", "y*?.*"));
 	TEST_FALSE(gMatchPath("Y.txt", "y*?.*"));
 	TEST_FALSE(gMatchPath("YOYO.txt", "yoyo.txt*?"));
+	TEST_TRUE(gMatchPath("medium_house\\texture_albedo.png", "*_albedo.*"));
 };
 
 
