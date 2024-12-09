@@ -186,15 +186,15 @@ int WinMain(
   int       nShowCmd
 )
 {
+	// Init some temp memory.
+	gThreadInitTempMemory(gMemAlloc(1_MiB));
+	defer { gMemFree(gThreadExitTempMemory()); };
+
 	// Check if we only want to run the tests.
 	if (StringView(lpCmdLine).Contains("-test"))
 	{
 		return (gRunTests() == TestResult::Success) ? 0 : 1;
 	}
-
-	// Init some temp memory.
-	gThreadInitTempMemory(gMemAlloc(1_MiB));
-	defer { gMemFree(gThreadExitTempMemory()); };
 
 	gSetCurrentThreadName("Main Thread");
 
