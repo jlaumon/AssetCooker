@@ -16,6 +16,7 @@
 #include <Bedrock/Thread.h>
 #include <Bedrock/Mutex.h>
 #include <Bedrock/ConditionVariable.h>
+#include <Bedrock/StringFormat.h>
 
 #include <optional>
 
@@ -420,6 +421,10 @@ template <> struct fmt::formatter<FileRefNumber> : fmt::formatter<fmt::string_vi
 	}
 };
 
+inline TempString gToString(FileRefNumber inRefNumber)
+{
+	return gTempFormat("0x%llX%016llX", inRefNumber.mData[1], inRefNumber.mData[0]);
+}
 
 
 // Formatter for FileInfo.
@@ -432,6 +437,13 @@ template <> struct fmt::formatter<FileInfo> : fmt::formatter<fmt::string_view>
 			inFileInfo.mPath);
 	}
 };
+
+inline TempString gToString(const FileInfo& inFileInfo)
+{
+	return gTempFormat("%s:%s", 
+		inFileInfo.GetRepo().mName.AsCStr(),
+		inFileInfo.mPath.AsCStr());
+}
 
 
 // Formatter for FileTime.
@@ -456,4 +468,23 @@ template <> struct fmt::formatter<FileTime> : fmt::formatter<fmt::string_view>
 		}
 	}
 };
+
+inline TempString gToString(FileTime inFileTime)
+{
+	if (inFileTime.IsValid())
+	{
+		LocalTime local_time = inFileTime.ToLocalTime();
+		return gTempFormat("%04u/%02u/%02u %02u:%02u:%02u", 
+			local_time.mYear,
+			local_time.mMonth,
+			local_time.mDay,
+			local_time.mHour,
+			local_time.mMinute,
+			local_time.mSecond);
+	}
+	else
+	{
+		return "Unknown Time";
+	}
+}
 

@@ -13,6 +13,7 @@
 #include <Bedrock/Algorithm.h>
 #include <Bedrock/Ticks.h>
 #include <Bedrock/Random.h>
+#include <Bedrock/StringFormat.h>
 
 #include "win32/misc.h"
 #include "win32/file.h"
@@ -486,7 +487,7 @@ FileDrive::FileDrive(char inDriveLetter)
 
 	// Get a handle to the drive.
 	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
-	mHandle = CreateFileA(FixedString32(R"(\\.\{}:)", mLetter).AsCStr(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	mHandle = CreateFileA(gTempFormat(R"(\\.\%c:)", mLetter).AsCStr(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (!mHandle.IsValid())
 		gApp.FatalError(R"(Failed to get handle to {}:\ - {})", mLetter, GetLastErrorString());
 
@@ -546,23 +547,23 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 	if (!handle.IsValid())
 	{
 		// Helper lambda to try to get a sensible string for the file being opened.
-		auto BuildFileStr = [this](FileRefNumber inRefNumber, FileID inFileID) {
+		auto BuildFileStr = [this](FileRefNumber inRefNumber, FileID inFileID) -> TempString {
 
 			// Try to find the FileInfo for that ref number.
 			FileID file_id = inFileID.IsValid() ? inFileID : FindFileID(inRefNumber);
 
 			// Turn it into a string.
 			if (file_id.IsValid())
-				return FixedString<cWin32MaxPathSizeUTF8>("{}", file_id.GetFile());
+				return gToString(file_id.GetFile());
 			else
-				return FixedString<cWin32MaxPathSizeUTF8>("Unknown");
+				return "Unknown";
 		};
 
 		uint32 error = GetLastError();
 
 		// In non-verbose mode, don't log errors unless we know they're about a file we care about.
 		if (gApp.mLogFSActivity >= LogLevel::Verbose || inFileID.IsValid())
-			gApp.LogError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID).AsStringView(), inRefNumber, GetLastErrorString());
+			gApp.LogError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID), inRefNumber, GetLastErrorString());
 		
 		// Some errors are okay, and we can just ignore the file or try to open it again later.
 		// Some are not okay, and we throw a fatal error.
@@ -576,7 +577,7 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 			|| error == ERROR_CANT_ACCESS_FILE)		// Unsure what this means but I've seen it happen for an unknown file on C:/ once.
 			return OpenFileError::FileNotFound;
 
-		gApp.FatalError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID).AsStringView(), inRefNumber, GetLastErrorString());
+		gApp.FatalError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID), inRefNumber, GetLastErrorString());
 	}
 
 	return handle;
@@ -666,9 +667,9 @@ constexpr uint32 operator&(USNReasons inA, USNReasons inB) { return (uint32)inA 
 constexpr uint32 operator&(uint32 inA, USNReasons inB) { return inA & (uint32)inB; }
 constexpr uint32 operator&(USNReasons inA, uint32 inB) { return (uint32)inA & inB; }
 
-FixedString512 gToString(USNReasons inReasons)
+TempString gToString(USNReasons inReasons)
 {
-	FixedString512 str;
+	TempString str;
 
 	if (inReasons & USNReasons::DATA_OVERWRITE				) str.Append(" DATA_OVERWRITE");
 	if (inReasons & USNReasons::DATA_EXTEND					) str.Append(" DATA_EXTEND");
@@ -1480,8 +1481,8 @@ void FileSystem::LoadCache()
 	Timer timer;
 	mInitState.Store(InitState::LoadingCache);
 
-	FixedString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
-	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "rb");
+	TempString cache_file_path = gTempFormat(R"(%s\%s)", gApp.mCacheDirectory.AsCStr(), cCacheFileName.AsCStr());
+	FILE*      cache_file      = fopen(cache_file_path.AsCStr(), "rb");
 
 	if (cache_file == nullptr)
 	{
@@ -1827,8 +1828,8 @@ void FileSystem::SaveCache()
 	// Make sure the cache dir exists.
 	CreateDirectoryA(gApp.mCacheDirectory.AsCStr(), nullptr);
 
-	FixedString256 cache_file_path(R"({}\{})", gApp.mCacheDirectory, cCacheFileName);
-	FILE*         cache_file = fopen(cache_file_path.AsCStr(), "wb");
+	TempString cache_file_path = gTempFormat(R"(%s\%s)", gApp.mCacheDirectory.AsCStr(), cCacheFileName.AsCStr());
+	FILE*      cache_file      = fopen(cache_file_path.AsCStr(), "wb");
 
 	if (cache_file == nullptr)
 		gApp.FatalError(R"(Failed to save cached state ("{}") - {} (0x{:X}))", cache_file_path, strerror(errno), errno);
