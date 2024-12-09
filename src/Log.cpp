@@ -90,8 +90,8 @@ void Log::Draw(StringView inName, bool* ioOpen)
 		LockGuard lock(mMutex);
 
 		ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-		FixedString32 title("{}", inName);
-		if (!ImGui::Begin(title.AsCStr(), ioOpen))
+
+		if (!ImGui::Begin(TempString(inName), ioOpen))
 		{
 			ImGui::End();
 			return;
