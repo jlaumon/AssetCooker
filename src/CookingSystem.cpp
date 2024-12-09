@@ -306,7 +306,8 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 				return true;
 
 			// Find where the string starts matching the pattern again.
-			size_t next_match = str.find(pattern[0]);
+			StringView pattern_until_next_wildcard = pattern.substr(0, pattern.find_first_of("?*"));
+			size_t next_match = str.find(pattern_until_next_wildcard);
 
 			// Never? Then it's a fail.
 			if (next_match == StringView::npos)
@@ -366,7 +367,8 @@ bool gMatchPath(StringView inPath, StringView inPattern)
 			pending_star = false;
 
 			// Find where the string starts matching the pattern again.
-			size_t next_match = str.find(pattern[0]);
+			StringView pattern_until_next_wildcard = pattern.substr(0, pattern.find_first_of("?*"));
+			size_t next_match = str.find(pattern_until_next_wildcard);
 
 			// Never? Then it's a fail.
 			if (next_match == StringView::npos)
@@ -396,6 +398,7 @@ REGISTER_TEST("MatchPath")
 	TEST_TRUE(gMatchPath ("YOYO.txt", "y*?.*"));
 	TEST_FALSE(gMatchPath("Y.txt", "y*?.*"));
 	TEST_FALSE(gMatchPath("YOYO.txt", "yoyo.txt*?"));
+	TEST_TRUE(gMatchPath("medium_house\\texture_albedo.png", "*_albedo.*"));
 };
 
 

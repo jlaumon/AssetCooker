@@ -270,6 +270,65 @@ TempPath gFormat(const FileInfo& inFile)
 }
 
 
+void gDrawInputFilters(const FileInfo& inFile)
+{
+	ImGui::PushID(TempString32("File {}", inFile.mID.AsUInt()).AsCStr());
+	defer { ImGui::PopID(); };
+
+	bool open = ImGui::Button("See Input Filters");
+
+	if (open)
+		ImGui::OpenPopup("Popup");
+
+	if (ImGui::IsPopupOpen("Popup") && 
+		ImGui::BeginPopupWithTitle("Popup", TempString128("Input Filters for {}: ...\\{}", 
+			inFile.GetRepo().mName, inFile.GetName()).AsCStr()))
+	{
+		defer { ImGui::EndPopup(); };
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, gStyle.ItemSpacing);
+		defer { ImGui::PopStyleVar(1); };
+		{
+			bool already_passed = false;
+			for (const CookingRule& rule : gCookingSystem.GetRules())
+			{
+				ImGui::TextUnformatted(rule.mName.AsCStr());
+				ImGui::Indent();
+
+				for (auto& filter : rule.mInputFilters)
+				{
+					bool pass = filter.Pass(inFile);
+
+					// Set the color.
+					uint32 icon_color;
+					if (already_passed)
+						icon_color = cColorTextFileDeleted;
+					else if (pass)
+						icon_color = cColorTextSuccess;
+					else
+						icon_color = cColorTextError;
+					ImGui::PushStyleColor(ImGuiCol_Text, icon_color);
+
+					// Draw the icon.
+					ImGui::TextUnformatted(pass ? ICON_FK_CHECK : ICON_FK_TIMES);
+
+					// Pop the color.
+					ImGui::PopStyleColor();
+
+					ImGui::SameLine();
+					ImGui::TextUnformatted(TempString512("{}:{}", gFileSystem.GetRepo(FileID{ filter.mRepoIndex, 0 }).mName, filter.mPathPattern));
+
+					if (pass)
+						already_passed = true;
+				}
+
+				ImGui::Unindent();
+			}
+		}
+	}
+}
+
+
 enum class DependencyType
 {
 	Unknown,
@@ -420,6 +479,8 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		}
 
 		ImGui::SeparatorText("Related Commands");
+
+		gDrawInputFilters(inFile);
 
 		if (!inFile.mInputOf.empty())
 			gDrawCookingCommandSpan("Is Input Of", inFile.mInputOf);
@@ -627,7 +688,7 @@ void gDrawCookingRulePopup(const CookingRule& inRule)
 	ImGui::SeparatorText(TempString64("Input Filters ({} items)", inRule.mInputFilters.size()));
 
 	for (const InputFilter& input_filter : inRule.mInputFilters)
-		ImGui::TextUnformatted(TempPath(R"({}: {})", gFileSystem.GetRepo(FileID{ input_filter.mRepoIndex, 0 }).mName, input_filter.mPathPattern));
+		ImGui::TextUnformatted(TempPath(R"({}:{})", gFileSystem.GetRepo(FileID{ input_filter.mRepoIndex, 0 }).mName, input_filter.mPathPattern));
 
 	if (!inRule.mInputPaths.empty())
 	{
