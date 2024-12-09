@@ -6,8 +6,8 @@
 #pragma once
 
 #include <Bedrock/Debug.h>
-#include "Strings.h"
+#include <Bedrock/String.h>
 
 // Get last error as a string.
-FixedString512 GetLastErrorString();
+TempString GetLastErrorString();
 
