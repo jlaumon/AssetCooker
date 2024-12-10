@@ -36,8 +36,6 @@ struct MutStringView : Span<char>
 	}
 };
 
-template<int taSize> struct FixedString;
-
 
 // WStringView.
 using WStringView = std::wstring_view;
@@ -89,33 +87,32 @@ namespace Details
 template <class taString> void gToLowercase(taString& ioString) { Details::ToLowercase(Span(ioString.Data(), ioString.Size() + 1)); }
 
 
-// TODO: rename to gStringCopy? gAppend is misleading since it writes at the beginning, not the end
-// Copy a string into a potentially larger one, and return a MutStringView for what remains.
-// eg. next = gAppend(buffer, "hello") will write "hello" into buffer, and next will point after "hello".
-constexpr MutStringView gAppend2(MutStringView ioDest, const StringView inStr)
+// Copy a StringView into a fixed sized buffer.
+inline StringView gStringCopy(MutStringView ioDest, StringView inStr)
 {
 	// Assert if destination isn't large enough, but still make sure we don't overflow.
 	int dest_available_size = ioDest.Size() - 1; // Keep 1 for null terminator.
 	gAssert(inStr.Size() <= dest_available_size);
 	int copy_size = gMin(inStr.Size(), dest_available_size);
 
-	for (int i = 0; i < copy_size; i++)
-		ioDest[i] = inStr[i];
+	gMemCopy(ioDest.Data(), inStr.Data(), copy_size);
 
 	// Add a null-terminator.
 	ioDest[copy_size] = 0;
 
-	return { ioDest.Data() + copy_size, ioDest.Size() - copy_size };
+	return { ioDest.Data(), copy_size };
 }
-constexpr MutStringView gStringCopy(MutStringView ioDest, const StringView inStr) { return gAppend2(ioDest, inStr); }
 
 
+// Append multiple strings to a TempString. Accepts any number of parameters.
 template <class ...taArgs>
 void gAppend(TempString& outString, taArgs&&... inArgs)
 {
 	(outString.Append(gForward<taArgs>(inArgs)), ...);
 }
 
+// Concatenate multiple strings into a TempString. Accepts any number of parameters.
+// Eg. TempString str = gConcat("hello", "world", "!");
 template <class ...taArgs>
 TempString gConcat(taArgs&&... inArgs)
 {
@@ -133,6 +130,7 @@ constexpr bool gIsNullTerminated(StringView inString)
 }
 
 
+// Format a size in bytes into an easy to read string.
 inline TempString gFormatSizeInBytes(int64 inBytes)
 {
 	if (inBytes < 10_KiB)

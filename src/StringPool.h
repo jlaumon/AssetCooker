@@ -56,6 +56,7 @@ struct StringPool
 		return mBuffer.CapacityInBytes();
 	}
 
+	// TODO: replace this with a String + custom allocator calling StringPool
 	struct ResizableStringView
 	{
 		using value_type          = char;
