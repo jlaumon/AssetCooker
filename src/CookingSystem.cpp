@@ -948,7 +948,7 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 const CookingRule* CookingSystem::FindRule(StringView inRuleName) const
 {
 	for (const CookingRule& rule : mRules)
-		if (gIsEqual(rule.mName, inRuleName))
+		if (rule.mName == inRuleName)
 			return &rule;
 
 	return nullptr;

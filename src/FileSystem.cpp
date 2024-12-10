@@ -326,7 +326,7 @@ StringView FileRepo::RemoveRootPath(StringView inFullPath)
 
 
 
-static TempString sBuildFilePath(StringView inParentDirPath, WStringView inFileNameW, MutStringView ioBuffer)
+static TempString sBuildFilePath(StringView inParentDirPath, WStringView inFileNameW)
 {
 	TempString path;
 
@@ -408,11 +408,10 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 				continue;
 
 			// Build the file path.
-			PathBufferUTF8     path_buffer;
-			OptionalStringView path = sBuildFilePath(dir.mPath, wfilename, path_buffer);
+			TempString path = sBuildFilePath(dir.mPath, wfilename);
 
 			// If it fails, ignore the file.
-			if (!path)
+			if (path.Empty())
 			{
 				gAppLogError("Failed to build the path of a file in %s", dir.ToString().AsCStr());
 				gAssert(false); // Investigate why that would happen.
@@ -423,7 +422,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 			const bool is_directory = (entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
 			// Add (or get) the file info.
-			FileInfo& file = GetOrAddFile(*path, is_directory ? FileType::Directory : FileType::File, entry->FileId);
+			FileInfo& file = GetOrAddFile(path, is_directory ? FileType::Directory : FileType::File, entry->FileId);
 
 			if (gApp.mLogFSActivity >= LogLevel::Verbose)
 				gAppLog("Added %s", file.ToString().AsCStr());

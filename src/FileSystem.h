@@ -416,53 +416,7 @@ inline FileRepo& FileID::GetRepo() const
 }
 
 
-// Formatter for FileRefNumber.
-template <> struct fmt::formatter<FileRefNumber> : fmt::formatter<fmt::string_view>
-{
-	auto format(FileRefNumber inRefNumber, format_context& ioCtx) const
-	{
-		return fmt::format_to(ioCtx.out(), "0x{:X}{:016X}", inRefNumber.mData[1], inRefNumber.mData[0]);
-	}
-};
-
 inline TempString gToString(FileRefNumber inRefNumber)
 {
 	return gTempFormat("0x%llX%016llX", inRefNumber.mData[1], inRefNumber.mData[0]);
 }
-
-
-// Formatter for FileInfo.
-template <> struct fmt::formatter<FileInfo> : fmt::formatter<fmt::string_view>
-{
-	auto format(const FileInfo& inFileInfo, format_context& ioCtx) const
-	{
-		return fmt::format_to(ioCtx.out(), "{}:{}", 
-			inFileInfo.GetRepo().mName,
-			inFileInfo.mPath);
-	}
-};
-
-
-// Formatter for FileTime.
-template <> struct fmt::formatter<FileTime> : fmt::formatter<fmt::string_view>
-{
-	auto format(FileTime inFileTime, format_context& ioCtx) const
-	{
-		if (inFileTime.IsValid())
-		{
-			LocalTime local_time = inFileTime.ToLocalTime();
-			return fmt::format_to(ioCtx.out(), "{:04}/{:02}/{:02} {:02}:{:02}:{:02}", 
-				local_time.mYear,
-				local_time.mMonth,
-				local_time.mDay,
-				local_time.mHour,
-				local_time.mMinute,
-				local_time.mSecond);
-		}
-		else
-		{
-			return fmt::format_to(ioCtx.out(), "Unknown Time");
-		}
-	}
-};
-
