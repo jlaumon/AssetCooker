@@ -15,7 +15,7 @@ void gReadUserPreferencesFile(StringView inPath)
 	if (!gFileExists(inPath))
 		return; // It's fine if that file doesn't exist, it's optional.
 
-	gApp.Log(R"(Reading User Preferences file "{}".)", inPath);
+	gAppLog(R"(Reading User Preferences file "%s".)", inPath.AsCStr());
 
 	// Parse the toml file.
 	TomlReader reader;
@@ -91,7 +91,8 @@ void gWriteUserPreferencesFile(StringView inPath)
 	FILE* prefs_file = fopen(inPath.AsCStr(), "wt");
 	if (prefs_file == nullptr)
 	{
-		gApp.LogError(R"(Failed to save User Preferences file ("{}") - {} (0x{:X}))", inPath, strerror(errno), errno);
+		gAppLogError(R"(Failed to save User Preferences file ("%s") - %s (0x%X))", 
+			inPath.AsCStr(), strerror(errno), errno);
 		return;
 	}
 
@@ -114,7 +115,7 @@ void gWriteUserPreferencesFile(StringView inPath)
 
 	size_t written_size = fwrite(str.c_str(), 1, str.size(), prefs_file);
 	if (written_size != str.size())
-		gApp.LogError(R"(Failed to save User Preferences file ("{}") - {} (0x{:X}))", inPath, strerror(errno), errno);
+		gAppLogError(R"(Failed to save User Preferences file ("%s") - %s (0x%X))", inPath.AsCStr(), strerror(errno), errno);
 
 	fclose(prefs_file);
 }

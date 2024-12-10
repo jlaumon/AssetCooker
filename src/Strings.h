@@ -11,8 +11,10 @@
 #include <optional>
 #include "fmt/format.h"
 
+#include <Strings.h>
 #include <Bedrock/StringView.h>
 #include <Bedrock/String.h>
+#include <Bedrock/StringFormat.h>
 
 constexpr bool gIsNullTerminated(StringView inString);
 
@@ -244,6 +246,18 @@ template <> struct fmt::formatter<SizeInBytes> : fmt::formatter<fmt::string_view
 			return fmt::format_to(ioCtx.out(), "{} GiB", (int64)inBytes / 1_GiB);
 	}
 };
+
+inline TempString gFormatSizeInBytes(int64 inBytes)
+{
+	if (inBytes < 10_KiB)
+		return gTempFormat("%lld B", inBytes);
+	else if (inBytes < 10_MiB)
+		return gTempFormat("%lld KiB", inBytes / 1_KiB);
+	else if (inBytes < 10_GiB)
+		return gTempFormat("%lld MiB", inBytes / 1_MiB);
+	else
+		return gTempFormat("%lld GiB", inBytes / 1_GiB);
+}
 
 
 // Convert wide char string to utf8. Always returns a null terminated string. Return an empty string on failure.

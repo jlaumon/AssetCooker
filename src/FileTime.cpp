@@ -5,6 +5,8 @@
  */
 #include "FileTime.h"
 
+#include <Bedrock/StringFormat.h>
+
 
 #include "win32/file.h"
 #include "win32/misc.h"
@@ -42,6 +44,25 @@ SystemTime FileTime::ToSystemTime() const
 LocalTime FileTime::ToLocalTime() const
 {
 	return ToSystemTime().ToLocalTime();
+}
+
+TempString FileTime::ToString() const
+{
+	if (IsValid())
+	{
+		LocalTime local_time = ToLocalTime();
+		return gTempFormat("%04u/%02u/%02u %02u:%02u:%02u", 
+			local_time.mYear,
+			local_time.mMonth,
+			local_time.mDay,
+			local_time.mHour,
+			local_time.mMinute,
+			local_time.mSecond);
+	}
+	else
+	{
+		return "Unknown Time";
+	}
 }
 
 

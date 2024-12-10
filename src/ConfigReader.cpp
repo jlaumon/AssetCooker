@@ -11,7 +11,7 @@
 
 void gReadConfigFile(StringView inPath)
 {
-	gApp.Log(R"(Reading Config file "{}".)", inPath);
+	gAppLog(R"(Reading Config file "%s".)", inPath.AsCStr());
 
 	// Parse the toml file.
 	TomlReader reader;

@@ -24,16 +24,17 @@
 #include "win32/threads.h"
 
 #include <algorithm> // for std::sort
+#include <stdarg.h>
 
 void App::Init()
 {
 	mLog.mAutoAddTime = true;
-	Log("Bonjour.");
+	gAppLog("Bonjour.");
 
 	// The application includes a manifest that should make the default code page be UTF8 (if at least Windows 10 1903).
 	// This in turn should mean that most ANSI win32 functions actually support UTF8.
 	// TODO: use A version of windows functions wherever possible
-	Log("UTF8 is {}.", GetACP() == CP_UTF8 ? "supported. Noice" : "not supported");
+	gAppLog("UTF8 is %s.", GetACP() == CP_UTF8 ? "supported. Noice" : "not supported");
 
 	// Read the config file.
 	gReadConfigFile("config.toml");
@@ -49,7 +50,7 @@ void App::Init()
 	// and the configurable window title (to allow multiple instances if they are cooking different projects).
 	mSingleInstanceMutex = CreateMutexA(nullptr, FALSE, gTempFormat("Asset Cooker eb835e40-e91e-4cfb-8e71-a68d3367bb7e %s", mMainWindowTitle.AsCStr()).AsCStr());
 	if (GetLastError() == ERROR_ALREADY_EXISTS)
-		FatalError("An instance of Asset Cooker is already running. Too many Cooks!");
+		gAppFatalError("An instance of Asset Cooker is already running. Too many Cooks!");
 
 	// Read the rule file.
 	if (!HasInitError())
@@ -65,7 +66,7 @@ void App::Exit()
 {
 	gWriteUserPreferencesFile(mUserPrefsFilePath);
 
-	Log("Au revoir.");
+	gAppLog("Au revoir.");
 	CloseLogFile();
 }
 
@@ -78,25 +79,35 @@ void App::RequestExit()
 	mExitReady = true;
 }
 
-bool App::IsExitRequested()
+bool App::IsExitRequested() const
 {
 	return mExitRequested;
 }
 
-bool App::IsExitReady()
+bool App::IsExitReady() const
 {
 	return mExitReady;
 }
 
+namespace Details
+{
+	// The va_list version is kept out of the header to avoid including stdarg.h in the header (or defining it manually) for now.
+	void StringFormat(StringFormatCallback inAppendCallback, void* outString, const char* inFormat, va_list inArgs);
+}
 
-void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
+
+void App::_FatalError(StringView inFormat, ...)
 {
 	// Make sure a single thread triggers the pop-up.
 	static Mutex blocker;
 	blocker.Lock();
 
+	va_list args;
+	va_start(args, inFormat);
+
 	// Log the error first.
-	LogErrorV(inFmt, inArgs);
+	_LogV(LogType::Error, inFormat, args);
+
 
 	if (gIsDebuggerAttached())
 		breakpoint;
@@ -107,21 +118,33 @@ void App::FatalErrorV(StringView inFmt, fmt::format_args inArgs)
 		if (!gIsRunningTest())
 		{
 			MessageBoxA(nullptr, 
-				FixedString512(inFmt, inArgs).AsCStr(), 
+				gTempFormatV(inFormat.AsCStr(), args).AsCStr(), 
 				gTempFormat("%s - Fatal Error!", mMainWindowTitle.AsCStr()).AsCStr(), 
 				MB_OK | MB_ICONERROR | MB_APPLMODAL);
 		}
 	}
 
-	LogError("Fatal error, exiting now.");
+	va_end(args);
+
+	_Log(LogType::Error, "Fatal error, exiting now.");
 	quick_exit(1);
 }
 
 
-void App::LogV(StringView inFmt, fmt::format_args inArgs, LogType inType)
+void App::_Log(LogType inType, StringView inFormat, ...)
 {
-	// Add to the in-memory log.
-	StringView formatted_str = mLog.Add(inType, inFmt, inArgs);
+	va_list args;
+	va_start(args, inFormat);
+
+	_LogV(inType, inFormat, args);
+
+	va_end(args);
+}
+
+
+void App::_LogV(LogType inType, StringView inFormat, va_list inArgs)
+{
+	StringView formatted_str = mLog.Add(inType, inFormat, inArgs);
 
 	// If running tests, print to stdout (otherwise we don't care).
 	// TODO: also if running in command line mode/no UI mode
@@ -130,15 +153,18 @@ void App::LogV(StringView inFmt, fmt::format_args inArgs, LogType inType)
 		fwrite(formatted_str.Data(), 1, formatted_str.Size(), stdout);
 	}
 
-	// Convert to wide char to write to the debug output.
-	wchar_t message_buffer[4096];
-	auto wchar_message = gUtf8ToWideChar(formatted_str, message_buffer);
-	gAssert(wchar_message); // Buffer too small? Why would you log something that long?
-
-	if (wchar_message)
+	// If there's a debugger attached, convert to wide char to write to the debug output.
+	if (gIsDebuggerAttached())
 	{
-		// Write the message to the output.
-		OutputDebugStringW(message_buffer);
+		wchar_t message_buffer[4096];
+		auto wchar_message = gUtf8ToWideChar(formatted_str, message_buffer);
+		gAssert(wchar_message); // Buffer too small? Why would you log something that long?
+
+		if (wchar_message)
+		{
+			// Write the message to the output.
+			OutputDebugStringW(message_buffer);
+		}
 	}
 
 	// Also log to a file.
@@ -186,15 +212,15 @@ void App::OpenLogFile()
 	}
 
 	if (mLogFile == nullptr)
-		LogError(R"(Failed to open log file "{}" - {})", new_log_file, GetLastErrorString());
+		gAppLogError(R"(Failed to open log file "%s" - %s)", new_log_file.AsCStr(), GetLastErrorString().AsCStr());
 
 	// Clean up old log files.
 	{
 		// Max number of log files to keep, delete the oldest ones if we have more.
-		constexpr int        max_log_files   = 5;
+		constexpr int max_log_files   = 5;
 
 		// List all the log files.
-		Vector<String> log_files;
+		TempVector<String> log_files;
 		{
 			WIN32_FIND_DATAA find_file_data;
 			HANDLE find_handle = FindFirstFileA(gTempFormat("%s\\*", mLogDirectory.AsCStr()).AsCStr(), &find_file_data);

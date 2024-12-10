@@ -50,7 +50,7 @@ PathHash gHashPath(StringView inAbsolutePath)
 	PathBufferUTF16     wpath_buffer;
 	OptionalWStringView wpath = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
 	if (!wpath)
-		gApp.FatalError("Failed to convert path {} to WideChar", inAbsolutePath);
+		gAppFatalError("Failed to convert path %s to WideChar", inAbsolutePath.AsCStr());
 
 	// TODO use gToLowerCase instead?
 	// Convert it to uppercase.
@@ -58,7 +58,7 @@ PathHash gHashPath(StringView inAbsolutePath)
 	PathBufferUTF16 uppercase_buffer;
 	int uppercase_size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, wpath->data(), (int)wpath->size(), uppercase_buffer, gElemCount(uppercase_buffer) / 2, nullptr, nullptr, 0);
 	if (uppercase_size == 0)
-		gApp.FatalError("Failed to convert path {} to uppercase", inAbsolutePath);
+		gAppFatalError("Failed to convert path %s to uppercase", inAbsolutePath.AsCStr());
 
 	WStringView uppercase_wpath = { uppercase_buffer, (size_t)uppercase_size };
 
@@ -91,6 +91,10 @@ FileRefNumber& FileRefNumber::operator=(const _FILE_ID_128& inFileID128)
 	return *this;
 }
 
+TempString FileRefNumber::ToString() const
+{
+	return gTempFormat("0x%llX%016llX", mData[1], mData[0]);
+}
 
 
 // Find the offset of the character after the last slash, or 0 if there's no slash.
@@ -114,6 +118,12 @@ static int16 sFindExtensionPos(uint16 inNamePos, StringView inPath)
 		return (int16)offset + inNamePos;
 	else
 		return (int16)inPath.Size(); // No extension.
+}
+
+
+TempString FileInfo::ToString() const
+{
+	return gConcat(GetRepo().mName, ":", mPath);
 }
 
 
@@ -161,18 +171,18 @@ FileRepo::FileRepo(uint32 inIndex, StringView inName, StringView inRootPath, Fil
 	// Get a handle to the root path.
 	OwnedHandle root_dir_handle = CreateFileA(mRootPath.AsCStr(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 	if (!root_dir_handle.IsValid())
-		gApp.FatalError("Failed to get handle to {} - {}", mRootPath, GetLastErrorString());
+		gAppFatalError("Failed to get handle to %s - %s", mRootPath.AsCStr(), GetLastErrorString().AsCStr());
 
 	// Get the FileReferenceNumber of the root dir.
 	FILE_ID_INFO file_info;
 	if (!GetFileInformationByHandleEx(root_dir_handle, FileIdInfo, &file_info, sizeof(file_info)))
-		gApp.FatalError("Failed to get FileReferenceNumber for {} - {}", mRootPath, GetLastErrorString());
+		gAppFatalError("Failed to get FileReferenceNumber for %s - %s", mRootPath.AsCStr(), GetLastErrorString().AsCStr());
 
 	// The root directory file info has an empty path (relative to mRootPath).
 	FileInfo& root_dir = GetOrAddFile("", FileType::Directory, file_info.FileId);
 	mRootDirID = root_dir.mID;
 
-	gApp.Log("Initialized FileRepo {} as {}:", mRootPath, mName);
+	gAppLog("Initialized FileRepo %s as %s:", mRootPath.AsCStr(), mName.AsCStr());
 }
 
 
@@ -214,7 +224,7 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 					if (file.mRefNumber != inRefNumber)
 					{
 						if (file.mRefNumber.IsValid())
-							gApp.LogError("{} changed RefNumber unexpectedly (missed event?)", file);
+							gAppLogError("%s changed RefNumber unexpectedly (missed event?)", file.ToString().AsCStr());
 
 						file.mRefNumber = inRefNumber;
 					}
@@ -242,9 +252,9 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 				// or it could be a junction/hardlink to the same file (TODO: detect that, at least to error properly?)
 				if (previous_file_id != actual_file_id || previous_file_id.GetFile().mPathHash != path_hash)
 				{
-					gApp.LogError(R"(Found two files with the same RefNumber! {}:\{} and {}{})", 
-						mDrive.mLetter, path,
-						previous_file_id.GetRepo().mRootPath, previous_file_id.GetFile().mPath);
+					gAppLogError(R"(Found two files with the same RefNumber! %c:\%s and %s%s)", 
+						mDrive.mLetter, path.AsCStr(),
+						previous_file_id.GetRepo().mRootPath.AsCStr(), previous_file_id.GetFile().mPath.AsCStr());
 
 					// Mark the old file as deleted, and add the new one instead.
 					MarkFileDeleted(GetFile(previous_file_id), {}, map_lock);
@@ -266,8 +276,8 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 			if (file->GetType() != inType)
 			{
 				// TODO we could support changing the file type if we make sure to update any list of all directories
-				gApp.FatalError("{} was a {} but is now a {}. This is not supported yet.",
-					*file,
+				gAppFatalError("%s was a %s but is now a %s. This is not supported yet.",
+					file->ToString().AsCStr(),
 					file->GetType() == FileType::Directory ? "Directory" : "File",
 					inType == FileType::Directory ? "Directory" : "File");
 			}
@@ -359,7 +369,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 	}
 
 	if (gApp.mLogFSActivity >= LogLevel::Verbose)
-		gApp.Log("Added {}", dir);
+		gAppLog("Added %s", dir.ToString().AsCStr());
 
 	// First GetFileInformationByHandleEx call needs a different value to make it "restart".
 	FILE_INFO_BY_HANDLE_CLASS file_info_class = FileIdExtdDirectoryRestartInfo;
@@ -372,7 +382,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 			if (GetLastError() == ERROR_NO_MORE_FILES)
 				break; // Finished iterating, exit the loop.
 
-			gApp.FatalError("Enumerating {} failed - {}", dir, GetLastErrorString());
+			gAppFatalError("Enumerating %s failed - %s", dir.ToString().AsCStr(), GetLastErrorString().AsCStr());
 		}
 
 		// Next time keep iterating instead of restarting.
@@ -404,7 +414,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 			// If it fails, ignore the file.
 			if (!path)
 			{
-				gApp.LogError("Failed to build the path of a file in {}", dir);
+				gAppLogError("Failed to build the path of a file in %s", dir.ToString().AsCStr());
 				gAssert(false); // Investigate why that would happen.
 				continue;
 			}
@@ -416,7 +426,7 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 			FileInfo& file = GetOrAddFile(*path, is_directory ? FileType::Directory : FileType::File, entry->FileId);
 
 			if (gApp.mLogFSActivity >= LogLevel::Verbose)
-				gApp.Log("Added {}", file);
+				gAppLog("Added %s", file.ToString().AsCStr());
 
 			if (file.IsDirectory())
 			{
@@ -443,7 +453,9 @@ void FileRepo::ScanDirectory(FileID inDirectoryID, ScanQueue& ioScanQueue, Span<
 			// Print how much of the buffer was used, to help sizing that buffer.
 			// Seems most folders need <1 KiB but saw one that used 30 KiB.
 			uint8* buffer_end = (uint8*)entry->FileName + entry->FileNameLength;
-			gApp.Log("Used {} of {} buffer.", SizeInBytes(buffer_end - ioBuffer.Data()), SizeInBytes(ioBuffer.Size()));
+			gAppLog("Used %s of %s buffer.", 
+				gFormatSizeInBytes(buffer_end - ioBuffer.Data()).AsCStr(), 
+				gFormatSizeInBytes(ioBuffer.Size()).AsCStr());
 		}
 	}
 }
@@ -471,7 +483,7 @@ void FileRepo::ScanFile(FileInfo& ioFile, RequestedAttributes inRequestedAttribu
 		{
 			// Note: for now don't force a rescan if that fails because we only use the file times for display,
 			// and it's unclear why it would fail/if a rescan would fix it.
-			gApp.LogError("Getting attributes for {} failed - {}", ioFile, GetLastErrorString());
+			gAppLogError("Getting attributes for %s failed - %s", ioFile.ToString().AsCStr(), GetLastErrorString().AsCStr());
 
 			return;
 		}
@@ -491,13 +503,13 @@ FileDrive::FileDrive(char inDriveLetter)
 	// Note: Only request FILE_TRAVERSE to make that work without admin rights.
 	mHandle = CreateFileA(gTempFormat(R"(\\.\%c:)", mLetter).AsCStr(), (DWORD)FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (!mHandle.IsValid())
-		gApp.FatalError(R"(Failed to get handle to {}:\ - {})", mLetter, GetLastErrorString());
+		gAppFatalError(R"(Failed to get handle to %c:\ - %s)", mLetter, GetLastErrorString().AsCStr());
 
 	// Query the USN journal to get its ID.
 	USN_JOURNAL_DATA_V0 journal_data;
 	uint32				unused;
 	if (!DeviceIoControl(mHandle, FSCTL_QUERY_USN_JOURNAL, nullptr, 0, &journal_data, sizeof(journal_data), &unused, nullptr))
-		gApp.FatalError(R"(Failed to query USN journal for {}:\ - {})", mLetter, GetLastErrorString());
+		gAppFatalError(R"(Failed to query USN journal for %c:\ - %s)", mLetter, GetLastErrorString().AsCStr());
 
 	// Store the jorunal ID.
 	mUSNJournalID = journal_data.UsnJournalID;
@@ -507,7 +519,8 @@ FileDrive::FileDrive(char inDriveLetter)
 	// Store the next USN. This will be overwritten if the cached state is usable.
 	mNextUSN  = journal_data.NextUsn;
 
-	gApp.Log(R"(Queried USN journal for {}:\. ID: 0x{:08X}. Max size: {})", mLetter, mUSNJournalID, SizeInBytes(journal_data.MaximumSize));
+	gAppLog(R"(Queried USN journal for %c:\. ID: 0x%08llX. Max size: %s)", 
+		mLetter, mUSNJournalID, gFormatSizeInBytes(journal_data.MaximumSize).AsCStr());
 }
 
 
@@ -556,7 +569,7 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 
 			// Turn it into a string.
 			if (file_id.IsValid())
-				return gToString(file_id.GetFile());
+				return file_id.GetFile().ToString();
 			else
 				return "Unknown";
 		};
@@ -565,7 +578,8 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 
 		// In non-verbose mode, don't log errors unless we know they're about a file we care about.
 		if (gApp.mLogFSActivity >= LogLevel::Verbose || inFileID.IsValid())
-			gApp.LogError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID), inRefNumber, GetLastErrorString());
+			gAppLogError("Failed to open %s (%s) - %s", 
+				BuildFileStr(inRefNumber, inFileID).AsCStr(), inRefNumber.ToString().AsCStr(), GetLastErrorString().AsCStr());
 		
 		// Some errors are okay, and we can just ignore the file or try to open it again later.
 		// Some are not okay, and we throw a fatal error.
@@ -579,7 +593,8 @@ HandleOrError FileDrive::OpenFileByRefNumber(FileRefNumber inRefNumber, OpenFile
 			|| error == ERROR_CANT_ACCESS_FILE)		// Unsure what this means but I've seen it happen for an unknown file on C:/ once.
 			return OpenFileError::FileNotFound;
 
-		gApp.FatalError("Failed to open {} ({}) - {}", BuildFileStr(inRefNumber, inFileID), inRefNumber, GetLastErrorString());
+		gAppFatalError("Failed to open %s (%s) - %s", 
+			BuildFileStr(inRefNumber, inFileID).AsCStr(), inRefNumber.ToString().AsCStr(), GetLastErrorString().AsCStr());
 	}
 
 	return handle;
@@ -619,7 +634,7 @@ USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
 	PathBufferUTF16 buffer;
 	DWORD available_bytes = 0;
 	if (!DeviceIoControl(inFileHandle, FSCTL_READ_FILE_USN_DATA, nullptr, 0, buffer, gElemCount(buffer) * sizeof(buffer[0]), &available_bytes, nullptr))
-		gApp.FatalError("Failed to get USN data"); // TODO add file path to message
+		gAppFatalError("Failed to get USN data"); // TODO add file path to message
 
 	auto record_header = (USN_RECORD_COMMON_HEADER*)buffer;
 	if (record_header->MajorVersion == 2)
@@ -634,7 +649,7 @@ USN FileDrive::GetUSN(const OwnedHandle& inFileHandle) const
 	}
 	else
 	{
-		gApp.FatalError("Got unexpected USN record version ({}.{})", record_header->MajorVersion, record_header->MinorVersion);
+		gAppFatalError("Got unexpected USN record version (%u.%u)", record_header->MajorVersion, record_header->MinorVersion);
 		return 0;
 	}
 }
@@ -735,7 +750,7 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 		if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioBuffer.Data(), (uint32)ioBuffer.Size(), &available_bytes, nullptr))
 		{
 			// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
-			gApp.FatalError("Failed to read USN journal for {}:\\ - {}", mLetter, GetLastErrorString());
+			gAppFatalError("Failed to read USN journal for %c:\\ - %s", mLetter, GetLastErrorString().AsCStr());
 		}
 
 		Span<uint8> available_buffer = ioBuffer.SubSpan(0, available_bytes);
@@ -792,14 +807,14 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 			if (deleted_file_id.IsValid())
 			{
 				FileInfo& deleted_file = deleted_file_id.GetFile();
-				FileTime  timestamp    = inRecord.TimeStamp.QuadPart;
+				FileTime  timestamp    = FileTime(inRecord.TimeStamp.QuadPart);
 
 				FileRepo& repo = gFileSystem.GetRepo(deleted_file.mID);
 
 				repo.MarkFileDeleted(deleted_file, timestamp);
 
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
-					gApp.Log("Deleted {}", deleted_file);
+					gAppLog("Deleted %s", deleted_file.ToString().AsCStr());
 
 				// If it's a directory, also mark all the file inside as deleted.
 				if (deleted_file.IsDirectory())
@@ -817,7 +832,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 							repo.MarkFileDeleted(file, timestamp);
 
 							if (gApp.mLogFSActivity >= LogLevel::Verbose)
-								gApp.Log("Deleted {}", file);
+								gAppLog("Deleted %s", file.ToString().AsCStr());
 						}
 					}
 				}
@@ -842,7 +857,9 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 			if (!GetFullPath(*file_handle, full_path))
 			{
 				// TODO: same remark as failing to open
-				gApp.LogError("Failed to get path for newly created file {} - {}", FileRefNumber(inRecord.FileReferenceNumber), GetLastErrorString());
+				gAppLogError("Failed to get path for newly created file %s - %s", 
+					FileRefNumber(inRecord.FileReferenceNumber).ToString().AsCStr(), 
+					GetLastErrorString().AsCStr());
 				return;
 			}
 
@@ -869,7 +886,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 				{
 					// If it's a file, treat it as if it was modified.
 					if (gApp.mLogFSActivity >= LogLevel::Verbose)
-						gApp.Log("Added {}", file);
+						gAppLog("Added %s", file.ToString().AsCStr());
 
 					file.mLastChangeUSN  = inRecord.Usn;
 					file.mLastChangeTime = inRecord.TimeStamp.QuadPart;
@@ -887,7 +904,7 @@ bool FileDrive::ProcessMonitorDirectory(Span<uint8> ioBufferUSN, ScanQueue &ioSc
 				FileInfo& file = file_id.GetFile();
 
 				if (gApp.mLogFSActivity >= LogLevel::Verbose)
-					gApp.Log("Modified {}", file);
+					gAppLog("Modified %s", file.ToString().AsCStr());
 
 				file.mLastChangeUSN  = inRecord.Usn;
 				file.mLastChangeTime = inRecord.TimeStamp.QuadPart;
@@ -1012,7 +1029,8 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 	for (auto& repo : mRepos)
 	{
 		if (repo.mName == inName)
-			gApp.FatalError("Failed to init FileRepo {} ({}) - There is already a repo with that name.", inName, inRootPath);
+			gAppFatalError("Failed to init FileRepo %s (%s) - There is already a repo with that name.", 
+				inName.AsCStr(), inRootPath.AsCStr());
 	}
 
 	// Get the absolute path (in case it's relative).
@@ -1029,16 +1047,16 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 	{
 		if (gStartsWith(repo.mRootPath, root_path))
 		{
-			gApp.FatalError("Failed to init FileRepo {} ({}) - Another FileRepo is inside its root path ({} {}).", 
-				inName, inRootPath, 
-				repo.mName, repo.mRootPath);
+			gAppFatalError("Failed to init FileRepo %s (%s) - Another FileRepo is inside its root path (%s %s).", 
+				inName.AsCStr(), inRootPath.AsCStr(), 
+				repo.mName.AsCStr(), repo.mRootPath.AsCStr());
 		}
 
 		if (gStartsWith(root_path, repo.mRootPath))
 		{
-			gApp.FatalError("Failed to init FileRepo {} ({}) - Root Path is inside another FileRepo ({} {}).", 
-				inName, inRootPath, 
-				repo.mName, repo.mRootPath);
+			gAppFatalError("Failed to init FileRepo %s (%s) - Root Path is inside another FileRepo (%s %s).", 
+				inName.AsCStr(), inRootPath.AsCStr(), 
+				repo.mName.AsCStr(), repo.mRootPath.AsCStr());
 		}
 	}
 
@@ -1067,7 +1085,7 @@ bool FileSystem::CreateDirectory(FileID inFileID)
 	bool success = gCreateDirectoryRecursive(abs_path);
 
 	if (!success)
-		gApp.LogError("Failed to create directory for {}", file);
+		gAppLogError("Failed to create directory for %s", file.ToString().AsCStr());
 
 	return success;
 }
@@ -1084,7 +1102,7 @@ bool FileSystem::DeleteFile(FileID inFileID)
 	bool success = DeleteFileA(abs_path.AsCStr());
 
 	if (!success)
-		gApp.LogError("Failed to delete {} - {}", abs_path, GetLastErrorString());
+		gAppLogError("Failed to delete %s - %s", abs_path.AsCStr(), GetLastErrorString().AsCStr());
 
 	return success;
 }
@@ -1114,7 +1132,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 			return;
 	}
 
-	gApp.Log("Starting initial scan.");
+	gAppLog("Starting initial scan.");
 	Timer timer;
 	mInitState.Store(InitState::Scanning);
 
@@ -1172,12 +1190,12 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 	gAssert(scan_queue.mDirectories.Empty());
 	gAssert(scan_queue.mThreadsBusy == 0);
 
-	size_t total_files = 0;
+	int total_files = 0;
 	for (auto& repo : mRepos)
 		if (!repo.mDrive.mLoadedFromCache)
-			total_files += repo.mFiles.SizeRelaxed();
+			total_files += (int)repo.mFiles.SizeRelaxed();
 
-	gApp.Log("Done. Found {} files in {:.2f} seconds.", 
+	gAppLog("Done. Found %d files in %.2f seconds.", 
 		total_files, gTicksToSeconds(timer.GetTicks()));
 
 	mInitState.Store(InitState::ReadingUSNJournal);
@@ -1189,7 +1207,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 			continue;
 
 		timer.Reset();
-		gApp.Log("Reading USN journal for {}:\\.", drive.mLetter);
+		gAppLog("Reading USN journal for %c:\\.", drive.mLetter);
 
 		int file_count = 0;
 
@@ -1207,7 +1225,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 			}
 		});
 
-		gApp.Log("Done. Found USN for {} files in {:.2f} seconds.", file_count, gTicksToSeconds(timer.GetTicks()));
+		gAppLog("Done. Found USN for %d files in %.2f seconds.", file_count, gTicksToSeconds(timer.GetTicks()));
 	}
 
 	// Files that haven't been touched in a while might not be referenced in the USN journal anymore.
@@ -1239,7 +1257,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 	if (!files_without_usn.Empty())
 	{
-		gApp.Log("{} files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.Size());
+		gAppLog("%d files were not present in the USN journal. Fetching their USN manually now.", files_without_usn.Size());
 
 		// Don't create too many threads because they'll get stuck in locks in OpenFileByRefNumber if the cache is warm,
 		// or they'll be bottlenecked by IO otherwise.
@@ -1279,7 +1297,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 		if (inInitialScanThread.IsStopRequested())
 			return;
 
-		gApp.Log("Done. Fetched {} individual USNs in {:.2f} seconds.", 
+		gAppLog("Done. Fetched %d individual USNs in %.2f seconds.", 
 			files_without_usn.Size(), gTicksToSeconds(timer.GetTicks()));
 	}
 }
@@ -1482,7 +1500,7 @@ constexpr StringView cCacheFileName      = "cache.bin";
 
 void FileSystem::LoadCache()
 {
-	gApp.Log("Loading cached state.");
+	gAppLog("Loading cached state.");
 	Timer timer;
 	mInitState.Store(InitState::LoadingCache);
 
@@ -1491,7 +1509,7 @@ void FileSystem::LoadCache()
 
 	if (cache_file == nullptr)
 	{
-		gApp.Log(R"(No cached state found ("{}"))", cache_file_path);
+		gAppLog(R"(No cached state found ("%s"))", cache_file_path.AsCStr());
 		return;
 	}
 
@@ -1503,7 +1521,7 @@ void FileSystem::LoadCache()
 
 	if (!bin.ExpectLabel("VERSION"))
 	{
-		gApp.LogError(R"(Corrupted cached state, ignoring cache. ("{}"))", cache_file_path);
+		gAppLogError(R"(Corrupted cached state, ignoring cache. ("%s"))", cache_file_path.AsCStr());
 		return;
 	}
 
@@ -1511,7 +1529,8 @@ void FileSystem::LoadCache()
 	bin.Read(format_version);
 	if (format_version != cCacheFormatVersion)
 	{
-		gApp.Log("Unsupported cached state version, ignoring cache. (Expected: {} Found: {}).", cCacheFormatVersion, format_version);
+		gAppLog("Unsupported cached state version, ignoring cache. (Expected: %d Found: %d).", 
+			cCacheFormatVersion, format_version);
 		return;
 	}
 
@@ -1539,24 +1558,24 @@ void FileSystem::LoadCache()
 		bool       drive_valid = true;
 		if (drive == nullptr)
 		{
-			gApp.LogError(R"(Drive {}:\ is listed in the cache but isn't used anymore, ignoring cache.)", drive_letter);
+			gAppLogError(R"(Drive %c:\ is listed in the cache but isn't used anymore, ignoring cache.)", drive_letter);
 			drive_valid = false;
 		}
 		else
 		{
 			if (drive->mUSNJournalID != journal_id)
 			{
-				gApp.LogError(R"(Drive {}:\ USN journal ID has changed, ignoring cache.)", drive_letter);
+				gAppLogError(R"(Drive %c:\ USN journal ID has changed, ignoring cache.)", drive_letter);
 				drive_valid = false;
 			}
 
 			if (drive->mFirstUSN > next_usn)
 			{
-				gApp.LogError(R"(Drive {}:\ cached state is too old, ignoring cache.)", drive_letter);
+				gAppLogError(R"(Drive %c:\ cached state is too old, ignoring cache.)", drive_letter);
 				if (drive_letter == 'C')
 				{
-					gApp.LogError(R"(  Consider using a different drive than C:\!)");
-					gApp.LogError(R"(  Windows writes a lot of files and can quickly fill the USN journal.)");
+					gAppLogError(R"(  Consider using a different drive than C:\!)");
+					gAppLogError(R"(  Windows writes a lot of files and can quickly fill the USN journal.)");
 				}
 
 				drive_valid = false;
@@ -1584,14 +1603,14 @@ void FileSystem::LoadCache()
 			bool      repo_valid = true;
 			if (repo == nullptr)
 			{
-				gApp.LogError(R"(Repo "{}" is listed in the cache but doesn't exist anymore, ignoring cache.)", repo_name);
+				gAppLogError(R"(Repo "%s" is listed in the cache but doesn't exist anymore, ignoring cache.)", repo_name.AsCStr());
 				repo_valid = false;
 			}
 			else
 			{
 				if (!gIsEqualNoCase(repo->mRootPath, repo_path))
 				{
-					gApp.LogError(R"(Repo "{}" root path changed, ignoring cache.)", repo_name);
+					gAppLogError(R"(Repo "%s" root path changed, ignoring cache.)", repo_name.AsCStr());
 					repo_valid = false;
 				}
 			}
@@ -1686,7 +1705,7 @@ void FileSystem::LoadCache()
 	TempVector<ErroredCommand> errored_commands;
 
 	// Read the commands.
-	size_t total_commands = 0;
+	int total_commands = 0;
 	uint16 rule_count     = 0;
 	bin.Read(rule_count);
 	for (int rule_index = 0; rule_index < (int)rule_count; ++rule_index)
@@ -1712,7 +1731,7 @@ void FileSystem::LoadCache()
 		const bool         rule_valid = (rule != nullptr);
 
 		if (rule_valid)
-			total_commands += command_count;
+			total_commands += (int)command_count;
 
 		for (int command_index = 0; command_index < (int)command_count; ++command_index)
 		{
@@ -1813,21 +1832,21 @@ void FileSystem::LoadCache()
 	bin.ExpectLabel("FIN");
 
 	if (bin.mError)
-		gApp.FatalError(R"(Corrupted cached state. Delete the file and try again ("{}")).)", cache_file_path);
+		gAppFatalError(R"(Corrupted cached state. Delete the file and try again ("%s")).)", cache_file_path.AsCStr());
 
-	size_t total_files = 0;
+	int total_files = 0;
 	for (auto& repo : mRepos)
 		if (repo.mDrive.mLoadedFromCache)
-			total_files += repo.mFiles.SizeRelaxed();
+			total_files += (int)repo.mFiles.SizeRelaxed();
 
-	gApp.Log("Done. Found {} Files and {} Commands in {:.2f} seconds.", 
+	gAppLog("Done. Found %d Files and %d Commands in %.2f seconds.", 
 		total_files, total_commands, gTicksToSeconds(timer.GetTicks()));
 }
 
 
 void FileSystem::SaveCache()
 {
-	gApp.Log("Saving cached state.");
+	gAppLog("Saving cached state.");
 	Timer timer;
 
 	// Make sure the cache dir exists.
@@ -1837,7 +1856,7 @@ void FileSystem::SaveCache()
 	FILE*      cache_file      = fopen(cache_file_path.AsCStr(), "wb");
 
 	if (cache_file == nullptr)
-		gApp.FatalError(R"(Failed to save cached state ("{}") - {} (0x{:X}))", cache_file_path, strerror(errno), errno);
+		gAppFatalError(R"(Failed to save cached state ("%s") - %s (0x%X))", cache_file_path.AsCStr(), strerror(errno), errno);
 
 	BinaryWriter bin;
 
@@ -2007,10 +2026,13 @@ void FileSystem::SaveCache()
 	bin.WriteLabel("FIN");
 
 	if (!bin.WriteFile(cache_file))
-		gApp.FatalError(R"(Failed to save cached state ("{}") - {} (0x{:X}))", cache_file_path, strerror(errno), errno);
+		gAppFatalError(R"(Failed to save cached state ("%s") - %s (0x%X))", cache_file_path.AsCStr(), strerror(errno), errno);
 
 	size_t file_size = ftell(cache_file);
 	fclose(cache_file);
 
-	gApp.Log("Done. Saved {} ({} compressed) in {:.2f} seconds.", SizeInBytes(bin.mBuffer.SizeRelaxed()), SizeInBytes(file_size), gTicksToSeconds(timer.GetTicks()));
+	gAppLog("Done. Saved %s (%s compressed) in %.2f seconds.", 
+		gFormatSizeInBytes(bin.mBuffer.SizeRelaxed()).AsCStr(), 
+		gFormatSizeInBytes(file_size).AsCStr(), 
+		gTicksToSeconds(timer.GetTicks()));
 }

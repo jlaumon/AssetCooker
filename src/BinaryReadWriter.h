@@ -148,7 +148,7 @@ struct BinaryReader : NoCopy
 
 		if (memcmp(inLabel, read_label, cLabelSize) != 0)
 		{
-			gApp.LogError(R"(Expected label "{}" not found, file corrupted.)", StringView(inLabel, taSize));
+			gAppLogError(R"(Expected label "%s" not found, file corrupted.)", inLabel);
 			mError = true;
 		}
 

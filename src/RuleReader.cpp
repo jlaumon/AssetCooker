@@ -13,7 +13,7 @@
 template <typename taReaderType>
 static void sReadRuleFile(StringView inPath)
 {
-	gApp.Log(R"(Reading Rule file "{}".)", inPath);
+	gAppLog(R"(Reading Rule file "%s".)", inPath.AsCStr());
 
 	// Parse the file.
 	taReaderType reader;
@@ -65,7 +65,7 @@ static void sReadRuleFile(StringView inPath)
 					FileRepo* repo = gFileSystem.FindRepo(repo_name);
 					if (repo == nullptr)
 					{
-						gApp.LogError(R"(Repo "{}" not found.)", repo_name.AsCStr());
+						gAppLogError(R"(Repo "%s" not found.)", repo_name.AsCStr());
 						reader.mErrorCount++;
 					}
 					else

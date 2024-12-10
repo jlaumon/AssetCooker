@@ -90,6 +90,8 @@ struct FileRefNumber
 
 	constexpr bool                 IsValid() const { return *this != cInvalid(); }
 	static constexpr FileRefNumber cInvalid() { return {}; }
+
+	TempString                     ToString() const;
 };
 static_assert(sizeof(FileRefNumber) == 16);
 
@@ -182,6 +184,8 @@ struct FileInfo : NoCopy
 	StringView                    GetExtension() const { return mPath.SubStr(mExtensionPos); }
 	StringView                    GetDirectory() const { return mPath.SubStr(0, mNamePos); } // Includes the trailing slash.
 	const FileRepo&               GetRepo() const { return mID.GetRepo(); }
+
+	TempString                    ToString() const; // For convenience when we need to log things about this file.
 
 	FileInfo(FileID inID, StringView inPath, Hash128 inPathHash, FileType inType, FileRefNumber inRefNumber);
 };
@@ -438,13 +442,6 @@ template <> struct fmt::formatter<FileInfo> : fmt::formatter<fmt::string_view>
 	}
 };
 
-inline TempString gToString(const FileInfo& inFileInfo)
-{
-	return gTempFormat("%s:%s", 
-		inFileInfo.GetRepo().mName.AsCStr(),
-		inFileInfo.mPath.AsCStr());
-}
-
 
 // Formatter for FileTime.
 template <> struct fmt::formatter<FileTime> : fmt::formatter<fmt::string_view>
@@ -468,23 +465,4 @@ template <> struct fmt::formatter<FileTime> : fmt::formatter<fmt::string_view>
 		}
 	}
 };
-
-inline TempString gToString(FileTime inFileTime)
-{
-	if (inFileTime.IsValid())
-	{
-		LocalTime local_time = inFileTime.ToLocalTime();
-		return gTempFormat("%04u/%02u/%02u %02u:%02u:%02u", 
-			local_time.mYear,
-			local_time.mMonth,
-			local_time.mDay,
-			local_time.mHour,
-			local_time.mMinute,
-			local_time.mSecond);
-	}
-	else
-	{
-		return "Unknown Time";
-	}
-}
 

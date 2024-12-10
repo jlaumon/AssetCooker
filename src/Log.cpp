@@ -16,9 +16,9 @@ StringPool::ResizableStringView Log::StartLine(LogType inType)
 	if (mAutoAddTime)
 	{
 		//double time = gTicksToSeconds(gGetTickCount() - gProcessStartTicks);
-		//resizable_str.AppendFormat("[{:.3f}] ", time);
+		//gAppendFormat(resizable_str, "[%.3f] ", time);
 		auto time = gGetLocalTime();
-		resizable_str.AppendFormat("[{:02}:{:02}:{:02}.{:02}] ", time.mHour, time.mMinute, time.mSecond, time.mMilliseconds / 10);
+		gAppendFormat(resizable_str, "[%02u:%02u:%02u.%02u] ", time.mHour, time.mMinute, time.mSecond, time.mMilliseconds / 10);
 	}
 
 	if (mAutoAddErrorTag && inType == LogType::Error)
@@ -44,13 +44,13 @@ void Log::FinishLine(LogType inType, StringPool::ResizableStringView& inLine)
 }
 
 
-StringView Log::Add(LogType inType, StringView inFmt, fmt::format_args inArgs)
+StringView Log::Add(LogType inType, StringView inFormat, va_list inArgs)
 {
 	LockGuard lock(mMutex);
 
 	StringPool::ResizableStringView str = StartLine(inType);
 
-	str.AppendFormatV(inFmt, inArgs);
+	gAppendFormatV(str, inFormat.AsCStr(), inArgs);
 
 	FinishLine(inType, str);
 

@@ -19,7 +19,7 @@
 struct LuaReader
 {
 	template <typename taType>
-	static constexpr StringView sTypeName()
+	static constexpr const char* sTypeName()
 	{
 		if constexpr (cIsSame<taType, StringView> 
 			|| cIsSame<taType, TempString>
@@ -50,7 +50,7 @@ struct LuaReader
 		Thread
 	};
 
-	static constexpr StringView sNodeTypeName(LuaType inType)
+	static constexpr const char* sNodeTypeName(LuaType inType)
 	{
 		switch (inType)
 		{
@@ -144,7 +144,8 @@ struct LuaReader
 
 		if (!is_right_type)
 		{
-			gApp.LogError("{} should be a {} but is a {}.", GetPath(inVarName), sTypeName<taType>(), sNodeTypeName(node_type));
+			gAppLogError("%s should be a %s but is a %s.", 
+				GetPath(inVarName).AsCStr(), sTypeName<taType>(), sNodeTypeName(node_type));
 			mErrorCount++;
 			return false;
 		}
@@ -190,7 +191,7 @@ struct LuaReader
 	{
 		if (!TryRead(inVarName, outVar))
 		{
-			gApp.LogError("{} ({}) is mandatory but was not found.", GetPath(inVarName), sTypeName<taType>());
+			gAppLogError("%s (%s) is mandatory but was not found.", GetPath(inVarName).AsCStr(), sTypeName<taType>());
 			mErrorCount++;
 			return false;
 		}
@@ -205,7 +206,7 @@ struct LuaReader
 
 		if (node_type != LuaType::None && node_type != LuaType::Nil)
 		{
-			gApp.LogError("{} is not allowed, {}", GetPath(inVarName), inReason);
+			gAppLogError("%s is not allowed, %s", GetPath(inVarName).AsCStr(), inReason.AsCStr());
 			mErrorCount++;
 		}
 	}
@@ -230,7 +231,7 @@ struct LuaReader
 		int ret = luaL_dofile(mLuaState, inPath.AsCStr());
 		if (ret != LUA_OK)
 		{
-			gApp.LogError(R"(Failed to load "{}" - {}.)", inPath, lua_tostring(mLuaState, -1));
+			gAppLogError(R"(Failed to load "%s" - %s.)", inPath.AsCStr(), lua_tostring(mLuaState, -1));
 			return false;
 		}
 
@@ -253,7 +254,8 @@ struct LuaReader
 		// If it's the wrong type however, that's an error.
 		if (node_type != LuaType::Table)
 		{
-			gApp.LogError("{} should be a {} but is a {}.", GetPath(inVarName), sNodeTypeName(LuaType::Table), sNodeTypeName(node_type));
+			gAppLogError("%s should be a %s but is a %s.", 
+				GetPath(inVarName).AsCStr(), sNodeTypeName(LuaType::Table), sNodeTypeName(node_type));
 			mErrorCount++;
 			lua_pop(mLuaState, 1);
 			return false;
@@ -267,7 +269,7 @@ struct LuaReader
 	{
 		if (!TryOpenTable(inVarName))
 		{
-			gApp.LogError("{} ({}) is mandatory but was not found.", GetPath(inVarName), sNodeTypeName(LuaType::Table));
+			gAppLogError("%s (%s) is mandatory but was not found.", GetPath(inVarName).AsCStr(), sNodeTypeName(LuaType::Table));
 			mErrorCount++;
 			return false;
 		}
@@ -338,7 +340,7 @@ struct LuaReader
 	{
 		if (!TryReadArray(inVarName, ioContainer))
 		{
-			gApp.LogError("{} ({}) is mandatory but was not found.", GetPath(inVarName), sNodeTypeName(LuaType::Table));
+			gAppLogError("%s (%s) is mandatory but was not found.", GetPath(inVarName).AsCStr(), sNodeTypeName(LuaType::Table));
 			mErrorCount++;
 			return false;
 		}

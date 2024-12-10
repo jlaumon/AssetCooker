@@ -900,7 +900,7 @@ void CookingSystem::CreateCommandsForFile(FileInfo& ioFile)
 			// but if something goes wrong anyway, log an error and ignore this rule.
 			if (!success)
 			{
-				gApp.LogError("Failed to create Rule {} command for {}", rule.mName, ioFile);
+				gAppLogError("Failed to create Rule %s command for %s", rule.mName.AsCStr(), ioFile.ToString().AsCStr());
 				continue;
 			}
 
@@ -981,7 +981,7 @@ bool CookingSystem::ValidateRules()
 	//		 or hash files and compare hashes (which is more work but looks like the way to go for other reasons, like implementing a shared cache).
 	if (gFileSystem.GetDriveCount() > 1)
 	{
-		gApp.LogError(R"(Having FileRepos on multiple Drives is not supported (yet).)");
+		gAppLogError(R"(Having FileRepos on multiple Drives is not supported (yet).)");
 		errors++;
 	}
 
@@ -994,20 +994,20 @@ bool CookingSystem::ValidateRules()
 			if (!inserted)
 			{
 				errors++;
-				gApp.LogError(R"(Found multiple rules with name "{}")", rule.mName);
+				gAppLogError(R"(Found multiple rules with name "%s")", rule.mName.AsCStr());
 			}
 		}
 		else
 		{
 			errors++;
-			gApp.LogError(R"(Rule[{}] has no name)", rules.GetIndex(rule));
+			gAppLogError(R"(Rule[%d] has no name)", rules.GetIndex(rule));
 		}
 
 		// Validate the version.
 		if (rule.mVersion == CookingRule::cInvalidVersion)
 		{
 			errors++;
-			gApp.LogError(R"(Rule {}, Version {} is a reserved value to indicate an invalid version.)", rule.mName, rule.mVersion);
+			gAppLogError(R"(Rule %s, Version %d is a reserved value to indicate an invalid version.)", rule.mName.AsCStr(), rule.mVersion);
 		}
 
 		// Validate the input filters.
@@ -1019,7 +1019,7 @@ bool CookingSystem::ValidateRules()
 			if (filter.mPathPattern.Empty())
 			{
 				errors++;
-				gApp.LogError(R"(Rule {}, InputFilter[{}].PathPattern cannot be empty.)", rule.mName, i);
+				gAppLogError(R"(Rule %s, InputFilter[%d].PathPattern cannot be empty.)", rule.mName.AsCStr(), i);
 			}
 		}
 
@@ -1030,14 +1030,14 @@ bool CookingSystem::ValidateRules()
 		if (rule.mCommandType == CommandType::CommandLine && !gFormatCommandString(rule.mCommandLine, dummy_file))
 		{
 			errors++;
-			gApp.LogError(R"(Rule {}: Failed to parse CommandLine "{}")", rule.mName, rule.mCommandLine);
+			gAppLogError(R"(Rule %s: Failed to parse CommandLine "%s")", rule.mName.AsCStr(), rule.mCommandLine.AsCStr());
 		}
 
 		// Validate the dep file path.
 		if (rule.UseDepFile() && !gFormatCommandString(rule.mDepFilePath, dummy_file))
 		{
 			errors++;
-			gApp.LogError(R"(Rule {}: Failed to parse DepFilePath "{}")", rule.mName, rule.mDepFilePath);
+			gAppLogError(R"(Rule %s: Failed to parse DepFilePath "%s")", rule.mName.AsCStr(), rule.mDepFilePath.AsCStr());
 		}
 
 		// Validate the input paths.
@@ -1046,7 +1046,7 @@ bool CookingSystem::ValidateRules()
 			if (!gFormatCommandString(rule.mInputPaths[i], dummy_file))
 			{
 				errors++;
-				gApp.LogError(R"(Rule {}: Failed to parse InputPaths[{}] "{}")", rule.mName, i, rule.mInputPaths[i]);
+				gAppLogError(R"(Rule %s: Failed to parse InputPaths[%d] "%s")", rule.mName.AsCStr(), i, rule.mInputPaths[i].AsCStr());
 			}
 		}
 
@@ -1056,7 +1056,7 @@ bool CookingSystem::ValidateRules()
 			if (!gFormatCommandString(rule.mOutputPaths[i], dummy_file))
 			{
 				errors++;
-				gApp.LogError(R"(Rule {}: Failed to parse OutputPaths[{}] "{}")", rule.mName, i, rule.mOutputPaths[i]);
+				gAppLogError(R"(Rule %s: Failed to parse OutputPaths[%d] "%s")", rule.mName.AsCStr(), i, rule.mOutputPaths[i].AsCStr());
 			}
 		}
 
@@ -1064,7 +1064,7 @@ bool CookingSystem::ValidateRules()
 		if (rule.mOutputPaths.Empty() && (!rule.UseDepFile() || rule.mDepFileFormat == DepFileFormat::Make)) // Make format DepFiles can only add inputs, not outputs.
 		{
 			errors++;
-			gApp.LogError(R"(Rule {}: a rule must have at least one output, or a DepFile that can register outputs.)", rule.mName);
+			gAppLogError(R"(Rule %s: a rule must have at least one output, or a DepFile that can register outputs.)", rule.mName.AsCStr());
 		}
 	}
 
@@ -1077,13 +1077,13 @@ static OwnedHandle sCreateJobObject()
 	// Create a job object.
 	OwnedHandle job_object = CreateJobObjectA(nullptr, nullptr);
 	if (job_object == nullptr)
-		gApp.FatalError("CreateJobObjectA failed - {}", GetLastErrorString());
+		gAppFatalError("CreateJobObjectA failed - %s", GetLastErrorString().AsCStr());
 
 	// Configure it so that child processes get killed with the parent.
 	JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit_info = {};
 	limit_info.BasicLimitInformation.LimitFlags     = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 	if (SetInformationJobObject(job_object, JobObjectExtendedLimitInformation, &limit_info, sizeof(limit_info)) == FALSE)
-		gApp.FatalError("SetInformationJobObject failed - {}", GetLastErrorString());
+		gAppFatalError("SetInformationJobObject failed - %s", GetLastErrorString().AsCStr());
 
 	return job_object;
 }
@@ -1101,7 +1101,7 @@ void CookingSystem::StartCooking()
 	// Create the job object that will make sure child processes are killed if this process is killed.
 	mJobObject = sCreateJobObject();
 
-	gApp.Log("Starting {} Cooking Threads.", thread_count);
+	gAppLog("Starting %d Cooking Threads.", thread_count);
 
 	mCookingThreads.reserve(thread_count);
 
@@ -1223,7 +1223,7 @@ void CookingSystem::QueueErroredCommands()
 
 static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStringView& ioOutput, HANDLE inJobObject)
 {
-	ioOutput.AppendFormat("Command Line: {}\n\n", inCommandLine);
+	gAppendFormat(ioOutput, "Command Line: %s\n\n", inCommandLine.AsCStr());
 
 	// Create the process for the command line.
 	subprocess_s process;
@@ -1235,13 +1235,13 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 	const char*  command_line_array[] = { inCommandLine.AsCStr(), nullptr };
 	if (subprocess_create(command_line_array, options, &process))
 	{
-		ioOutput.AppendFormat("[error] Failed to create process - {}\n", GetLastErrorString());
+		gAppendFormat(ioOutput, "[error] Failed to create process - %s\n", GetLastErrorString().AsCStr());
 		return false;
 	}
 
 	// Assign the job object to the process, to make sure it is killed if the Asset Cooker process ends.
 	if (AssignProcessToJobObject(inJobObject, process.hProcess) == FALSE)
-		gApp.FatalError("AssignProcessToJobObject failed - {}", GetLastErrorString());
+		gAppFatalError("AssignProcessToJobObject failed - %s", GetLastErrorString().AsCStr());
 
 	// Get the output.
 	// TODO: optionally skip getting the output?
@@ -1269,12 +1269,12 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 	// Log the exit code if we have it.
 	if (!got_exit_code)
 	{
-		ioOutput.AppendFormat("[error] Failed to get exit code - {}\n", GetLastErrorString());
+		gAppendFormat(ioOutput, "[error] Failed to get exit code - %s\n", GetLastErrorString().AsCStr());
 		success = false;
 	}
 	else
 	{
-		ioOutput.AppendFormat("\nExit code: {} (0x{:X})\n", exit_code, (uint32)exit_code);
+		gAppendFormat(ioOutput, "\nExit code: %d (0x%X)\n", exit_code, (uint32)exit_code);
 	}
 
 	// Non-zero exit code is considered an error.
@@ -1294,7 +1294,8 @@ bool sRunCopyFile(const CookingCommand& inCommand, StringPool::ResizableStringVi
 	// Incompatible with DepFile, otherwise mOutputs[0] is the DepFile. This is checked by the RuleReader.
 	gAssert(inCommand.GetRule().UseDepFile() == false);
 
-	ioOutput.AppendFormat("Copying {} to {}\n", inCommand.mInputs[0].GetFile(), inCommand.mOutputs[0].GetFile());
+	gAppendFormat(ioOutput, "Copying %s to %s\n", 
+		inCommand.mInputs[0].GetFile().ToString().AsCStr(), inCommand.mOutputs[0].GetFile().ToString().AsCStr());
 
 	TempString input  = gConcat(R"(\\?\)", inCommand.mInputs [0].GetRepo().mRootPath, inCommand.mInputs [0].GetFile().mPath);
 	TempString output = gConcat(R"(\\?\)", inCommand.mOutputs[0].GetRepo().mRootPath, inCommand.mOutputs[0].GetFile().mPath);
@@ -1381,7 +1382,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 			if (input.IsDeleted())
 			{
 				all_inputs_exist = false;
-				output_str.AppendFormat("[error] Input missing: {}\n", input);
+				gAppendFormat(output_str, "[error] Input missing: %s\n", input.ToString().AsCStr());
 			}
 		}
 
@@ -1403,7 +1404,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 			if (!success)
 			{
 				all_dirs_exist = false;
-				output_str.AppendFormat("[error] Failed to create directory for {}\n", gFileSystem.GetFile(output_file));
+				gAppendFormat(output_str, "[error] Failed to create directory for %s\n", output_file.GetFile().ToString().AsCStr());
 			}
 		}
 
@@ -1479,7 +1480,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Set the end time and add the duration at the end of the log.
 	log_entry.mTimeEnd = gGetSystemTimeAsFileTime();
-	output_str.AppendFormat("\nDuration: {:.3f} seconds\n", (double)(log_entry.mTimeEnd - log_entry.mTimeStart) / 1'000'000'000.0);
+	gAppendFormat(output_str, "\nDuration: %.3f seconds\n", (double)(log_entry.mTimeEnd - log_entry.mTimeStart) / 1'000'000'000.0);
 
 	// Store the log output.
 	log_entry.mOutput = output_str.AsStringView();
@@ -1526,11 +1527,11 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 	{
 		if (gFileSystem.DeleteFile(output_id))
 		{
-			output_str.AppendFormat("Deleted {}\n", output_id.GetFile());
+			gAppendFormat(output_str, "Deleted %s\n", output_id.GetFile().ToString().AsCStr());
 		}
 		else
 		{
-			output_str.AppendFormat("[error] Failed to delete {}{}\n", output_id.GetRepo().mRootPath, output_id.GetFile().mPath);
+			gAppendFormat(output_str, "[error] Failed to delete %s%s\n", output_id.GetRepo().mRootPath.AsCStr(), output_id.GetFile().mPath.AsCStr());
 			error = true;
 		}
 	}

@@ -11,38 +11,21 @@
 #include <toml++/toml.hpp>
 
 
-// Formatter for toml errors.
-template <> struct fmt::formatter<toml::parse_error> : fmt::formatter<fmt::string_view>
+inline TempString gToString(const toml::parse_error& inError)
 {
-	auto format(const toml::parse_error& inError, format_context& ioCtx) const
-	{
-		return fmt::format_to(ioCtx.out(), R"({} (line {}, column {}))",
-			inError.description(),
-			inError.source().begin.line,
-			inError.source().begin.column
-			);
-	}
-};
+	return gTempFormat(R"(%s (line %u, column %u)",
+		inError.description().data(),
+		inError.source().begin.line,
+		inError.source().begin.column
+		);
+}
 
 
-// Formatter for toml node types.
-template <> struct fmt::formatter<toml::node_type> : fmt::formatter<fmt::string_view>
+constexpr StringView gToStringView(toml::node_type inNodeType)
 {
-	auto format(const toml::node_type& inNodeType, format_context& ioCtx) const
-	{
-		return fmt::format_to(ioCtx.out(), "{}", toml::impl::node_type_friendly_names[(int)inNodeType]);
-	}
-};
-
-
-// Formatter for toml path.
-template <> struct fmt::formatter<toml::path> : fmt::formatter<fmt::string_view>
-{
-	auto format(const toml::path& inPath, format_context& ioCtx) const
-	{
-		return fmt::format_to(ioCtx.out(), "{}", inPath.str());
-	}
-};
+	auto sv = toml::impl::node_type_friendly_names[(int)inNodeType];
+	return { sv.data(), (int)sv.size() };
+}
 
 
 inline toml::path operator+ (const toml::path& lhs, StringView rhs)
@@ -55,7 +38,7 @@ inline toml::path operator+ (const toml::path& lhs, StringView rhs)
 struct TomlReader
 {
 	template <typename taType>
-	static constexpr StringView sTypeName()
+	static constexpr const char* sTypeName()
 	{
 		if constexpr (cIsSame<taType, StringView> 
 			|| cIsSame<taType, TempString>
@@ -118,7 +101,8 @@ struct TomlReader
 
 		if (!is_right_type)
 		{
-			gApp.LogError("{} should be a {} but is a {}.", GetPath(inVarName), sTypeName<taType>(), node->type());
+			gAppLogError("%s should be a %s but is a %s.", 
+				GetPath(inVarName).str().c_str(), sTypeName<taType>(), gToStringView(node->type()).AsCStr());
 			mErrorCount++;
 			return false;
 		}
@@ -152,7 +136,7 @@ struct TomlReader
 	{
 		if (!TryRead(inVarName, outVar))
 		{
-			gApp.LogError("{} ({}) is mandatory but was not found.", GetPath(inVarName), sTypeName<taType>());
+			gAppLogError("%s (%s) is mandatory but was not found.", GetPath(inVarName).str().c_str(), sTypeName<taType>());
 			mErrorCount++;
 			return false;
 		}
@@ -164,7 +148,7 @@ struct TomlReader
 	{
 		if (GetNode(inVarName) != nullptr)
 		{
-			gApp.LogError("{} is not allowed, {}", GetPath(inVarName), inReason);
+			gAppLogError("%s is not allowed, %s", GetPath(inVarName).str().c_str(), inReason.AsCStr());
 			mErrorCount++;
 		}
 	}
@@ -175,8 +159,8 @@ struct TomlReader
 		mParsedFile = toml::parse_file(std::string_view(inPath.Data(), inPath.Size()));
 		if (!mParsedFile)
 		{
-			gApp.LogError(R"(Failed to parse TOML file "{}".)", inPath);
-			gApp.LogError("{}", mParsedFile.error());
+			gAppLogError(R"(Failed to parse TOML file "%s".)", inPath.AsCStr());
+			gAppLogError("%s", gToString(mParsedFile.error()).AsCStr());
 			return false;
 		}
 
@@ -197,7 +181,7 @@ struct TomlReader
 		// If it's the wrong type however, that's an error.
 		if (!node->is_table())
 		{
-			gApp.LogError("{} should be a table but is a {}.", GetPath(inVarName), node->type());
+			gAppLogError("%s should be a table but is a %s.", GetPath(inVarName).str().c_str(), gToStringView(node->type()).AsCStr());
 			mErrorCount++;
 			return false;
 		}
@@ -211,7 +195,7 @@ struct TomlReader
 	{
 		if (!TryOpenTable(inVarName))
 		{
-			gApp.LogError("{} (table) is mandatory but was not found.", GetPath(inVarName));
+			gAppLogError("%s (table) is mandatory but was not found.", GetPath(inVarName).str().c_str());
 			mErrorCount++;
 			return false;
 		}
@@ -237,7 +221,7 @@ struct TomlReader
 		// If it's the wrong type however, that's an error.
 		if (!node->is_array())
 		{
-			gApp.LogError("{} should be an array but is a {}.", GetPath(inVarName), node->type());
+			gAppLogError("%s should be an array but is a %s.", GetPath(inVarName).str().c_str(), gToStringView(node->type()).AsCStr());
 			mErrorCount++;
 			return false;
 		}
@@ -251,7 +235,7 @@ struct TomlReader
 	{
 		if (!TryOpenArray(inVarName))
 		{
-			gApp.LogError("{} (array) is mandatory but was not found.", GetPath(inVarName));
+			gAppLogError("%s (array) is mandatory but was not found.", GetPath(inVarName).str().c_str());
 			mErrorCount++;
 			return false;
 		}
@@ -305,7 +289,7 @@ struct TomlReader
 	{
 		if (!TryReadArray(inVarName, ioContainer))
 		{
-			gApp.LogError("{} (array) is mandatory but was not found.", GetPath(inVarName));
+			gAppLogError("%s (array) is mandatory but was not found.", GetPath(inVarName).str().c_str());
 			mErrorCount++;
 			return false;
 		}

@@ -35,7 +35,7 @@ TempString gGetAbsolutePath(StringView inPath)
 	}
 
 	if (size == 0 || size > abs_path.Capacity())
-		gApp.FatalError(R"(Failed get absolute path for "{}")", inPath);
+		gAppFatalError(R"(Failed get absolute path for %s")", inPath.AsCStr());
 
 	gAssert(size < abs_path.Capacity()); // Don't think that can happen, but if it does it means we might be missing the last char?
 	abs_path.Resize(size);

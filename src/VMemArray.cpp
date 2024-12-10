@@ -55,7 +55,7 @@ VMemBlock gVMemReserve(size_t inSize)
 	void* ptr = VirtualAlloc(nullptr, inSize, MEM_RESERVE, PAGE_NOACCESS);
 
 	if (ptr == nullptr)
-		gApp.FatalError("VirtualAlloc failed - {}", GetLastErrorString());
+		gAppFatalError("VirtualAlloc failed - %s", GetLastErrorString().AsCStr());
 
 	return { (uint8*)ptr, (uint8*)ptr + inSize };
 }
@@ -64,7 +64,7 @@ VMemBlock gVMemReserve(size_t inSize)
 void gVMemFree(VMemBlock inBlock)
 {
 	if (!VirtualFree(inBlock.mBegin, 0, MEM_RELEASE))
-		gApp.FatalError("VirtualFree failed - {}", GetLastErrorString());
+		gAppFatalError("VirtualFree failed - %s", GetLastErrorString().AsCStr());
 }
 
 
@@ -74,7 +74,7 @@ VMemBlock gVMemCommit(VMemBlock inBlock)
 	inBlock.mEnd   = (uint8*)gAlignUp((uintptr_t)inBlock.mEnd, gVMemCommitGranularity());
 
 	if (!VirtualAlloc(inBlock.mBegin, inBlock.Size(), MEM_COMMIT, PAGE_READWRITE))
-		gApp.FatalError("VirtualAlloc failed - {}", GetLastErrorString());
+		gAppFatalError("VirtualAlloc failed - %s", GetLastErrorString().AsCStr());
 
 	return inBlock;
 }

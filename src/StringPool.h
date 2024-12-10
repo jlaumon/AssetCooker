@@ -69,6 +69,8 @@ struct StringPool
 		StringView		AsStringView() const	{ return { mData, mSize - 1 }; }
 
 
+		void Append(const char* inStr, int inSize) { Append({ inStr, inSize }); }
+
 		void Append(StringView inStr)
 		{
 			// String needs to be the last alloc in the pool to allow resizing.
@@ -89,21 +91,6 @@ struct StringPool
 
 			mSize += additional_size;
 			mPool.mBuffer.IncreaseSize(additional_size, mPoolLock);
-		}
-
-		template<typename... taArgs> void AppendFormat(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs)
-		{
-			AppendFormatV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...));
-		}
-
-		void AppendFormatV(StringView inFmt, fmt::format_args inArgs)
-		{
-			fmt::vformat_to(std::back_inserter(*this), fmt::string_view(inFmt.Data(), inFmt.Size()), inArgs);
-		}
-
-		void push_back(char inChar)
-		{
-			Append({ &inChar, 1 });
 		}
 	};
 

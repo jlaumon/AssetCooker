@@ -28,7 +28,7 @@ bool gReadFile(StringView inPath, VMemArray<uint8>& outFileData)
 		return false;
 
 	if (file_size.QuadPart > UINT32_MAX)
-		gApp.FatalError("gReadFile: Trying to read a file that is > 4GiB ({})", inPath);
+		gAppFatalError("gReadFile: Trying to read a file that is > 4GiB (%s)", inPath.AsCStr());
 
 	auto lock = outFileData.Lock();
 	Span<uint8> buffer = outFileData.EnsureCapacity(file_size.QuadPart + 1, lock);
@@ -175,7 +175,7 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, V
 	int deps_start = dep_file_content.Find(cDepStartMarker);
 	if (deps_start == -1)
 	{
-		gApp.LogError(R"(Failed to parse Dep File {}, couldn't find the first dependency)", inDepFileID.GetFile());
+		gAppLogError(R"(Failed to parse Dep File %s, couldn't find the first dependency)", inDepFileID.GetFile().ToString().AsCStr());
 		return false;
 	}
 
@@ -231,7 +231,8 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, V
 			FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
 			if (repo == nullptr)
 			{
-				gApp.LogError(R"(Failed to parse Dep File {}, path doesn't belong in any Repo ("{}"))", inDepFileID.GetFile(), abs_path);
+				gAppLogError(R"(Failed to parse Dep File %s, path doesn't belong in any Repo ("%s"))", 
+					inDepFileID.GetFile().ToString().AsCStr(), abs_path.AsCStr());
 				return false;
 			}
 
@@ -262,7 +263,8 @@ bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& ou
 	VMemArray<uint8> buffer(4ull * 1024 * 1024, 4096);
 	if (!gReadFile(full_path, buffer))
 	{
-		gApp.LogError(R"(Failed to read Dep File {} - {})", inDepFileID.GetFile(), GetLastErrorString());
+		gAppLogError(R"(Failed to read Dep File %s - %s)", 
+			inDepFileID.GetFile().ToString().AsCStr(), GetLastErrorString().AsCStr());
 		return false;
 	}
 
@@ -270,7 +272,7 @@ bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& ou
 
 	if (inFormat == DepFileFormat::AssetCooker)
 	{
-		gApp.FatalError("TODO");
+		gAppFatalError("TODO");
 	}
 	else if (inFormat == DepFileFormat::Make)
 	{

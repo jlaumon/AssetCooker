@@ -82,7 +82,7 @@ void gNotifAdd(NotifType inType, StringView inTitle, StringView inMessage)
 	gStringCopy(nid.szInfoTitle, inTitle);
 	gStringCopy(nid.szInfo, inMessage);
 
-	gApp.Log("Notification: {} - {} {}", gToStringView(inType), inTitle, inMessage);
+	gAppLog("Notification: %s - %s %s", gToStringView(inType).AsCStr(), inTitle.AsCStr(), inMessage.AsCStr());
 
 	bool ret = Shell_NotifyIconA(NIM_MODIFY, &nid);
 	gAssert(ret);

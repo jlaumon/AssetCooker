@@ -19,18 +19,8 @@ struct Log
 {
 	static constexpr StringView  cErrorTag = "[error]";
 
-	template<typename... taArgs> void Add(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs)
-	{
-		Add(LogType::Normal, inFmt, fmt::make_format_args(inArgs...));
-	}
-
-	template<typename... taArgs> void AddError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs)
-	{
-		Add(LogType::Error, inFmt, fmt::make_format_args(inArgs...));
-	}
-
 	// Returns the formatted string out of convenience.
-	StringView                      Add(LogType inType, StringView inFmt, fmt::format_args inArgs);
+	StringView                      Add(LogType inType, StringView inFormat, va_list inArgs);
 
 	void Clear();
 	void Draw(StringView inName, bool* ioOpen = nullptr);

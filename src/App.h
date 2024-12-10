@@ -42,20 +42,16 @@ struct App
 	void Exit();
 
 	void RequestExit();
-	bool IsExitRequested();
-	bool IsExitReady();
+	bool IsExitRequested() const;
+	bool IsExitReady() const;
 
 	bool HasInitError() const { return !mInitError.Empty(); }
 	void SetInitError(StringView inText) { mInitError = inText; }
 
-	template <class... taArgs>
-	[[noreturn]] void               FatalError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { FatalErrorV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...)); }
-	[[noreturn]] void               FatalErrorV(StringView inFmt, fmt::format_args inArgs = {});
-
-	template <class... taArgs> void Log(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...)); }
-	void                            LogV(StringView inFmt, fmt::format_args inArgs = {}, LogType inType = LogType::Normal);
-	template <class... taArgs> void LogError(fmt::format_string<taArgs...> inFmt, const taArgs&... inArgs) { LogErrorV(StringView(inFmt.get().data(), (int)inFmt.get().size()), fmt::make_format_args(inArgs...)); }
-	void                            LogErrorV(StringView inFmt, fmt::format_args inArgs = {}) { LogV(inFmt, inArgs, LogType::Error); }
+	// Use the macros gAppLog/gAppFatalError to get format validation instead of calling the methods directly.
+	void                            _Log(LogType inType, StringView inFormat, ...);
+	void                            _LogV(LogType inType, StringView inFormat, va_list inArgs);
+	[[noreturn]] void               _FatalError(StringView inFormat, ...);
 
 	void                            OpenLogFile();
 	void                            CloseLogFile();
@@ -85,3 +81,24 @@ struct App
 };
 
 inline App gApp;
+
+#define gAppLog(format, ...)                            \
+	do                                                  \
+	{                                                   \
+		(void)sizeof(printf(format, __VA_ARGS__));      \
+		gApp._Log(LogType::Normal, format, __VA_ARGS__); \
+	} while (false)
+
+#define gAppLogError(format, ...)                      \
+	do                                                 \
+	{                                                  \
+		(void)sizeof(printf(format, __VA_ARGS__));     \
+		gApp._Log(LogType::Error, format, __VA_ARGS__); \
+	} while (false)
+
+#define gAppFatalError(format, ...)                \
+	do                                             \
+	{                                              \
+		(void)sizeof(printf(format, __VA_ARGS__)); \
+		gApp._FatalError(format, __VA_ARGS__);      \
+	} while (false)

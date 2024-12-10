@@ -6,6 +6,8 @@
 #pragma once
 #include "Core.h"
 
+#include <Bedrock/String.h>
+
 // Forward declarations.
 struct FileTime;
 struct SystemTime;
@@ -29,7 +31,7 @@ struct FileTime
 
 	// Conversion to/from FILETIME.
 	FileTime(const _FILETIME& inFileTime) { *this = inFileTime; }
-	FileTime(uint64 inTime) { mDateTime = inTime; }
+	explicit FileTime(uint64 inTime) { mDateTime = inTime; }
 	_FILETIME ToWin32() const;
 	FileTime& operator=(const _FILETIME&);
 	FileTime& operator=(uint64 inTime)
@@ -45,6 +47,8 @@ struct FileTime
 
 	constexpr bool            IsValid() const { return *this != cInvalid(); }
 	static constexpr FileTime cInvalid() { return {}; }
+
+	TempString                ToString() const; // For convenience when logging.
 };
 static_assert(sizeof(FileTime) == 8);
 

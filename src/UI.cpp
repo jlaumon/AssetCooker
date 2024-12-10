@@ -248,7 +248,7 @@ TempString gToString(const CookingCommand& inCommand)
 	return gTempFormat("%s%s %s",
 		inCommand.GetRule().mName.AsCStr(),
 		inCommand.NeedsCleanup() ? " (Cleanup)" : "",
-		gToString(inCommand.GetMainInput().GetFile()).AsCStr());
+		inCommand.GetMainInput().GetFile().ToString().AsCStr());
 }
 
 
@@ -392,7 +392,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 	if (file_state != None)
 		ImGui::PushStyleColor(ImGuiCol_Text, cFileStateData[file_state].mColor);
 
-	bool clicked = ImGui::Selectable(gToString(inFile), false, ImGuiSelectableFlags_DontClosePopups);
+	bool clicked = ImGui::Selectable(inFile.ToString(), false, ImGuiSelectableFlags_DontClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (file_state != None && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
@@ -419,7 +419,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 		// TODO auto wrapping is kind of incompatible with window auto resizing, need to provide a wrap position, or maybe make sure it isn't the first item drawn?
 		// https://github.com/ocornut/imgui/issues/778#issuecomment-239696811
 		//ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextUnformatted(gToString(inFile));
+		ImGui::TextUnformatted(inFile.ToString());
 		//ImGui::PopTextWrapPos();
 		ImGui::Spacing();
 
@@ -462,21 +462,21 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 			if (inFile.IsDeleted())
 			{
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Deletion Time");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(gToString(inFile.mCreationTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(inFile.mCreationTime.ToString());
 			}
 			else
 			{
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("RefNumber");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(gToString(inFile.mRefNumber));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(inFile.mRefNumber.ToString());
 				
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Creation Time");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(gToString(inFile.mCreationTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(inFile.mCreationTime.ToString());
 
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change Time");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(gToString(inFile.mLastChangeTime));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(inFile.mLastChangeTime.ToString());
 				
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change USN");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(gToString(inFile.mLastChangeUSN));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(gTempFormat("%llu", inFile.mLastChangeUSN));
 			}
 
 			ImGui::EndTable();
@@ -585,10 +585,10 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook Time");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(gToString(inCommand.mLastCookTime));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(inCommand.mLastCookTime.ToString());
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook USN");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(gToString(inCommand.mLastCookUSN));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(gTempFormat("%llu", inCommand.mLastCookUSN));
 		
 		ImGui::EndTable();
 	}
@@ -894,7 +894,9 @@ void gDrawCookingLog()
 
 			ImGui::TableNextColumn();
 			{
-				ImGui::TextUnformatted(gTempFormat("%s%s", log_entry.mIsCleanup ? "(Cleanup) " : "", gToString(command.GetMainInput().GetFile()).AsCStr()));
+				ImGui::TextUnformatted(gTempFormat("%s%s", 
+					log_entry.mIsCleanup ? "(Cleanup) " : "", 
+					command.GetMainInput().GetFile().ToString().AsCStr()));
 			}
 
 			ImGui::TableNextColumn();
@@ -1083,7 +1085,7 @@ void gDrawFileSearch()
 		for (const FileRepo& repo : gFileSystem.mRepos)
 			for (const FileInfo& file : repo.mFiles)
 			{
-				auto file_str = gToString(file);
+				auto file_str = file.ToString();
 				if (filter.PassFilter(file_str))
 					filtered_list.emplace_back(file.mID);
 			}

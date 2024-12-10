@@ -240,7 +240,7 @@ int WinMain(
 
 	// Initialize Direct3D
 	if (!CreateDeviceD3D(hwnd))
-		gApp.FatalError("Failed to create D3D device - {}", GetLastErrorString());
+		gAppFatalError("Failed to create D3D device - %s", GetLastErrorString().AsCStr());
 
 	// Show the window
 	::ShowWindow(hwnd, SW_SHOWDEFAULT);
