@@ -77,9 +77,9 @@ static StringView sParseArgument(const char*& ioPtr, const char* inPtrEnd)
 
 
 template<class taFormatter>
-static Optional<String> sParseCommandVariables(StringView inFormatStr, const taFormatter& inFormatter)
+static Optional<TempString> sParseCommandVariables(StringView inFormatStr, const taFormatter& inFormatter)
 {
-	String str;
+	TempString str;
 	const char* p_begin = inFormatStr.Data();
 	const char* p_end   = inFormatStr.End();
 	const char* p       = p_begin;
@@ -144,12 +144,12 @@ static Optional<String> sParseCommandVariables(StringView inFormatStr, const taF
 
 
 // TODO add an output error string to help understand why it fails
-Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
+Optional<TempString> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
 {
 	if (inFormatStr.Empty())
 		return {}; // Consider empty format string is an error.
 
-	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, String& outStr) 
+	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
 	{
 		switch (inVar)
 		{
@@ -206,8 +206,8 @@ Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& in
 
 Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile)
 {
-	FileRepo*        repo = nullptr;
-	Optional<String> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, String& outStr) 
+	FileRepo*            repo = nullptr;
+	Optional<TempString> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
 	{
 		switch (inVar)
 		{
@@ -244,7 +244,7 @@ Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo
 	if (!path)
 		return {};
 
-	return RepoAndFilePath{ *repo, *path };
+	return RepoAndFilePath{ *repo, gMove(*path) };
 }
 
 
@@ -684,7 +684,7 @@ void CookingQueue::Clear()
 }
 
 
-size_t CookingQueue::GetSize() const
+int CookingQueue::GetSize() const
 {
 	LockGuard lock(mMutex);
 	return mTotalSize;

@@ -47,12 +47,12 @@ constexpr StringView gToStringView(CommandVariables inVar)
 
 // Check for CommandVariables and replace them by the corresponding part of inFile.
 // Eg. "copy.exe {Repo:Source}{Path} {Repo:Bin}" will turn into "copy.exe D:/src/file.txt D:/bin/"
-Optional<String> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile);
+Optional<TempString> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile);
 
 struct RepoAndFilePath
 {
-	FileRepo& mRepo;
-	String    mPath;
+	FileRepo&  mRepo;
+	TempString mPath;
 };
 // Check for CommandVariables and replace them by the corresponding part of inFile but expects the string to be a single file path.
 // One Repo var is needed at the start and of the path and the corresponding FileRepo will be returned instead of be replaced by its path.
@@ -60,15 +60,15 @@ Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo
 
 
 // Format the file path and get (or add) the corresponding file. Return an invalid FileID if the format is invalid.
-FileID                         gGetOrAddFileFromFormat(StringView inFormatStr, const FileInfo& inFile);
+FileID                    gGetOrAddFileFromFormat(StringView inFormatStr, const FileInfo& inFile);
 
 
 struct InputFilter
 {
-	uint32                  mRepoIndex = FileID::cInvalid().mRepoIndex;
-	StringView              mPathPattern;
+	uint32     mRepoIndex = FileID::cInvalid().mRepoIndex;
+	StringView mPathPattern;
 
-	bool                    Pass(const FileInfo& inFile) const;
+	bool       Pass(const FileInfo& inFile) const;
 };
 
 
@@ -254,7 +254,7 @@ struct CookingQueue : NoCopy
 	bool             Remove(CookingCommandID inCommandID, RemoveOption inOption = RemoveOption::None);	// Return true if removed.
 	void             Clear();
 
-	size_t           GetSize() const;
+	int              GetSize() const;
 	bool             IsEmpty() const { return GetSize() == 0; }
 
 	void             PushInternal(MutexLockGuard& ioLock, int inPriority, CookingCommandID inCommandID, PushPosition inPosition);
@@ -269,9 +269,9 @@ struct CookingQueue : NoCopy
 		auto                          operator<=>(const PrioBucket& inOther) const { return mPriority <=> inOther.mPriority; }
 	};
 
-	Vector<PrioBucket>      mPrioBuckets;
-	size_t                  mTotalSize = 0;
-	mutable Mutex           mMutex;
+	Vector<PrioBucket> mPrioBuckets;
+	int                mTotalSize = 0;
+	mutable Mutex      mMutex;
 };
 
 
