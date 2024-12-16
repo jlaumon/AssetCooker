@@ -28,7 +28,7 @@ struct BinaryWriter : NoCopy
 		mBuffer.Resize(mBuffer.Size() + size_bytes, EResizeInit::NoZeroInit);
 
 		// Write the data.
-		gMemCopy(mBuffer.Data() - size_bytes, inSpan.Data(), size_bytes);
+		gMemCopy(mBuffer.End() - size_bytes, inSpan.Data(), size_bytes);
 	}
 
 	template <typename taType>
