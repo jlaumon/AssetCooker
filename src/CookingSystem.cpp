@@ -505,8 +505,8 @@ void CookingCommand::UpdateDirtyState()
 	// If the command is waiting for results and all outputs were written (or deleted in case of cleanup), change its state to success.
 	if (last_cook_is_waiting)
 	{
-		if (!last_cook_is_cleanup && all_output_written ||
-			last_cook_is_cleanup && all_output_missing)
+		if ((!last_cook_is_cleanup && all_output_written) ||
+			(last_cook_is_cleanup && all_output_missing))
 		{
 			mLastCookingLog->mCookingState.Store(CookingState::Success);
 			last_cook_is_waiting = false;
