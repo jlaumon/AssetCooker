@@ -18,6 +18,7 @@
 #include "Notifications.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Ticks.h>
+#include <Bedrock/Trace.h>
 
 
 // Data
@@ -195,6 +196,9 @@ int WinMain(
 	{
 		return (gRunTests() == TestResult::Success) ? 0 : 1;
 	}
+
+	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.
+	gSetTraceCallback([](StringView inStr) { gApp._Log(LogType::Normal, inStr); });
 
 	gSetCurrentThreadName("Main Thread");
 
