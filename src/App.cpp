@@ -110,7 +110,7 @@ void App::_FatalError(StringView inFormat, ...)
 
 
 	if (gIsDebuggerAttached())
-		breakpoint;
+		BREAKPOINT;
 	else
 	{
 		// Don't make popups when running tests.

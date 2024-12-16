@@ -12,20 +12,8 @@
 #include <Bedrock/Mutex.h>
 #include <Bedrock/Atomic.h>
 #include <Bedrock/PlacementNew.h>
+#include <Bedrock/Vector.h>
 
-struct VMemBlock
-{
-	uint8* mBegin = nullptr;
-	uint8* mEnd   = nullptr;
-
-	size_t Size() const { return mEnd - mBegin; }
-};
-
-size_t    gVMemReserveGranularity();		// Return the granularity at which memory can be reserved.
-size_t    gVMemCommitGranularity();			// Return the granularity at which memory can be committed.
-VMemBlock gVMemReserve(size_t inSize);		// Reserve some memory. inSize will be rounded up to reserve granularity.
-void      gVMemFree(VMemBlock inBlock);		// Free previously reserved memory.
-VMemBlock gVMemCommit(VMemBlock inBlock);	// Commit some reserved memory.
 
 using VMemArrayLock = LockGuard<Mutex>;
 
@@ -36,28 +24,15 @@ struct VMemArray : NoCopy
 {
 	using ValueType = taType;
 
-	VMemArray(size_t inMaxCapacityInBytes = 0, size_t inMinGrowSizeInBytes = 0)
+	VMemArray(int inMaxCapacityInBytes = 0, int inMinGrowSizeInBytes = 0)
 	{
-		if (inMaxCapacityInBytes)
-			mSizeToReserve = inMaxCapacityInBytes;
-
-		if (inMinGrowSizeInBytes)
-			mMinCommitSize = inMinGrowSizeInBytes;
-
-		// Reserve backing memory on immediately as we want safe read access without lock.
-		mBegin        = (taType*)gVMemReserve(mSizeToReserve).mBegin;
-		mEndCommitted = (uint8*)mBegin;
-		mEnd.Store(mBegin, MemoryOrder::Relaxed);
+		mVector = VMemVector<taType>(VMemAllocator<taType>(inMaxCapacityInBytes, inMinGrowSizeInBytes));
 	}
 
 	~VMemArray()
 	{
 		// Destroy all elements.
 		Clear();
-
-		// Free the VMem.
-		if (mBegin)
-			gVMemFree({ (uint8*)mBegin, (uint8*)mBegin + mSizeToReserve });
 	}
 
 	[[nodiscard]] VMemArrayLock Lock() { return VMemArrayLock(mMutex); }
@@ -67,10 +42,10 @@ struct VMemArray : NoCopy
 		// If no lock was provided, make a new one.
 		const VMemArrayLock& lock = inLock ? (const VMemArrayLock&)*inLock : (const VMemArrayLock&)Lock();
 
-		taType* new_element = &EnsureCapacity(1, lock)[0];
+		// Reserve instead of letting PushBack do a geometric grow since VMem will commit a large block anyway.
+		mVector.Reserve(mVector.Size() + 1);
 
-		// Call copy constructor.
-		new (new_element) taType(inElement);
+		mVector.PushBack(inElement);
 
 		// Update mEnd last to let readers see the new element only when it's ready.
 		IncreaseSize(1, lock);
@@ -82,10 +57,10 @@ struct VMemArray : NoCopy
 		// If no lock was provided, make a new one.
 		const VMemArrayLock& lock = inLock ? (const VMemArrayLock&)*inLock : (const VMemArrayLock&)Lock();
 
-		taType& new_element = EnsureCapacity(1, lock)[0];
+		// Reserve instead of letting PushBack do a geometric grow since VMem will commit a large block anyway.
+		mVector.Reserve(mVector.Size() + 1);
 
-		// Call constructor.
-		gPlacementNew(new_element, gForward<taArgs>(inArgs)...);
+		taType& new_element = mVector.EmplaceBack(gForward<taArgs>(inArgs)...);
 
 		// Update mEnd last to let readers see the new element only when it's ready.
 		IncreaseSize(1, lock);
@@ -95,30 +70,21 @@ struct VMemArray : NoCopy
 
 	// Increase the current size. This is not like resize, elements are not constructed.
 	// Meant to be used with a manual lock: first lock, then reserve, then construct elements manually, then set size.
-	void IncreaseSize(size_t inSizeIncreaseInElements, const VMemArrayLock& inLock)
+	void IncreaseSize(int inSizeIncreaseInElements, const VMemArrayLock& inLock)
 	{
-		mEnd.Store(mEnd.Load(MemoryOrder::Relaxed) + inSizeIncreaseInElements, MemoryOrder::Relaxed);
+		mAtomicSize.Add(inSizeIncreaseInElements, MemoryOrder::Relaxed);
 	}
 
 	// Make sure enough memory is committed for that many more elements.
-	// Return the span for the new elements (not constructed).
-	[[nodiscard]] Span<taType> EnsureCapacity(size_t inExtraCapacityInElements, const VMemArrayLock& inLock)
+	// Return the span for the new elements (constructed if they have a constructor, but not zero initialzied if they're trivial types).
+	[[nodiscard]] Span<taType> EnsureCapacity(int inExtraCapacityInElements, const VMemArrayLock& inLock)
 	{
 		ValidateLock(inLock);
 
-		taType* cur_end = mEnd.Load(MemoryOrder::Relaxed);
-		taType* new_end = cur_end + inExtraCapacityInElements;
+		mVector.Resize(mVector.Size() + inExtraCapacityInElements, EResizeInit::NoZeroInit);
 
-		// Do we need to commit more memory?
-		if ((uint8*)new_end <= mEndCommitted)
-			return { cur_end, new_end };
-
-		// It's fine if this is not aligned to pages, gVMemCommit will round up.
-		uint8* new_end_committed = gMax((uint8*)new_end, mEndCommitted + mMinCommitSize);
-
-		mEndCommitted = gVMemCommit({ mEndCommitted, new_end_committed }).mEnd;
-
-		return { cur_end, new_end };
+		taType* cur_end = mVector.Begin() + mAtomicSize.Load(MemoryOrder::Relaxed);
+		return { cur_end, inExtraCapacityInElements };
 	}
 
 	// Destroy all elements.
@@ -129,39 +95,34 @@ struct VMemArray : NoCopy
 		const VMemArrayLock& lock = inLock.value_or((const VMemArrayLock&)Lock());
 		(void)lock;
 
-		Span elements = *this;
-		mEnd.Store(mBegin);
+		mAtomicSize.Store(mVector.Size());
 
-		for (taType& element : elements)
-			element.~taType();
+		mVector.Clear();
 	}
 
-	taType&              operator[](size_t inIndex)			{ gAssert(inIndex < Size()); return mBegin[inIndex]; }
-	const taType&        operator[](size_t inIndex) const	{ gAssert(inIndex < Size()); return mBegin[inIndex]; }
+	taType&              operator[](size_t inIndex)			{ gAssert(inIndex < Size()); return mVector[inIndex]; }
+	const taType&        operator[](size_t inIndex) const	{ gAssert(inIndex < Size()); return mVector[inIndex]; }
 					     
-	size_t               Size() const						{ return mEnd.Load() - mBegin; }
-	size_t               SizeRelaxed() const				{ return mEnd.Load(MemoryOrder::Relaxed) - mBegin; }	// To use inside lock scope.
-	size_t               CapacityInBytes() const			{ return (uint8*)mBegin - mEndCommitted; }
-	size_t               MaxCapacityInBytes() const			{ return mSizeToReserve; }
+	size_t               Size() const						{ return mAtomicSize.Load(); }
+	size_t               SizeRelaxed() const				{ return mAtomicSize.Load(MemoryOrder::Relaxed); }	// To use inside lock scope.
+	size_t               CapacityInBytes() const			{ return mVector.Capacity(); }
+	size_t               MaxCapacityInBytes() const			{ return mVector.GetAllocator().GetArena()->GetReservedSize(); }
 
-	taType*              Begin()							{ return mBegin; }
-	taType*              End()								{ return mEnd.Load(); }
-	taType*              begin()							{ return mBegin; }
-	taType*              end()								{ return mEnd.Load(); }
-	const taType*        Begin()	const					{ return mBegin; }
-	const taType*        End()		const					{ return mEnd.Load(); }
-	const taType*        begin()	const					{ return mBegin; }
-	const taType*        end()		const					{ return mEnd.Load(); }
+	taType*              Begin()							{ return mVector.Begin(); }
+	taType*              End()								{ return mVector.Begin() + mAtomicSize.Load(); }
+	taType*              begin()							{ return mVector.Begin(); }
+	taType*              end()								{ return mVector.Begin() + mAtomicSize.Load(); }
+	const taType*        Begin()	const					{ return mVector.Begin(); }
+	const taType*        End()		const					{ return mVector.Begin() + mAtomicSize.Load(); }
+	const taType*        begin()	const					{ return mVector.Begin(); }
+	const taType*        end()		const					{ return mVector.Begin() + mAtomicSize.Load(); }
 
 private:
 	void                 ValidateLock(const VMemArrayLock& inLock) const { gAssert(inLock.GetMutex() == &mMutex); }
 
-	taType*              mBegin        = nullptr;
-	Atomic<taType*>      mEnd          = nullptr;
-	uint8*               mEndCommitted = nullptr;
+	VMemVector<taType>   mVector;
+	Atomic<int>          mAtomicSize = 0;
 	Mutex                mMutex;
-	size_t               mSizeToReserve = 1024ull * 1024 * 1024;
-	size_t               mMinCommitSize = 256ull * 1024;			// Minimum size to commit at once, to avoid calling gVMemCommit too often.
 };
 
 

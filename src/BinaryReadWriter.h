@@ -14,13 +14,6 @@
 // Helper class to write a binary file.
 struct BinaryWriter : NoCopy
 {
-	BinaryWriter()
-	{
-		// Lock once to avoid the overhead of locking many times.
-		// TODO make the mutex a template param to have a dummy one when not needed?
-		mBufferLock = mBuffer.Lock();
-	}
-
 	// Write the internal buffer to this file.
 	bool WriteFile(FILE* ioFile);
 
@@ -31,9 +24,11 @@ struct BinaryWriter : NoCopy
 
 		int size_bytes = inSpan.SizeInBytes();
 
-		Span dest = mBuffer.EnsureCapacity(size_bytes, mBufferLock);
-		memcpy(dest.Data(), inSpan.Data(), size_bytes);
-		mBuffer.IncreaseSize(size_bytes, mBufferLock);
+		// Resize the buffer.
+		mBuffer.Resize(mBuffer.Size() + size_bytes, EResizeInit::NoZeroInit);
+
+		// Write the data.
+		gMemCopy(mBuffer.Data() - size_bytes, inSpan.Data(), size_bytes);
 	}
 
 	template <typename taType>
@@ -54,28 +49,20 @@ struct BinaryWriter : NoCopy
 		Write(inLabel.SubSpan(0, inLabel.Size() - 1));
 	}
 
-	VMemArray<uint8> mBuffer = { 1'000'000'000, 256ull * 1024 };
-	VMemArrayLock    mBufferLock;
+	VMemVector<uint8> mBuffer;
 };
 
 
 // Helper class to read a binary file.
 struct BinaryReader : NoCopy
 {
-	BinaryReader()
-	{
-		// Lock once to avoid the overhead of locking many times.
-		// TODO make the mutex a template param to have a dummy one when not needed?
-		mBufferLock = mBuffer.Lock();
-	}
-
 	// Read the entire file into the internal buffer.
 	bool ReadFile(FILE* inFile);
 
 	template <typename taType>
 	void Read(Span<taType> outSpan)
 	{
-		if (mCurrentOffset + outSpan.SizeInBytes() > mBuffer.SizeRelaxed())
+		if (mCurrentOffset + outSpan.SizeInBytes() > mBuffer.Size())
 		{
 			mError = true;
 			return;
@@ -83,7 +70,7 @@ struct BinaryReader : NoCopy
 
 		static_assert(cHasUniqueObjectRepresentations<taType>); // Make sure there's no padding inside that type.
 
-		memcpy(outSpan.Data(), mBuffer.Begin() + mCurrentOffset, outSpan.SizeInBytes());
+		gMemCopy(outSpan.Data(), mBuffer.Begin() + mCurrentOffset, outSpan.SizeInBytes());
 		mCurrentOffset += outSpan.SizeInBytes();
 	}
 
@@ -118,9 +105,9 @@ struct BinaryReader : NoCopy
 		return buffer;
 	}
 
-	void Skip(size_t inSizeInBytes)
+	void Skip(int inSizeInBytes)
 	{
-		if (mCurrentOffset + inSizeInBytes > mBuffer.SizeRelaxed())
+		if (mCurrentOffset + inSizeInBytes > mBuffer.Size())
 		{
 			mError = true;
 			return;
@@ -136,7 +123,7 @@ struct BinaryReader : NoCopy
 		Skip(size);
 	}
 
-	template <size_t taSize>
+	template <int taSize>
 	bool ExpectLabel(const char (& inLabel)[taSize])
 	{
 		gAssert(inLabel[taSize - 1] == 0);
@@ -146,7 +133,7 @@ struct BinaryReader : NoCopy
 		static_assert(cLabelSize <= gElemCount(read_label));
 		Read(Span(read_label, cLabelSize));
 
-		if (memcmp(inLabel, read_label, cLabelSize) != 0)
+		if (gMemCmp(inLabel, read_label, cLabelSize) != 0)
 		{
 			gAppLogError(R"(Expected label "%s" not found, file corrupted.)", inLabel);
 			mError = true;
@@ -155,8 +142,7 @@ struct BinaryReader : NoCopy
 		return !mError; // This will return false if there was an error before, even if the label is correct. That's on purpose, we use this to early out.
 	}
 
-	VMemArray<uint8> mBuffer = { 1'000'000'000, 256ull * 1024 };
-	VMemArrayLock    mBufferLock;
-	size_t           mCurrentOffset = 0;
-	bool             mError = false;
+	VMemVector<uint8> mBuffer;
+	int               mCurrentOffset = 0;
+	bool              mError         = false;
 };

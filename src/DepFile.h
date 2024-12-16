@@ -4,6 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #pragma once
+
+#include <Bedrock/Vector.h>
+
 #include "CookingSystem.h"
 
 bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& outInputs, Vector<FileID>& outOutputs);

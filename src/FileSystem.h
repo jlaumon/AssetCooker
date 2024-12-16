@@ -367,8 +367,8 @@ private:
 	friend void     gDrawFileSearch();
 	friend struct FileRepo;
 
-	VMemArray<FileRepo>        mRepos  = { 10'000'000, gVMemCommitGranularity() };
-	VMemArray<FileDrive>       mDrives = { 10'000'000, gVMemCommitGranularity() };        // All the drives that have at least one repo on them.
+	VMemArray<FileRepo>        mRepos  = { 10_MiB, gVMemCommitGranularity() };
+	VMemArray<FileDrive>       mDrives = { 10_MiB, gVMemCommitGranularity() };        // All the drives that have at least one repo on them.
 
 	Atomic<InitState>          mInitState = InitState::NotInitialized;
 	struct InitStats

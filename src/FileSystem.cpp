@@ -2031,7 +2031,7 @@ void FileSystem::SaveCache()
 	fclose(cache_file);
 
 	gAppLog("Done. Saved %s (%s compressed) in %.2f seconds.", 
-		gFormatSizeInBytes(bin.mBuffer.SizeRelaxed()).AsCStr(), 
+		gFormatSizeInBytes(bin.mBuffer.Size()).AsCStr(), 
 		gFormatSizeInBytes(file_size).AsCStr(), 
 		gTicksToSeconds(timer.GetTicks()));
 }

@@ -14,7 +14,7 @@
 #include "win32/file.h"
 #include "win32/io.h"
 
-bool gReadFile(StringView inPath, VMemArray<uint8>& outFileData)
+bool gReadFile(StringView inPath, TempVector<uint8>& outFileData)
 {
 	TempString long_path;
 	inPath = gConvertToLargePath(inPath, long_path);
@@ -30,16 +30,13 @@ bool gReadFile(StringView inPath, VMemArray<uint8>& outFileData)
 	if (file_size.QuadPart > UINT32_MAX)
 		gAppFatalError("gReadFile: Trying to read a file that is > 4GiB (%s)", inPath.AsCStr());
 
-	auto lock = outFileData.Lock();
-	Span<uint8> buffer = outFileData.EnsureCapacity(file_size.QuadPart + 1, lock);
+	outFileData.Resize(file_size.QuadPart + 1, EResizeInit::NoZeroInit);
 
 	DWORD bytes_read = 0;
-	BOOL success = ReadFile(handle, buffer.Data(), file_size.LowPart, &bytes_read, nullptr) != 0;
+	BOOL success = ReadFile(handle, outFileData.Data(), file_size.LowPart, &bytes_read, nullptr) != 0;
 
 	// Null terminate in case it's text.
-	buffer[file_size.QuadPart] = 0;
-
-	outFileData.IncreaseSize(file_size.QuadPart + 1, lock);
+	outFileData[file_size.QuadPart] = 0;
 
 	return success != 0;
 }
@@ -259,8 +256,7 @@ bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& ou
 {
 	TempString full_path = gConcat(inDepFileID.GetRepo().mRootPath, inDepFileID.GetFile().mPath);
 
-	// TODO virtual memory is probably overkill and slower than heap here
-	VMemArray<uint8> buffer(4ull * 1024 * 1024, 4096);
+	TempVector<uint8> buffer;
 	if (!gReadFile(full_path, buffer))
 	{
 		gAppLogError(R"(Failed to read Dep File %s - %s)", 

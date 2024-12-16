@@ -11,7 +11,7 @@ bool BinaryWriter::WriteFile(FILE* ioFile)
 {
 	// Compress the data with LZ4.
 	// LZ4HC gives a slightly better ratio but is 10 times as slow, so not worth it here.
-	int    uncompressed_size   = (int)mBuffer.SizeRelaxed();
+	int    uncompressed_size   = mBuffer.Size();
 	int    compressed_size_max = LZ4_compressBound(uncompressed_size);
 	char*  compressed_buffer   = (char*)malloc(compressed_size_max);
 	int    compressed_size     = LZ4_compress_default((const char*)mBuffer.Begin(), compressed_buffer, uncompressed_size, compressed_size_max);
@@ -53,13 +53,12 @@ bool BinaryReader::ReadFile(FILE* inFile)
 	if (fread(compressed_buffer, 1, compressed_size, inFile) != compressed_size)
 		return false;
 
-	Span uncompressed_buffer = mBuffer.EnsureCapacity(uncompressed_size, mBufferLock);
+	// Resize the buffer.
+	mBuffer.Resize(uncompressed_size, EResizeInit::NoZeroInit);
 
-	// Decompress the data.
-	int actual_uncompressed_size = LZ4_decompress_safe(compressed_buffer, (char*)uncompressed_buffer.Data(), compressed_size, uncompressed_buffer.Size());
+	// Decompress the data into the buffer.
+	int actual_uncompressed_size = LZ4_decompress_safe(compressed_buffer, (char*)mBuffer.Data(), compressed_size, mBuffer.Size());
 	gAssert(actual_uncompressed_size == uncompressed_size);
-
-	mBuffer.IncreaseSize(uncompressed_size, mBufferLock);
 
 	return true;
 }
