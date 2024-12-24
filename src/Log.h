@@ -36,7 +36,7 @@ struct Log
 		StringView  AsStringView() const { return { mData, mSize }; }
 	};
 	
-	SegmentedVector<Line>   mLines;
+	VMemVector<Line>		mLines;
 	StringPool              mStringPool;
 	Mutex                   mMutex;
 	ImGuiTextFilter         mFilter;

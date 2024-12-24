@@ -1107,9 +1107,9 @@ bool FileSystem::DeleteFile(FileID inFileID)
 }
 
 
-size_t FileSystem::GetFileCount() const
+int FileSystem::GetFileCount() const
 {
-	size_t file_count = 0;
+	int file_count = 0;
 	for (const FileRepo& repo : mRepos)
 		file_count += repo.mFiles.Size();
 	return file_count;
@@ -1138,7 +1138,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 	// Don't use too many threads otherwise they'll just spend their time on the hashmap mutex.
 	// TODO this could be improved
 	constexpr int cMaxScanThreadCount = 4;
-	const int scan_thread_count = gMin((int)std::thread::hardware_concurrency(), cMaxScanThreadCount);
+	const int scan_thread_count = gMin(gThreadHardwareConcurrency(), cMaxScanThreadCount);
 
 	// Prepare a scan queue that can be used by multiple threads.
 	ScanQueue scan_queue;
@@ -1261,7 +1261,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 		// Don't create too many threads because they'll get stuck in locks in OpenFileByRefNumber if the cache is warm,
 		// or they'll be bottlenecked by IO otherwise.
 		constexpr int cMaxUSNThreadCount = 4;
-		const int     usn_thread_count   = gMin((int)std::thread::hardware_concurrency(), cMaxUSNThreadCount);
+		const int     usn_thread_count   = gMin(gThreadHardwareConcurrency(), cMaxUSNThreadCount);
 
 		// Create temporary worker threads to get all the missing USNs.
 		Thread usn_threads[cMaxUSNThreadCount];
@@ -1943,7 +1943,7 @@ void FileSystem::SaveCache()
 	Span rules = gCookingSystem.GetRules();
 
 	// Build the list of commands for each rule.
-	Vector<SegmentedVector<CookingCommandID>> commands_per_rule;
+	TempVector<Vector<CookingCommandID>> commands_per_rule;
 	commands_per_rule.Resize(rules.Size());
 	for (const CookingCommand& command : gCookingSystem.GetCommands())
 	{
@@ -1956,7 +1956,7 @@ void FileSystem::SaveCache()
 		if (command.mLastCookRuleVersion != command.GetRule().mVersion)
 			continue;
 
-		commands_per_rule[command.mRuleID.mIndex].emplace_back(command.mID);
+		commands_per_rule[command.mRuleID.mIndex].PushBack(command.mID);
 	}
 
 	// Write the commands, sorted by rule.
@@ -1969,8 +1969,8 @@ void FileSystem::SaveCache()
 		bin.Write(rule.UseDepFile());
 		bin.Write(rule.mVersion);
 
-		const SegmentedVector<CookingCommandID>& commands = commands_per_rule[rule.mID.mIndex];
-		bin.Write((uint32)commands.size());
+		Span commands = commands_per_rule[rule.mID.mIndex];
+		bin.Write((uint32)commands.Size());
 
 		for (CookingCommandID command_id : commands)
 		{

@@ -40,7 +40,7 @@ void Log::FinishLine(LogType inType, StringPool::ResizableStringView& inLine)
 	// TODO: check inLine for extra end of lines and split it (?), otherwise can't use imgui clipper
 	gAssert(gIsNullTerminated(inLine.AsStringView()));
 
-	mLines.emplace_back(line.Data(), line.Size(), inType);
+	mLines.EmplaceBack(line.Data(), line.Size(), inType);
 }
 
 
@@ -61,7 +61,7 @@ StringView Log::Add(LogType inType, StringView inFormat, va_list inArgs)
 void Log::Clear()
 {
 	LockGuard lock(mMutex);
-	mLines.clear();
+	mLines.Clear();
 	mStringPool.Clear();
 }
 
@@ -123,7 +123,7 @@ void Log::Draw(StringView inName, bool* ioOpen)
 		else
 		{
 			ImGuiListClipper clipper;
-			clipper.Begin((int)mLines.size());
+			clipper.Begin(mLines.Size());
 			while (clipper.Step())
 			{
 				for (int line_no = clipper.DisplayStart; line_no < clipper.DisplayEnd; line_no++)

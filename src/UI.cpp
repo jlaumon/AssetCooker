@@ -835,7 +835,7 @@ void gDrawCookingLog()
 
 	ImGui::SameLine();
 	ImGui::AlignTextToFramePadding();
-	ImGui::TextUnformatted(gTempFormat("%d items", (int)gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex));
+	ImGui::TextUnformatted(gTempFormat("%d items", gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex));
 
 
 	if (!ImGui::BeginTable("CookingLog", 4, ImGuiTableFlags_ScrollY))
@@ -852,7 +852,7 @@ void gDrawCookingLog()
 	bool scroll_target_changed = false;
 
 	ImGuiListClipper clipper;
-	clipper.Begin((int)gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex);
+	clipper.Begin(gCookingSystem.mCookingLog.Size() - gFirstCookingLogEntryIndex);
 	defer { clipper.End(); };
 	while (clipper.Step())
 	{
@@ -998,18 +998,18 @@ void gDrawCommandSearch()
 		return;
 	}
 
-	static ImGuiTextFilter                   filter;
-	static SegmentedVector<CookingCommandID> filtered_list;
+	static ImGuiTextFilter              filter;
+	static VMemVector<CookingCommandID> filtered_list;
 
 	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
 	{
 		// Rebuild the filtered list.
-		filtered_list.clear();
+		filtered_list.Clear();
 		for (const CookingCommand& command : gCookingSystem.mCommands)
 		{
 			auto command_str = gToString(command);
 			if (filter.PassFilter(command_str))
-				filtered_list.emplace_back(command.mID);
+				filtered_list.PushBack(command.mID);
 		}
 	}
 
@@ -1029,7 +1029,7 @@ void gDrawCommandSearch()
 
 	ImGui::SameLine();
 	ImGui::AlignTextToFramePadding();
-	ImGui::Text("%d items", filter.IsActive() ? (int)filtered_list.size() : gCookingSystem.mCommands.Size());
+	ImGui::Text("%d items", filter.IsActive() ? filtered_list.Size() : gCookingSystem.mCommands.Size());
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
@@ -1039,7 +1039,7 @@ void gDrawCommandSearch()
 		if (filter.IsActive())
 		{
 			// Draw the filtered list.
-			clipper.Begin((int)filtered_list.size());
+			clipper.Begin(filtered_list.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1050,7 +1050,7 @@ void gDrawCommandSearch()
 		else
 		{
 			// Draw the full list.
-			clipper.Begin((int)gCookingSystem.mCommands.Size());
+			clipper.Begin(gCookingSystem.mCommands.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1075,23 +1075,23 @@ void gDrawFileSearch()
 		return;
 	}
 
-	static ImGuiTextFilter         filter;
-	static SegmentedVector<FileID> filtered_list;
+	static ImGuiTextFilter    filter;
+	static VMemVector<FileID> filtered_list;
 
 	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
 	{
 		// Rebuild the filtered list.
-		filtered_list.clear();
+		filtered_list.Clear();
 		for (const FileRepo& repo : gFileSystem.mRepos)
 			for (const FileInfo& file : repo.mFiles)
 			{
 				auto file_str = file.ToString();
 				if (filter.PassFilter(file_str))
-					filtered_list.emplace_back(file.mID);
+					filtered_list.PushBack(file.mID);
 			}
 	}
 
-	ImGui::Text("%d items", filter.IsActive() ? (int)filtered_list.size() : gFileSystem.GetFileCount());
+	ImGui::Text("%d items", filter.IsActive() ? filtered_list.Size() : gFileSystem.GetFileCount());
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
@@ -1101,7 +1101,7 @@ void gDrawFileSearch()
 		if (filter.IsActive())
 		{
 			// Draw the filtered list.
-			clipper.Begin((int)filtered_list.size());
+			clipper.Begin(filtered_list.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1114,7 +1114,7 @@ void gDrawFileSearch()
 			// Draw the full list.
 			for (const FileRepo& repo : gFileSystem.mRepos)
 			{
-				clipper.Begin((int)repo.mFiles.Size());
+				clipper.Begin(repo.mFiles.Size());
 				while (clipper.Step())
 				{
 					for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1144,7 +1144,7 @@ void gDrawCookingThreads()
 		return;
 	}
 
-	int thread_count = (int)gCookingSystem.mCookingThreads.size();
+	int thread_count = gCookingSystem.mCookingThreads.Size();
 	int columns      = sqrt(thread_count); // TODO need a max number of columns instead, they're useless if too short
 
 	if (thread_count && ImGui::BeginTable("Threads", columns, ImGuiTableFlags_SizingStretchSame))
@@ -1198,7 +1198,7 @@ void gDrawDebugWindow()
 	{
 		int num_commands  = gCookingSystem.mCommands.Size();
 		int first_command = gRand32() % num_commands;
-		for (int i = 0; i<gMin(100, (int)num_commands); ++i)
+		for (int i = 0; i<gMin(100, num_commands); ++i)
 		{
 			int command_index = (first_command + i) % num_commands;
 			gCookingSystem.ForceCook(gCookingSystem.mCommands[command_index].mID);
@@ -1210,7 +1210,7 @@ void gDrawDebugWindow()
 	{
 		int num_commands  = gCookingSystem.mCommands.Size();
 		int first_command = gRand32() % num_commands;
-		for (int i = 0; i<gMin(1000, (int)num_commands); ++i)
+		for (int i = 0; i<gMin(1000, num_commands); ++i)
 		{
 			int command_index = (first_command + i) % num_commands;
 			gCookingSystem.ForceCook(gCookingSystem.mCommands[i].mID);
@@ -1241,10 +1241,10 @@ void gDrawDebugWindow()
 		clipper.End();
 	}
 
-	if (ImGui::CollapsingHeader(gTempFormat("Commands (%d)##Commands", (int)gCookingSystem.mCommands.Size())))
+	if (ImGui::CollapsingHeader(gTempFormat("Commands (%d)##Commands", gCookingSystem.mCommands.Size())))
 	{
 		ImGuiListClipper clipper;
-		clipper.Begin((int)gCookingSystem.mCommands.Size());
+		clipper.Begin(gCookingSystem.mCommands.Size());
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1256,10 +1256,10 @@ void gDrawDebugWindow()
 	for (FileRepo& repo : gFileSystem.mRepos)
 	{
 		ImGui::PushID(&repo);
-		if (ImGui::CollapsingHeader(gTempFormat("%s (%s) - %d Files##Repo", repo.mName.AsCStr(), repo.mRootPath.AsCStr(), (int)repo.mFiles.Size())))
+		if (ImGui::CollapsingHeader(gTempFormat("%s (%s) - %d Files##Repo", repo.mName.AsCStr(), repo.mRootPath.AsCStr(), repo.mFiles.Size())))
 		{
 			ImGuiListClipper clipper;
-			clipper.Begin((int)repo.mFiles.Size());
+			clipper.Begin(repo.mFiles.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
@@ -1323,12 +1323,12 @@ void gDrawStatusBar()
 		}
 		case FileSystem::InitState::LoadingCache: 
 		{
-			ImGui::TextUnformatted(gTempFormat("%s Loading cache... %5d files found.", gGetAnimatedHourglass(), (int)gFileSystem.GetFileCount()));
+			ImGui::TextUnformatted(gTempFormat("%s Loading cache... %5d files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
 			break;
 		}
 		case FileSystem::InitState::Scanning: 
 		{
-			ImGui::TextUnformatted(gTempFormat("%s Scanning... %5d files found.", gGetAnimatedHourglass(), (int)gFileSystem.GetFileCount()));
+			ImGui::TextUnformatted(gTempFormat("%s Scanning... %5d files found.", gGetAnimatedHourglass(), gFileSystem.GetFileCount()));
 			break;
 		}
 		case FileSystem::InitState::ReadingUSNJournal: 
@@ -1379,7 +1379,7 @@ void gDrawStatusBar()
 
 	// Display some stats on the right side of the status bar.
 	{
-		TempString cooking_stats = gTempFormat("%d Files, %d Repos, %d Commands | ", (int)gFileSystem.GetFileCount(), (int)gFileSystem.GetRepoCount(), (int)gCookingSystem.GetCommandCount());
+		TempString cooking_stats = gTempFormat("%d Files, %d Repos, %d Commands | ", gFileSystem.GetFileCount(), gFileSystem.GetRepoCount(), gCookingSystem.GetCommandCount());
 		float stats_text_size = ImGui::CalcTextSize(cooking_stats).x;
 
 		StringView ui_stats(ICON_FK_TACHOMETER " UI");

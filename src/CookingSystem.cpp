@@ -1096,19 +1096,22 @@ void CookingSystem::StartCooking()
 
 	// Number of threads is at least one, and is capped by number of CPU cores minus one,
 	// because we want to leave one core for the file system monitoring thread (and main thread).
-	thread_count = gClamp(thread_count, 1, (int)std::thread::hardware_concurrency() - 1);
+	thread_count = gClamp(thread_count, 1, gThreadHardwareConcurrency() - 1);
+
+	// Also make sure we don't go above the max size of the thread array.
+	thread_count = gMin(thread_count, mCookingThreads.MaxSize());
 
 	// Create the job object that will make sure child processes are killed if this process is killed.
 	mJobObject = sCreateJobObject();
 
 	gAppLog("Starting %d Cooking Threads.", thread_count);
 
-	mCookingThreads.reserve(thread_count);
+	mCookingThreads.Reserve(thread_count);
 
 	// Start the cooking threads.
 	for (int i = 0; i < thread_count; ++i)
 	{
-		auto& thread = mCookingThreads.emplace_back();
+		auto& thread = mCookingThreads.EmplaceBack();
 		thread.mThread.Create({ 
 			.mName = "CookingThread",
 			.mTempMemSize = 128_KiB,

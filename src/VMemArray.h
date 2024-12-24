@@ -100,13 +100,13 @@ struct VMemArray : NoCopy
 		mVector.Clear();
 	}
 
-	taType&              operator[](size_t inIndex)			{ gAssert(inIndex < Size()); return mVector[inIndex]; }
-	const taType&        operator[](size_t inIndex) const	{ gAssert(inIndex < Size()); return mVector[inIndex]; }
+	taType&              operator[](int inIndex)			{ gAssert(inIndex < Size()); return mVector[inIndex]; }
+	const taType&        operator[](int inIndex) const		{ gAssert(inIndex < Size()); return mVector[inIndex]; }
 					     
-	size_t               Size() const						{ return mAtomicSize.Load(); }
-	size_t               SizeRelaxed() const				{ return mAtomicSize.Load(MemoryOrder::Relaxed); }	// To use inside lock scope.
-	size_t               CapacityInBytes() const			{ return mVector.Capacity(); }
-	size_t               MaxCapacityInBytes() const			{ return mVector.GetAllocator().GetArena()->GetReservedSize(); }
+	int                  Size() const						{ return mAtomicSize.Load(); }
+	int                  SizeRelaxed() const				{ return mAtomicSize.Load(MemoryOrder::Relaxed); } // To use inside lock scope.
+	int                  CapacityInBytes() const			{ return mVector.Capacity(); }
+	int                  MaxCapacityInBytes() const			{ return mVector.GetAllocator().GetArena()->GetReservedSize(); }
 
 	taType*              Begin()							{ return mVector.Begin(); }
 	taType*              End()								{ return mVector.Begin() + mAtomicSize.Load(); }

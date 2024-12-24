@@ -324,7 +324,7 @@ struct CookingSystem : NoCopy
 	void                                  SetCookingThreadCount(int inThreadCount) { mWantedCookingThreadCount = inThreadCount; }
 	int                                   GetCookingThreadCount() const { return mWantedCookingThreadCount; }
 
-	size_t                                GetCommandCount() const { return mCommands.Size(); } // Total number of commands, for debug/display.
+	int                                   GetCommandCount() const { return mCommands.Size(); } // Total number of commands, for debug/display.
 
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
 	void                                  QueueUpdateDirtyState(CookingCommandID inCommandID);
@@ -370,7 +370,7 @@ private:
 		StringPool                     mStringPool;
 		Atomic<CookingLogEntryID>      mCurrentLogEntry;
 	};
-	SegmentedVector<CookingThread, 64>       mCookingThreads;
+	FixedVector<CookingThread, 128>       mCookingThreads;
 	bool                                     mCookingStartPaused     = false;
 	bool                                     mCookingPaused          = true;
 	int                                      mWantedCookingThreadCount = 0;	// Number of threads requested. Actual number of threads created might be lower. 

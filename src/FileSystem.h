@@ -333,9 +333,9 @@ struct FileSystem : NoCopy
 	bool            CreateDirectory(FileID inFileID);                  // Make sure all the parent directories for this file exist.
 	bool            DeleteFile(FileID inFileID);                       // Delete this file on disk.
 
-	size_t          GetDriveCount() const { return mDrives.Size(); }   // Number of drives, for debug/display.
-	size_t          GetRepoCount() const { return mRepos.Size(); }     // Number of repos, for debug/display.
-	size_t          GetFileCount() const;                              // Total number of files, for debug/display.
+	int             GetDriveCount() const { return mDrives.Size(); }   // Number of drives, for debug/display.
+	int             GetRepoCount() const { return mRepos.Size(); }     // Number of repos, for debug/display.
+	int             GetFileCount() const;                              // Total number of files, for debug/display.
 
 	void			KickMonitorDirectoryThread();
 
