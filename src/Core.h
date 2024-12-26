@@ -11,7 +11,6 @@
 // Forward declarations of std types we don't want to include here.
 namespace std
 {
-template <class T, size_t Extent> class span;
 template <class T> class optional;
 template <class T> class reference_wrapper;
 }
