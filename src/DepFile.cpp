@@ -286,17 +286,17 @@ void gApplyDepFileContent(CookingCommand& ioCommand, Span<FileID> inDepFileInput
 {
 	// Update the mInputOf fields.
 	{
-		HashSet<FileID> old_dep_file_inputs = gToHashSet(Span(ioCommand.mDepFileInputs));
-		HashSet<FileID> new_dep_file_inputs = gToHashSet(Span(inDepFileInputs));
+		TempHashSet<FileID> old_dep_file_inputs = gToHashSet(Span(ioCommand.mDepFileInputs));
+		TempHashSet<FileID> new_dep_file_inputs = gToHashSet(Span(inDepFileInputs));
 
 		// If there are new inputs, let them know about this command.
 		for (FileID input : inDepFileInputs)
-			if (!old_dep_file_inputs.contains(input) && !gContains(ioCommand.mInputs, input))
+			if (!old_dep_file_inputs.Contains(input) && !gContains(ioCommand.mInputs, input))
 				input.GetFile().mInputOf.PushBack(ioCommand.mID);
 
 		// If some inputs disappeared, remove this command from them.
 		for (FileID old_input : old_dep_file_inputs)
-			if (!new_dep_file_inputs.contains(old_input) && !gContains(ioCommand.mInputs, old_input))
+			if (!new_dep_file_inputs.Contains(old_input) && !gContains(ioCommand.mInputs, old_input))
 			{
 				bool found = gSwapEraseFirstIf(old_input.GetFile().mInputOf, [&ioCommand](CookingCommandID inID) { return inID == ioCommand.mID; });
 				gAssert(found);
@@ -305,17 +305,17 @@ void gApplyDepFileContent(CookingCommand& ioCommand, Span<FileID> inDepFileInput
 
 	// Update the mOutputOf fields.
 	{
-		HashSet<FileID> old_dep_file_outputs = gToHashSet(Span(ioCommand.mDepFileOutputs));
-		HashSet<FileID> new_dep_file_outputs = gToHashSet(Span(inDepFileOutputs));
+		TempHashSet<FileID> old_dep_file_outputs = gToHashSet(Span(ioCommand.mDepFileOutputs));
+		TempHashSet<FileID> new_dep_file_outputs = gToHashSet(Span(inDepFileOutputs));
 
 		// If there are new outputs, let them know about this command.
 		for (FileID output : inDepFileOutputs)
-			if (!old_dep_file_outputs.contains(output) && !gContains(ioCommand.mOutputs, output))
+			if (!old_dep_file_outputs.Contains(output) && !gContains(ioCommand.mOutputs, output))
 				output.GetFile().mOutputOf.PushBack(ioCommand.mID);
 
 		// If some outputs disappeared, remove this command from them.
 		for (FileID old_output : old_dep_file_outputs)
-			if (!new_dep_file_outputs.contains(old_output) && !gContains(ioCommand.mOutputs, old_output))
+			if (!new_dep_file_outputs.Contains(old_output) && !gContains(ioCommand.mOutputs, old_output))
 			{
 				bool found = gSwapEraseFirstIf(old_output.GetFile().mOutputOf, [&ioCommand](CookingCommandID inID) { return inID == ioCommand.mID; });
 				gAssert(found);

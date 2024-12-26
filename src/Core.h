@@ -8,60 +8,6 @@
 
 #include <Bedrock/Core.h>
 
-
-// Basic containers.
-#include "ankerl/unordered_dense.h"
-
-// These namespaces are too long, add shortcuts.
-template <  class Key,
-			class T,
-			class Hash =  ankerl::unordered_dense::hash<Key>,
-			class KeyEqual = std::equal_to<Key>,
-			class AllocatorOrContainer = std::allocator<std::pair<Key, T>>,
-			class Bucket =  ankerl::unordered_dense::bucket_type::standard>
-using HashMap = ankerl::unordered_dense::map<Key, T, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
-
-template <  class Key,
-			class T,
-			class Hash = ankerl::unordered_dense::hash<Key>,
-			class KeyEqual = std::equal_to<Key>,
-			class AllocatorOrContainer = std::allocator<std::pair<Key, T>>,
-			class Bucket = ankerl::unordered_dense::bucket_type::standard>
-using SegmentedHashMap = ankerl::unordered_dense::segmented_map<Key, T, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
-
-template <  class Key,
-			class Hash = ankerl::unordered_dense::hash<Key>,
-			class KeyEqual = std::equal_to<Key>,
-			class AllocatorOrContainer = std::allocator<Key>,
-			class Bucket = ankerl::unordered_dense::bucket_type::standard>
-using HashSet = ankerl::unordered_dense::set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
-
-template <  class Key,
-			class Hash = ankerl::unordered_dense::hash<Key>,
-			class KeyEqual = std::equal_to<Key>,
-			class AllocatorOrContainer = std::allocator<Key>,
-			class Bucket = ankerl::unordered_dense::bucket_type::standard>
-using SegmentedHashSet = ankerl::unordered_dense::segmented_set<Key, Hash, KeyEqual, AllocatorOrContainer, Bucket>;
-
-
-// Hash helper to hash entire structs.
-// Only use on structs/classes that don't contain any padding.
-template <typename taType>
-struct MemoryHasher
-{
-	using is_avalanching = void; // mark class as high quality avalanching hash
-
-    uint64 operator()(const taType& inValue) const noexcept
-	{
-		static_assert(std::has_unique_object_representations_v<taType>);
-        return ankerl::unordered_dense::detail::wyhash::hash(&inValue, sizeof(inValue));
-    }
-};
-
-inline uint64 gHash(uint64 inValue) { return ankerl::unordered_dense::detail::wyhash::hash(inValue); }
-inline uint64 gHashCombine(uint64 inA, uint64 inB) { return ankerl::unordered_dense::detail::wyhash::mix(inA, inB); }
-
-
 // Forward declarations of std types we don't want to include here.
 namespace std
 {
@@ -72,6 +18,7 @@ template <class T> class reference_wrapper;
 
 // TODO: remove and add only where needed
 #include <Bedrock/Span.h> 
+#include <Bedrock/HashMap.h> 
 
 // Typedef for Optional, until we have a custom version.
 template <typename taType>
@@ -123,13 +70,13 @@ struct MultiSpanRange
 
 // Helper to turn a Span into a HashSet.
 template <typename taType>
-static HashSet<taType> gToHashSet(Span<taType> inSpan)
+static TempHashSet<taType> gToHashSet(Span<taType> inSpan)
 {
-	HashSet<taType> hash_set;
-	hash_set.reserve(inSpan.Size());
+	TempHashSet<taType> hash_set;
+	hash_set.Reserve(inSpan.Size());
 
 	for (taType& element : inSpan)
-		hash_set.insert(element);
+		hash_set.Insert(element);
 
 	return hash_set;
 }

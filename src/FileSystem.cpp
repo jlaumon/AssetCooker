@@ -211,10 +211,10 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 			// TODO: not great to access these internals, maybe find a better way?
 			LockGuard map_lock(gFileSystem.mFilesByPathHashMutex);
 
-			auto [it, inserted] = gFileSystem.mFilesByPathHash.insert({ path_hash, new_file_id });
-			if (!inserted)
+			auto [_, value, result] = gFileSystem.mFilesByPathHash.Insert(path_hash, new_file_id);
+			if (result == EInsertResult::Found)
 			{
-				actual_file_id = it->second;
+				actual_file_id = value;
 
 				if (inRefNumber.IsValid())
 				{
@@ -242,10 +242,10 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 			// TODO: not great to access these internals, maybe find a better way?
 			LockGuard map_lock(mDrive.mFilesByRefNumberMutex);
 
-			auto [it, inserted] = mDrive.mFilesByRefNumber.insert({ inRefNumber, actual_file_id });
-			if (!inserted)
+			auto [_, value, result] = mDrive.mFilesByRefNumber.Insert(inRefNumber, actual_file_id);
+			if (result == EInsertResult::Found)
 			{
-				FileID previous_file_id = it->second;
+				FileID previous_file_id = value;
 
 				// Check if the existing file is the same (ie. same path).
 				// The file could have been renamed but kept the same ref number (and we've missed that rename event?),
@@ -304,7 +304,7 @@ void FileRepo::MarkFileDeleted(FileInfo& ioFile, FileTime inTimeStamp, const Loc
 {
 	gAssert(inLock.GetMutex() == &mDrive.mFilesByRefNumberMutex);
 
-	mDrive.mFilesByRefNumber.erase(ioFile.mRefNumber);
+	mDrive.mFilesByRefNumber.Erase(ioFile.mRefNumber);
 	ioFile.mRefNumber      = FileRefNumber::cInvalid();
 	ioFile.mCreationTime   = inTimeStamp;	// Store the time of deletion in the creation time. 
 	ioFile.mLastChangeTime = {};
@@ -940,9 +940,9 @@ FileID FileDrive::FindFileID(FileRefNumber inRefNumber) const
 {
 	LockGuard lock(mFilesByRefNumberMutex);
 
-	auto it = mFilesByRefNumber.find(inRefNumber);
-	if (it != mFilesByRefNumber.end())
-		return it->second;
+	auto it = mFilesByRefNumber.Find(inRefNumber);
+	if (it != mFilesByRefNumber.End())
+		return it->mValue;
 
 	return {};
 }
@@ -1012,9 +1012,9 @@ FileID FileSystem::FindFileIDByPathHash(PathHash inPathHash) const
 {
 	LockGuard lock(mFilesByPathHashMutex);
 
-	auto it = mFilesByPathHash.find(inPathHash);
-	if (it != mFilesByPathHash.end())
-		return it->second;
+	auto it = mFilesByPathHash.Find(inPathHash);
+	if (it != mFilesByPathHash.End())
+		return it->mValue;
 
 	return {};
 }
@@ -1311,8 +1311,6 @@ void FileSystem::KickMonitorDirectoryThread()
 // TODO this is doing a bit more than monitoring the filesystem, give it a more general name and move to app?
 void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 {
-	using namespace std::chrono_literals;
-
 	// Start not idle.
 	mIsMonitorDirThreadIdle.Store(false);
 

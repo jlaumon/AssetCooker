@@ -17,6 +17,7 @@
 #include <Bedrock/Mutex.h>
 #include <Bedrock/ConditionVariable.h>
 #include <Bedrock/StringFormat.h>
+#include <Bedrock/HashMap.h>
 
 #include <optional>
 
@@ -95,8 +96,13 @@ struct FileRefNumber
 };
 static_assert(sizeof(FileRefNumber) == 16);
 
-template <> struct ankerl::unordered_dense::hash<FileRefNumber> : MemoryHasher<FileRefNumber> {};
-
+template <> struct Hash<FileRefNumber>
+{
+	uint64 operator()(FileRefNumber inRefNumber) const
+	{
+		return gHash(inRefNumber.mData, sizeof(inRefNumber.mData));
+	}
+};
 
 
 // Wrapper for a 128-bits hash value.
@@ -107,18 +113,16 @@ struct Hash128
 	constexpr auto operator<=>(const Hash128&) const = default;
 };
 
-template <> struct ankerl::unordered_dense::hash<Hash128>
+template <> struct Hash<Hash128>
 {
-	using is_avalanching = void; // mark class as high quality avalanching hash
-
 	// Hash128 is already a good quality hash, just return the lower 8 bytes.
-    uint64 operator()(const Hash128& inValue) const noexcept { return inValue.mData[0]; }
+	uint64 operator()(Hash128 inHash) const { return inHash.mData[0]; }
 };
 
 
 // Hash type specific to paths.
 struct PathHash : Hash128 {};
-template <> struct ankerl::unordered_dense::hash<PathHash> : public ankerl::unordered_dense::hash<Hash128> {};
+template <> struct Hash<PathHash> : Hash<Hash128> {};
 
 // Hash the absolute path of a file in a case insensitive manner.
 PathHash gHashPath(StringView inAbsolutePath);
@@ -147,8 +151,10 @@ struct FileID
 };
 static_assert(sizeof(FileID) == 4);
 
-template <> struct ankerl::unordered_dense::hash<FileID> : MemoryHasher<FileID> {};
-
+template <> struct Hash<FileID>
+{
+	uint64 operator()(FileID inID) const { return gHash(inID.AsUInt()); }
+};
 
 enum class FileType : int
 {
@@ -303,7 +309,7 @@ struct FileDrive : NoCopy
 	bool                   mLoadedFromCache = false;
 	Vector<FileRepo*>      mRepos;
 
-	using FilesByRefNumberMap = SegmentedHashMap<FileRefNumber, FileID>;
+	using FilesByRefNumberMap = VMemHashMap<FileRefNumber, FileID>;
 
 	FilesByRefNumberMap    mFilesByRefNumber;      // Map to find files by ref number.
 	mutable Mutex          mFilesByRefNumberMutex; // Mutex to protect access to the map.
@@ -379,9 +385,6 @@ private:
 	};
 	InitStats                  mInitStats;
 
-	Mutex                      mChangedFilesMutex;
-	SegmentedHashSet<FileID>   mChangedFiles;
-
 	Thread                     mMonitorDirThread;
 	SyncSignal                 mMonitorDirThreadSignal;
 	AtomicBool                 mIsMonitorDirThreadIdle = true;
@@ -395,7 +398,7 @@ private:
 	Queue<FileToRescan> mFilesToRescan;
 	Mutex               mFilesToRescanMutex;
 
-	using FilesByPathHash = SegmentedHashMap<PathHash, FileID>;
+	using FilesByPathHash = VMemHashMap<PathHash, FileID>;
 	FilesByPathHash mFilesByPathHash;      // Map to find files by path hash.
 	mutable Mutex   mFilesByPathHashMutex; // Mutex to protect access to the map.
 };

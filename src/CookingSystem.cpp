@@ -972,9 +972,9 @@ CookingCommand* CookingSystem::FindCommandByMainInput(CookingRuleID inRule, File
 
 bool CookingSystem::ValidateRules()
 {
-	HashSet<StringView> all_names;
-	int                 errors = 0;
-	Span                rules  = GetRules();
+	TempHashSet<StringView> all_names;
+	int                     errors = 0;
+	Span                    rules  = GetRules();
 
 	// TODO: This is a temporary limitation because the current code compares USN numbers from multiple drives (and that doesn't work).
 	//		 Solution are to either store one USN per drive involved in commands, etc. (but storing variable number of USN seems annoying/inefficent),
@@ -990,8 +990,8 @@ bool CookingSystem::ValidateRules()
 		// Validate the name.
 		if (!rule.mName.Empty())
 		{
-			auto [_, inserted] = all_names.insert(rule.mName);
-			if (!inserted)
+			auto [_, result] = all_names.Insert(rule.mName);
+			if (result == EInsertResult::Found)
 			{
 				errors++;
 				gAppLogError(R"(Found multiple rules with name "%s")", rule.mName.AsCStr());
@@ -1561,7 +1561,7 @@ void CookingSystem::AddTimeOut(CookingLogEntry* inLogEntry)
 {
 	{
 		LockGuard lock(mTimeOutMutex);
-		mTimeOutNextBatch.insert(inLogEntry);
+		mTimeOutNextBatch.Insert(inLogEntry);
 	}
 
 	// Tell the thread there are timeouts to process.
@@ -1581,7 +1581,7 @@ void CookingSystem::TimeOutUpdateThread()
 			LockGuard lock(mTimeOutMutex);
 
 			// Wait until there are time outs to update.
-			while (mTimeOutNextBatch.empty())
+			while (mTimeOutNextBatch.Empty())
 			{
 				mTimeOutAddedSignal.Wait(lock);
 
@@ -1624,7 +1624,7 @@ void CookingSystem::TimeOutUpdateThread()
 				}
 			}
 
-			mTimeOutCurrentBatch.clear();
+			mTimeOutCurrentBatch.Clear();
 		}
 	}
 }
@@ -1645,16 +1645,16 @@ void CookingSystem::QueueUpdateDirtyStates(FileID inFileID)
 	LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
 
 	for (CookingCommandID command_id : file.mInputOf)
-		mCommandsQueuedForUpdateDirtyState.insert(command_id);
+		mCommandsQueuedForUpdateDirtyState.Insert(command_id);
 	for (CookingCommandID command_id : file.mOutputOf)
-		mCommandsQueuedForUpdateDirtyState.insert(command_id);
+		mCommandsQueuedForUpdateDirtyState.Insert(command_id);
 }
 
 
 void CookingSystem::QueueUpdateDirtyState(CookingCommandID inCommandID)
 {
 	LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
-	mCommandsQueuedForUpdateDirtyState.insert(inCommandID);
+	mCommandsQueuedForUpdateDirtyState.Insert(inCommandID);
 }
 
 
@@ -1662,7 +1662,7 @@ bool CookingSystem::ProcessUpdateDirtyStates()
 {
 	LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
 
-	for (auto it = mCommandsQueuedForUpdateDirtyState.begin(); it != mCommandsQueuedForUpdateDirtyState.end();)
+	for (auto it = mCommandsQueuedForUpdateDirtyState.Begin(); it != mCommandsQueuedForUpdateDirtyState.End();)
 	{
 		CookingCommand& command = GetCommand(*it);
 
@@ -1674,11 +1674,11 @@ bool CookingSystem::ProcessUpdateDirtyStates()
 		{
 			// Update and remove from the list.
 			command.UpdateDirtyState();
-			it = mCommandsQueuedForUpdateDirtyState.erase(it);
+			it = mCommandsQueuedForUpdateDirtyState.Erase(it);
 		}
 	}
 
-	return !mCommandsQueuedForUpdateDirtyState.empty();
+	return !mCommandsQueuedForUpdateDirtyState.Empty();
 }
 
 
@@ -1689,7 +1689,7 @@ void CookingSystem::UpdateAllDirtyStates()
 	for (CookingCommand& command : mCommands)
 		command.UpdateDirtyState();
 
-	mCommandsQueuedForUpdateDirtyState.clear();
+	mCommandsQueuedForUpdateDirtyState.Clear();
 }
 
 
@@ -1763,9 +1763,9 @@ bool CookingSystem::IsIdle() const
 	{
 		LockGuard lock(mTimeOutMutex);
 
-		if (!mTimeOutCurrentBatch.empty())
+		if (!mTimeOutCurrentBatch.Empty())
 				return false;
-		if (!mTimeOutNextBatch.empty())
+		if (!mTimeOutNextBatch.Empty())
 				return false;
 	}
 

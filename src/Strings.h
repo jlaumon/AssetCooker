@@ -151,16 +151,6 @@ TempString gWideCharToUtf8(WStringView inWString);
 OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer);
 
 
-// Hash for StringView.
-template <> struct ankerl::unordered_dense::hash<StringView>
-{
-    using is_avalanching = void;
-    uint64 operator()(const StringView& inString) const
-	{
-        return detail::wyhash::hash(inString.Data(), inString.Size());
-    }
-};
-
 
 // Helper to turn back an StringView into an enum, assuming the right gToStringView exists for the enum and that its values go from 0 to _Count.
 template <typename taEnumType>

@@ -16,6 +16,7 @@
 #include <Bedrock/ConditionVariable.h>
 #include <Bedrock/Semaphore.h>
 #include <Bedrock/Atomic.h>
+#include <Bedrock/HashMap.h>
 
 
 enum class CommandVariables : uint8
@@ -358,7 +359,7 @@ private:
 	StringPool                            mStringPool = { 64ull * 1024 };
 	VMemArray<CookingCommand>             mCommands;
 
-	SegmentedHashSet<CookingCommandID>    mCommandsQueuedForUpdateDirtyState;
+	VMemHashSet<CookingCommandID>         mCommandsQueuedForUpdateDirtyState;
 	Mutex                                 mCommandsQueuedForUpdateDirtyStateMutex;
 
 	CookingQueue                          mCommandsDirty;	// All dirty commands.
