@@ -1,9 +1,6 @@
 [submodule "thirdparty/imgui"]
 	path = thirdparty/imgui
 	url = https://github.com/ocornut/imgui.git
-[submodule "thirdparty/unordered_dense"]
-	path = thirdparty/unordered_dense
-	url = https://github.com/martinus/unordered_dense.git
 [submodule "thirdparty/WindowsHModular"]
 	path = thirdparty/WindowsHModular
 	url = https://github.com/jlaumon/WindowsHModular.git
