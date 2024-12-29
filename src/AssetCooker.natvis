@@ -7,12 +7,8 @@
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
 
 <Type Name="VMemArray&lt;*&gt;">
-  <DisplayString>{{ Size={*($T1**)&amp;mEnd - mBegin} Capacity={(mEndCommitted - (uint8*)mBegin) / sizeof($T1)} }}</DisplayString>
   <Expand>
-    <ArrayItems>
-      <Size>*($T1**)&amp;mEnd - mBegin</Size>
-      <ValuePointer>mBegin</ValuePointer>
-    </ArrayItems>
+	<ExpandedItem>mVector</ExpandedItem>
   </Expand>
 </Type>
 
@@ -52,10 +48,10 @@
 
 <Type Name="FileID">
   <DisplayString Condition="mRepoIndex == cMaxFileRepos">[-1, -1] Invalid</DisplayString>
-  <DisplayString Condition="mRepoIndex != cMaxFileRepos">[{mRepoIndex}, {mFileIndex}] { gFileSystem.mRepos[mRepoIndex].mName, s8b}:{ gFileSystem.mRepos[mRepoIndex].mFiles[mFileIndex].mPath, s8b }</DisplayString>
+  <DisplayString Condition="mRepoIndex != cMaxFileRepos">[{mRepoIndex}, {mFileIndex}] { gFileSystem.mRepos.mVector.mData[mRepoIndex].mName, s8b}:{ gFileSystem.mRepos.mVector.mData[mRepoIndex].mFiles.mVector.mData[mFileIndex].mPath, s8b }</DisplayString>
   <Expand>
-    <Item Condition="mRepoIndex != cMaxFileRepos" Name="File">gFileSystem.mRepos[mRepoIndex].mFiles[mFileIndex]</Item>
-    <Item Condition="mRepoIndex != cMaxFileRepos" Name="Repo">gFileSystem.mRepos[mRepoIndex]</Item>
+    <Item Condition="mRepoIndex != cMaxFileRepos" Name="File">gFileSystem.mRepos.mVector.mData[mRepoIndex].mFiles.mVector.mData[mFileIndex]</Item>
+    <Item Condition="mRepoIndex != cMaxFileRepos" Name="Repo">gFileSystem.mRepos.mVector.mData[mRepoIndex]</Item>
   </Expand>
 </Type>
 
