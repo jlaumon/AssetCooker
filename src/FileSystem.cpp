@@ -1120,16 +1120,8 @@ int FileSystem::GetFileCount() const
 void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBufferUSN)
 {
 	// Early out if we have everything from the cache already.
-	{
-		bool all_cached = true;
-
-		for (const FileDrive& drive : mDrives)
-			if (!drive.mLoadedFromCache)
-				all_cached = false;
-
-		if (all_cached)
-			return;
-	}
+	if (gAllOf(mDrives, [](const FileDrive& inDrive) { return inDrive.mLoadedFromCache; }))
+		return;
 
 	gAppLog("Starting initial scan.");
 	Timer timer;
@@ -1192,7 +1184,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 	int total_files = 0;
 	for (auto& repo : mRepos)
 		if (!repo.mDrive.mLoadedFromCache)
-			total_files += (int)repo.mFiles.SizeRelaxed();
+			total_files += repo.mFiles.SizeRelaxed();
 
 	gAppLog("Done. Found %d files in %.2f seconds.", 
 		total_files, gTicksToSeconds(timer.GetTicks()));
