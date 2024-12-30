@@ -1544,8 +1544,9 @@ void FileSystem::LoadCache()
 		USN next_usn = 0;
 		bin.Read(next_usn);
 
-		FileDrive* drive       = FindDrive(drive_letter);
-		bool       drive_valid = true;
+		FileDrive* drive         = FindDrive(drive_letter);
+		bool       drive_valid   = true;
+		bool       rescan_needed = false;
 		if (drive == nullptr)
 		{
 			gAppLogError(R"(Drive %c:\ is listed in the cache but isn't used anymore, ignoring cache.)", drive_letter);
@@ -1561,14 +1562,17 @@ void FileSystem::LoadCache()
 
 			if (drive->mFirstUSN > next_usn)
 			{
-				gAppLogError(R"(Drive %c:\ cached state is too old, ignoring cache.)", drive_letter);
+				gAppLogError(R"(Drive %c:\ cached state is too old, re-scan required.)", drive_letter);
 				if (drive_letter == 'C')
 				{
 					gAppLogError(R"(  Consider using a different drive than C:\!)");
 					gAppLogError(R"(  Windows writes a lot of files and can quickly fill the USN journal.)");
 				}
 
-				drive_valid = false;
+				// We can't rely on the USN journal to catch up on what's changed, but reading the cached state 
+				// is still useful since it contains the commands last cook USN.
+				// We'll need to consider all the files from the cache to be deleted, then run the initial scan to see what actually exists.
+				rescan_needed = true;
 			}
 		}
 
@@ -1616,8 +1620,10 @@ void FileSystem::LoadCache()
 			// Set the next USN we should read.
 			drive->mNextUSN = next_usn;
 
-			// Remember we're loading this drive from the cache to skip the initial scan.
-			drive->mLoadedFromCache = true;
+			// Remember we're loading this drive from the cache to skip the initial scan
+			// (unless a rescan is needed, then we explicitly don't want to skip it!)
+			if (!rescan_needed)
+				drive->mLoadedFromCache = true;
 
 			// Add the repos names to the list of valid repos so that we read their content later.
 			all_valid_repos.Insert(all_valid_repos.Size(), valid_repos);
@@ -1638,10 +1644,11 @@ void FileSystem::LoadCache()
 		uint32 string_pool_bytes = 0;
 		bin.Read(string_pool_bytes);
 
-		bool repo_valid = gContains(all_valid_repos, repo_name);
-		
 		// We found it earlier, so this shouldn't fail.
 		FileRepo* repo = FindRepo(repo_name);
+
+		const bool repo_valid    = gContains(all_valid_repos, repo_name);
+		const bool rescan_needed = !repo->mDrive.mLoadedFromCache;
 
 		if (!bin.ExpectLabel("STRINGS"))
 			break;
@@ -1679,6 +1686,11 @@ void FileSystem::LoadCache()
 				file_info.mCreationTime   = serialized_file_info.mCreationTime;
 				file_info.mLastChangeUSN  = serialized_file_info.mLastChangeUSN;
 				file_info.mLastChangeTime = serialized_file_info.mLastChangeTime;
+
+				// Mark all the files as deleted, the scan will tell if they actually still exist.
+				// Note: Don't mark the root dir as deleted otherwise we won't be able to scan it (because it clears the ref number).
+				if (rescan_needed && !file_info.mPath.Empty())
+					repo->MarkFileDeleted(file_info, {});
 			}
 		}
 		else
