@@ -328,15 +328,6 @@ StringView FileRepo::RemoveRootPath(StringView inFullPath)
 
 static TempString sBuildFilePath(StringView inParentDirPath, WStringView inFileNameW)
 {
-	TempString path;
-
-	// Add the parent dir if there's one (can be empty for the root dir).
-	if (!inParentDirPath.Empty())
-	{
-		path += inParentDirPath;
-		path += "\\";
-	}
-
 	TempString file_name = gWideCharToUtf8(inFileNameW);
 	if (file_name.Empty())
 	{
@@ -346,6 +337,16 @@ static TempString sBuildFilePath(StringView inParentDirPath, WStringView inFileN
 		return {};
 	}
 
+	TempString path;
+
+	// Add the parent dir if there's one (can be empty for the root dir).
+	if (!inParentDirPath.Empty())
+	{
+		path += inParentDirPath;
+		path += "\\";
+	}
+
+	// Add the file name.
 	path += file_name;
 
 	return path;
@@ -1576,6 +1577,7 @@ void FileSystem::LoadCache()
 		total_repo_count += repo_count;
 
 		TempVector<StringView> valid_repos;
+		valid_repos.Reserve(repo_count);
 
 		for (int repo_index = 0; repo_index < (int)repo_count; ++repo_index)
 		{
