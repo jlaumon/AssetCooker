@@ -1644,11 +1644,10 @@ void FileSystem::LoadCache()
 		uint32 string_pool_bytes = 0;
 		bin.Read(string_pool_bytes);
 
-		// We found it earlier, so this shouldn't fail.
 		FileRepo* repo = FindRepo(repo_name);
 
 		const bool repo_valid    = gContains(all_valid_repos, repo_name);
-		const bool rescan_needed = !repo->mDrive.mLoadedFromCache;
+		const bool rescan_needed = repo_valid && !repo->mDrive.mLoadedFromCache;
 
 		if (!bin.ExpectLabel("STRINGS"))
 			break;
