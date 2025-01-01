@@ -196,7 +196,8 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 	// Calculate the case insensitive path hash that will be used to identify the file.
 	PathHash  path_hash = gHashPath(gConcat(mRootPath, path));
 
-	FileInfo* file      = nullptr;
+	FileInfo*     file                 = nullptr;
+	FileRefNumber ref_number_to_remove = {};
 
 	{
 		// Lock during the entire operation because we need to reserve a file ID.
@@ -218,14 +219,25 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 
 				if (inRefNumber.IsValid())
 				{
-					// If the file is already known, make sure we update the ref number.
-					// The file could have been deleted and re-created (and we've missed the event?) and gotten a new ref number.
 					FileInfo& file = GetFile(actual_file_id);
+
+					// If the file is already known, make sure we update the ref number.
+					// Three cases to consider here:
+					// - The ref number is the same: nothing to do (the function is GetOrAdd after all).
+					// - The file had an invalid ref number: it just means it was deleted and now it exists again.
+					// - The file had a different (but valid) ref number. This can happen when a file is created and immediately
+					// renamed to an existing file. Some apps do this when saving a file (eg. Visual Studio): they create a temp file,
+					// delete the target file, then rename the temp file to the target name. When we see the event for the temp file being
+					// created, it already has the target name, and the event for the deletion of the target file is after so we haven't seen it yet.
+					// It's a weird case, but it's actually not a problem: just make sure the ref number of the target file is immediately removed
+					// from the ref number hash map to avoid having two ref numbers pointing to the same FileInfo.
 					if (file.mRefNumber != inRefNumber)
 					{
+						// Case 3: if the file had a valid ref number, remember it to remove it from the hash map below.
 						if (file.mRefNumber.IsValid())
-							gAppLogError("%s changed RefNumber unexpectedly (missed event?)", file.ToString().AsCStr());
+							ref_number_to_remove = file.mRefNumber;
 
+						// Update the ref number.
 						file.mRefNumber = inRefNumber;
 					}
 				}
@@ -237,10 +249,17 @@ FileInfo& FileRepo::GetOrAddFile(StringView inPath, FileType inType, FileRefNumb
 		}
 
 		// Update the ref number hash map.
-		if (inRefNumber.IsValid())
+		if (inRefNumber.IsValid() || ref_number_to_remove.IsValid())
 		{
 			// TODO: not great to access these internals, maybe find a better way?
 			LockGuard map_lock(mDrive.mFilesByRefNumberMutex);
+
+			// If there's a ref number to remove from the map, do it now that we have the lock.
+			if (ref_number_to_remove.IsValid())
+			{
+				bool erased = mDrive.mFilesByRefNumber.Erase(ref_number_to_remove);
+				gAssert(erased);
+			}
 
 			auto [_, value, result] = mDrive.mFilesByRefNumber.Insert(inRefNumber, actual_file_id);
 			if (result == EInsertResult::Found)
