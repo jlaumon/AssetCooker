@@ -51,7 +51,7 @@ TempString gWideCharToUtf8(WStringView inWString)
 	TempString out_str;
 
 	// Reserve enough buffer. 4 char per wchar should be enough in all cases. But make it at least 4K just in case.
-	out_str.Reserve(gMin((int)inWString.size() * 4, 4096));
+	out_str.Reserve(gMax((int)inWString.size() * 4, 4096));
 
 	int available_bytes = out_str.Capacity() - 1;
 
