@@ -367,32 +367,32 @@ private:
 
 	struct CookingThread
 	{
-		Thread                         mThread;
-		StringPool                     mStringPool;
-		Atomic<CookingLogEntryID>      mCurrentLogEntry;
+		Thread						      mThread;
+		StringPool					      mStringPool;
+		Atomic<CookingLogEntryID>	      mCurrentLogEntry;
 	};
 	FixedVector<CookingThread, 128>       mCookingThreads;
-	bool                                     mCookingStartPaused     = false;
-	bool                                     mCookingPaused          = true;
-	int                                      mWantedCookingThreadCount = 0;	// Number of threads requested. Actual number of threads created might be lower. 
+	bool                                  mCookingStartPaused     = false;
+	bool                                  mCookingPaused          = true;
+	int                                   mWantedCookingThreadCount = 0;	// Number of threads requested. Actual number of threads created might be lower. 
 
-	friend void                              gDrawCookingLog();
-	friend void                              gDrawSelectedCookingLogEntry();
-	VMemArray<CookingLogEntry>               mCookingLog;
+	friend void                           gDrawCookingLog();
+	friend void                           gDrawSelectedCookingLogEntry();
+	VMemArray<CookingLogEntry>            mCookingLog;
 
-	AtomicInt32                              mCookingErrors           = 0; // Total number of commands that ended in error.
-	int                                      mLastNotifCookingErrors  = 0;
-	size_t                                   mLastNotifCookingLogSize = 0;
-	int64                                    mLastNotifTicks          = 0;
+	AtomicInt32                           mCookingErrors           = 0; // Total number of commands that ended in error.
+	int                                   mLastNotifCookingErrors  = 0;
+	size_t                                mLastNotifCookingLogSize = 0;
+	int64                                 mLastNotifTicks          = 0;
 
-	HashSet<CookingLogEntry*>                mTimeOutCurrentBatch;
-	HashSet<CookingLogEntry*>                mTimeOutNextBatch;
-	mutable Mutex                            mTimeOutMutex;
-	Thread                                   mTimeOutUpdateThread;
-	ConditionVariable						 mTimeOutAddedSignal;
-	Semaphore                                mTimeOutTimerSignal = Semaphore(0, 1);
+	HashSet<CookingLogEntry*>             mTimeOutCurrentBatch;
+	HashSet<CookingLogEntry*>             mTimeOutNextBatch;
+	mutable Mutex                         mTimeOutMutex;
+	Thread                                mTimeOutUpdateThread;
+	ConditionVariable                     mTimeOutAddedSignal;
+	Semaphore                             mTimeOutTimerSignal = Semaphore(0, 1);
 
-	OwnedHandle                              mJobObject; // JobObject used to make sure child processes are killed if this process ends.
+	OwnedHandle                           mJobObject; // JobObject used to make sure child processes are killed if this process ends.
 };
 
 
