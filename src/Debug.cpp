@@ -22,13 +22,12 @@ TempString GetLastErrorString()
 	{
 		str.Reserve(1024);
 
-		// Note: We use capacity - 1 here to make sure there's always room for an extra null terminator.
-		DWORD written_chars = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error,
-										  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str.Data(), str.Capacity() - 1, nullptr);
+		// Note: FormatMessageA always writes the null terminator, and write nothing if there's not enough room for it.
+		// The value returned is the number of char written excluding the null terminator(!).
+		DWORD string_size = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, error,
+										  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str.Data(), str.Capacity(), nullptr);
 
-		// Make sure there is a null terminator (FormatMessage does not always add one).
-		if (written_chars > 0)
-			*str.End() = 0;
+		str.Resize(string_size);
 
 		// There's usually an EOL at the end, remove it.
 		while (str.EndsWith("\n") || str.EndsWith("\r"))
