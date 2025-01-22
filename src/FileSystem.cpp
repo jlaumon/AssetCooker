@@ -769,7 +769,11 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 		if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioBuffer.Data(), (uint32)ioBuffer.Size(), &available_bytes, nullptr))
 		{
 			// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
-			gAppFatalError("Failed to read USN journal for %c:\\ - %s", mLetter, GetLastErrorString().AsCStr());
+			// Note: got reports that it sometimes fails with ERROR_JOURNAL_ENTRY_DELETED, unclear why that happens.
+			gAppFatalError("Failed to read USN journal for %c:\\ - Trying to read USN %llx.\nError: %s", 
+				mLetter,
+				start_usn,
+				GetLastErrorString().AsCStr());
 		}
 
 		Span<uint8> available_buffer = ioBuffer.SubSpan(0, available_bytes);
