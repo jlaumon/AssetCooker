@@ -769,7 +769,6 @@ USN FileDrive::ReadUSNJournal(USN inStartUSN, Span<uint8> ioBuffer, taFunctionTy
 		if (!DeviceIoControl(mHandle, FSCTL_READ_UNPRIVILEGED_USN_JOURNAL, &journal_data, sizeof(journal_data), ioBuffer.Data(), (uint32)ioBuffer.Size(), &available_bytes, nullptr))
 		{
 			// TODO: test this but probably the only thing to do is to restart and re-scan everything (maybe the journal was deleted?)
-			// Note: got reports that it sometimes fails with ERROR_JOURNAL_ENTRY_DELETED, unclear why that happens.
 			gAppFatalError("Failed to read USN journal for %c:\\ - Trying to read USN %llx.\nError: %s", 
 				mLetter,
 				start_usn,
@@ -1640,13 +1639,16 @@ void FileSystem::LoadCache()
 		// If all repos for this drive are valid, we can use the cached state.
 		if (drive_valid && valid_repos.Size() == drive->mRepos.Size())
 		{
-			// Set the next USN we should read.
-			drive->mNextUSN = next_usn;
-
-			// Remember we're loading this drive from the cache to skip the initial scan
-			// (unless a rescan is needed, then we explicitly don't want to skip it!)
 			if (!rescan_needed)
+			{
+				// Remember we're loading this drive from the cache to skip the initial scan
+				// (unless a rescan is needed, then we explicitly don't want to skip it!)
 				drive->mLoadedFromCache = true;
+
+				// Set the next USN we should read.
+				// (If a rescan is needed, don't overwrite mNextUSN. next_usn is too old and we're going to read everything anyway).
+				drive->mNextUSN = next_usn;
+			}
 
 			// Add the repos names to the list of valid repos so that we read their content later.
 			all_valid_repos.Insert(all_valid_repos.Size(), valid_repos);
