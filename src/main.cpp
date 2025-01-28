@@ -199,6 +199,7 @@ int WinMain(
 
 	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.
 	gSetTraceCallback([](StringView inStr) { gApp._Log(LogType::Normal, inStr); });
+	defer { gSetTraceCallback(nullptr); }; // Also remove it eventually, otherwise an assert/trace in a global var destructor would crash.
 
 	gSetCurrentThreadName("Main Thread");
 

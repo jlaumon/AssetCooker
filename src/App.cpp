@@ -22,6 +22,7 @@
 #include "win32/window.h"
 #include "win32/io.h"
 #include "win32/threads.h"
+#include "win32/process.h"
 
 #include <algorithm> // for std::sort
 #include <stdarg.h>
@@ -96,6 +97,41 @@ namespace Details
 }
 
 
+// Get the IDs of all the threads in the process.
+TempVector<DWORD> gGetAllThreadIDs()
+{
+	OwnedHandle snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+	if (snapshot == INVALID_HANDLE_VALUE)
+		return {};
+
+	TempVector<DWORD> thread_ids;
+	DWORD             current_process = GetCurrentProcessId();
+	THREADENTRY32     thread_entry    = { .dwSize = sizeof(thread_entry) };
+
+	// Iterate all the threads in the system.
+	if (Thread32First(snapshot, &thread_entry))
+	{
+		do
+		{
+			if (thread_entry.dwSize >= offsetof(THREADENTRY32, th32OwnerProcessID) + sizeof(thread_entry.th32OwnerProcessID))
+			{
+				// If it's the right process, add it to the list.
+				if (thread_entry.th32OwnerProcessID == current_process)
+				{
+					thread_ids.PushBack(thread_entry.th32ThreadID);
+				}
+			}
+
+			thread_entry.dwSize = sizeof(thread_entry);
+
+		} while (Thread32Next(snapshot, &thread_entry));
+	}
+
+	return thread_ids;
+}
+
+
+
 void App::_FatalError(StringView inFormat, ...)
 {
 	// Make sure a single thread triggers the pop-up.
@@ -108,6 +144,32 @@ void App::_FatalError(StringView inFormat, ...)
 	// Log the error first.
 	_LogV(LogType::Error, inFormat, args);
 
+	// Suspend all other threads.
+	// This is to stop cooking/monitoring and also to avoid crashing when once we exit below.
+	{
+		TempVector<OwnedHandle> all_threads;
+		DWORD                   current_thread_id = GetCurrentThreadId();
+		for (DWORD thread_id : gGetAllThreadIDs())
+		{
+			if (thread_id == current_thread_id)
+				continue; // Skip the current thread.
+
+			OwnedHandle thread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, thread_id);
+			if (thread != nullptr)
+				all_threads.PushBack(gMove(thread));
+		}
+
+		// Suspend the threads. This is asynchronous and can take a while.
+		for (HANDLE thread : all_threads)
+			SuspendThread(thread);
+
+		// Try getting the context of each thread to force Windows to wait until the thread is actually suspended.
+		for (HANDLE thread : all_threads)
+		{
+			CONTEXT context;
+			GetThreadContext(thread, &context);
+		}
+	}
 
 	if (gIsDebuggerAttached())
 		BREAKPOINT;
@@ -127,7 +189,9 @@ void App::_FatalError(StringView inFormat, ...)
 	va_end(args);
 
 	_Log(LogType::Error, "Fatal error, exiting now.");
-	quick_exit(1);
+
+	// Terminate the process now, don't try to cleanup anything.
+	TerminateProcess(GetCurrentProcess(), 1);
 }
 
 
