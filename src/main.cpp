@@ -248,7 +248,7 @@ int WinMain(
 		gAppFatalError("Failed to create D3D device - %s", GetLastErrorString().AsCStr());
 
 	// Show the window
-	::ShowWindow(hwnd, SW_SHOWDEFAULT);
+	::ShowWindow(hwnd, gApp.mStartMinimized ? SW_SHOWMINIMIZED : SW_SHOWDEFAULT);
 	::UpdateWindow(hwnd);
 
 	// Setup Dear ImGui context
