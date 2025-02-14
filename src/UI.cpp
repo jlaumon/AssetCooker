@@ -202,7 +202,7 @@ void gDrawMainMenuBar()
 		if (ImGui::BeginMenu("Settings"))
 		{
 			ImGui::MenuItem("Hide Window On Minimize", nullptr, &gApp.mHideWindowOnMinimize);
-			ImGui::MenuItem("Start with the Window Minimized", nullptr, &gApp.mStartMinimized);
+			ImGui::MenuItem("Start With Window Minimized", nullptr, &gApp.mStartMinimized);
 			sMenuEnum("Enable Notif On Cooking Finish", gApp.mEnableNotifOnCookingFinish);
 			sMenuEnum("Enable Notif On Cooking Error", gApp.mEnableNotifOnCookingError);
 			sMenuEnum("Enable Notif Sound", gApp.mEnableNotifSound);
