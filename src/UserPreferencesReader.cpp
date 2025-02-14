@@ -39,6 +39,13 @@ void gReadUserPreferencesFile(StringView inPath)
 			gCookingSystem.SetCookingPaused(start_paused);
 	}
 
+	// Start minimized (or hidden to tray icon)
+	{
+		bool start_minimized = gApp.mStartMinimized;
+		if (reader.TryRead("StartMinimized", start_minimized))
+			gApp.mStartMinimized = start_minimized;
+	}
+
 	// Number of Cooking Threads.
 	{
 		int num_cooking_threads = 0;
@@ -99,6 +106,7 @@ void gWriteUserPreferencesFile(StringView inPath)
 	toml::table prefs_toml;
 
 	prefs_toml.insert("StartPaused", gCookingSystem.IsCookingPaused());
+	prefs_toml.insert("StartMinimized", gApp.mStartMinimized);
 	prefs_toml.insert("NumCookingThreads", gCookingSystem.GetCookingThreadCount());
 	prefs_toml.insert("LogFSActivity", std::string_view(gToStringView(gApp.mLogFSActivity).AsCStr()));
 	prefs_toml.insert("UIScale", gUIGetUserScale());

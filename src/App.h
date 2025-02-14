@@ -72,6 +72,7 @@ struct App
 	String                          mInitError;
 
 	bool                            mHideWindowOnMinimize       = true; // Hide the window when minimizing it.
+	bool                            mStartMinimized             = false; // Start with the window minimized (or hidden if mHideWindowOnMinimize is set).
 	NotifEnabled                    mEnableNotifOnHideWindow    = NotifEnabled::Always; // Show a notification when the window is hidden saying that Asset Cooker is still running.
 	NotifEnabled                    mEnableNotifOnCookingFinish = NotifEnabled::WhenMinimized; // Show a notification when cooking finishes.
 	NotifEnabled                    mEnableNotifOnCookingError  = NotifEnabled::Always; // Show a notification when a cooking error occurs (even if cooking isn't finished yet).
