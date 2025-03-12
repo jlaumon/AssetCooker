@@ -10,6 +10,7 @@
 #include "FileSystem.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Algorithm.h>
+#include <Bedrock/StringFormat.h>
 
 #include "win32/file.h"
 #include "win32/io.h"
@@ -45,6 +46,11 @@ bool gReadFile(StringView inPath, TempVector<uint8>& outFileData)
 static bool sIsSpace(char inChar)
 {
 	return inChar == ' ' || inChar == '\t';
+}
+
+static bool sIsEndOfLine(char inChar)
+{
+	return inChar == '\r' || inChar == '\n';
 }
 
 static bool sMakeEscapedWithBackslash(char inChar)
@@ -162,8 +168,9 @@ REGISTER_TEST("CleanupPath")
 	TEST_TRUE(sCleanupPath(R"(%percent%.glsl)") == R"(%percent%.glsl)");
 };
 
+
 // Barebones GNU Make-like dependency file parser. 
-static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, Vector<FileID>& outInputs)
+static bool sParseDepFileMake(FileID inDepFileID, StringView inDepFileContent, Vector<FileID>& outInputs)
 {
 	StringView dep_file_content = inDepFileContent;
 
@@ -252,6 +259,184 @@ static bool sParseMakeDepFile(FileID inDepFileID, StringView inDepFileContent, V
 }
 
 
+namespace 
+{
+	struct Dependency
+	{
+		enum DepType
+		{
+			Input,
+			Output
+		};
+
+		DepType    mType;
+		StringView mPath;
+	};
+}
+
+// Parse custom AssetCooker dep file format
+// Ex:
+//   INPUT: D:/inputs/file.png
+//   INPUT: D:/other_inputs/file.txt
+//   OUTPUT: X:/outputs/file.dds
+static void sParseDepFileAssetCooker(StringView inDepFileContent, TempVector<Dependency>& outDependencies, Vector<String>& outErrors)
+{
+	StringView dep_file_content = inDepFileContent;
+
+	while (!dep_file_content.Empty())
+	{
+		StringView line      = dep_file_content.SubStr(0, dep_file_content.FindFirstOf("\r\n"));
+		const int  line_size = line.Size();
+
+		defer 
+		{
+			// Go to next line.
+			dep_file_content.RemovePrefix(line_size);
+
+			while (!dep_file_content.Empty() && sIsEndOfLine(dep_file_content.Front()))
+				dep_file_content.RemovePrefix(1);
+		};
+
+		// Remove leading white space.
+		while (!line.Empty() && sIsSpace(line.Front()))
+			line.RemovePrefix(1);
+
+		// Empty lines are allowed, just skip them.
+		if (line.Empty())
+			continue;
+
+		constexpr StringView input_str = "INPUT:";
+		constexpr StringView output_str = "OUTPUT:";
+
+		Dependency dep;
+
+		if (line.StartsWith(input_str))
+		{
+			dep.mPath = line.SubStr(input_str.Size());
+			dep.mType = Dependency::Input;
+		}
+		else if (line.StartsWith(output_str))
+		{
+			dep.mPath = line.SubStr(output_str.Size());
+			dep.mType = Dependency::Output;
+		}
+		else
+		{
+			// Bad format.
+			outErrors.PushBack(gFormat(R"(Invalid line. Lines should start with INPUT: or OUTPUT: ("%s"))", TempString(line).AsCStr()));
+			continue;
+		}
+
+		// Remove leading and trailing spaces.
+		while (!dep.mPath.Empty() && sIsSpace(dep.mPath.Front()))
+			dep.mPath.RemovePrefix(1);
+		while (!dep.mPath.Empty() && sIsSpace(dep.mPath.Back()))
+			dep.mPath.RemoveSuffix(1);
+
+		if (dep.mPath.Empty())
+		{
+			// Bad format.
+			outErrors.PushBack(gFormat(R"(Invalid line. There should be a path after INPUT: or OUTPUT: ("%s"))", TempString(line).AsCStr()));
+			continue;
+		}
+
+		outDependencies.PushBack(dep);
+	}
+}
+
+
+REGISTER_TEST("DepFile_AssetCooker")
+{
+	TEST_INIT_TEMP_MEMORY(10_KiB);
+
+	constexpr StringView dep_file = 
+		" \t  "
+		"INPUT:C:/simple/input.txt\n"
+		"OUTPUT:C:/simple/output.txt\n"
+		"Hello error\n"
+		"INPUT:\n" // also error, no path 
+		"INPUT:C:/with spaces/t e s t.txt\n\r"
+		"\t\t\t \n\n\n\n\n"
+		"#INPUT:error but technically this could be a comment?\n"
+		"  INPUT:  C:/with spaces\\test.txt\t  \r\n"
+		"\n"
+		"  \t\t\t\tOUTPUT: \t D:/an/output.txt\t  \r\n"
+		"                                       \n"
+	;
+
+	TempVector<Dependency> dependencies;
+	Vector<String>         errors;
+	sParseDepFileAssetCooker(dep_file, dependencies, errors);
+
+	TEST_TRUE(errors.Size() == 3);
+	TEST_TRUE(dependencies.Size() == 5);
+
+	TEST_TRUE(dependencies[0].mPath == "C:/simple/input.txt");
+	TEST_TRUE(dependencies[0].mType == Dependency::Input);
+
+	TEST_TRUE(dependencies[1].mPath == "C:/simple/output.txt");
+	TEST_TRUE(dependencies[1].mType == Dependency::Output);
+
+	TEST_TRUE(dependencies[2].mPath == "C:/with spaces/t e s t.txt");
+	TEST_TRUE(dependencies[2].mType == Dependency::Input);
+
+	TEST_TRUE(dependencies[3].mPath == "C:/with spaces\\test.txt");
+	TEST_TRUE(dependencies[3].mType == Dependency::Input);
+
+	TEST_TRUE(dependencies[4].mPath == "D:/an/output.txt");
+	TEST_TRUE(dependencies[4].mType == Dependency::Output);
+};
+
+
+static bool sParseDepFileAssetCooker(FileID inDepFileID, StringView inDepFileContent, Vector<FileID>& outInputs, Vector<FileID>& outOutputs)
+{
+	TempVector<Dependency> dependencies;
+	Vector<String>         errors;
+
+	// Parse the content.
+	sParseDepFileAssetCooker(inDepFileContent, dependencies, errors);
+
+	// Process the file paths.
+	for (const Dependency& dep : dependencies)
+	{
+		// Make a copy because we need a null terminated string.
+		TempString path = dep.mPath;
+
+		// Get a proper absolute path, in case some relative parts are involved (might happen when doing #include "../something.h").
+		TempString abs_path = gGetAbsolutePath(path);
+
+		// Find the repo.
+		FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
+		if (repo == nullptr)
+		{
+			errors.PushBack(gFormat(R"(Path doesn't beling in any Repo ("%s"))", abs_path.AsCStr()));
+		}
+
+		// Skip the repo path to get the file part.
+		StringView file_path = abs_path.SubStr(repo->mRootPath.Size());
+
+		// Find or add the file.
+		// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).
+		FileID     file_id = repo->GetOrAddFile(file_path, FileType::File, {}).mID;
+
+		// Add it to the input list, while making sure there are no duplicates.
+		gEmplaceSorted(outInputs, file_id);
+	}
+
+	if (!errors.Empty())
+	{
+		gAppLogError(R"(Failed to parse Dep File %s)", inDepFileID.GetFile().ToString().AsCStr());
+		for (String& error : errors)
+			gAppLogError("  %s", error.AsCStr());
+
+		return false;
+	}
+
+	return true;
+}
+
+
+
 bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& outInputs, Vector<FileID>& outOutputs)
 {
 	TempString full_path = gConcat(inDepFileID.GetRepo().mRootPath, inDepFileID.GetFile().mPath);
@@ -266,13 +451,15 @@ bool gReadDepFile(DepFileFormat inFormat, FileID inDepFileID, Vector<FileID>& ou
 
 	gAssert(buffer[buffer.Size() - 1] == 0); // Should be null terminated.
 
+	StringView dep_file_content((const char*)buffer.Begin(), buffer.Size() - 1); // -1 to exclude the null terminator
+
 	if (inFormat == DepFileFormat::AssetCooker)
 	{
-		gAppFatalError("TODO");
+		return sParseDepFileAssetCooker(inDepFileID, dep_file_content, outInputs, outOutputs);
 	}
 	else if (inFormat == DepFileFormat::Make)
 	{
-		return sParseMakeDepFile(inDepFileID, StringView((const char*)buffer.Begin(), buffer.Size() - 1), outInputs); // -1 to exclude the null terminator
+		return sParseDepFileMake(inDepFileID, dep_file_content, outInputs);
 	}
 	else
 	{
