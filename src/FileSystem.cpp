@@ -1729,7 +1729,7 @@ void FileSystem::LoadCache()
 		CookingCommandID mCommandID;
 		StringView       mLastCookOutput;
 	};
-	TempVector<ErroredCommand> errored_commands;
+	Vector<ErroredCommand> errored_commands;
 
 	// Read the commands.
 	int total_commands = 0;
