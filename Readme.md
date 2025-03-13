@@ -150,8 +150,20 @@ Here is the full list of variables supported by DepFiles.
 | Variable    | Type              | Default Value | Description                                                                                                                                                                  |
 |-------------|-------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Path        | string            |               | The path of the Dep File. Supports [Command Variables](#command-variables-reference).                                                                                        |
-| Format      | string            | "AssetCooker" | The format of Dep File to expect.<br>`"AssetCooker"`: The AssetCooker custom Dep File format.<br>`"Make"`: The standard make .d file format (supported by many compilers).   |
+| Format      | string            | "AssetCooker" | The format of Dep File to expect.<br>`"AssetCooker"`: The [AssetCooker custom Dep File format](#asset-cooker-depfile-format).<br>`"Make"`: The standard make .d file format (supported by many compilers).   |
 | CommandLine | string            | ""            | An optional command line to generate the DepFile (if the main CommandLine cannot generate it directly). Supports [Command Variable](#command-variables-references).          |
+
+##### Asset Cooker DepFile Format
+
+The "AssetCooker" DepFile format is very simple: one dependency per line, inputs are preceded by `INPUTS:`, outputs by `OUTPUT:`. Relative paths are accepted.
+
+Example:
+```
+INPUT: D:/path/to/input.txt
+INPUT: D:/other/input.txt
+OUTPUT: D:/outputs/file.txt
+```
+
 
 ### Command Variables Reference
 
