@@ -420,14 +420,12 @@ void CookingCommand::UpdateDirtyState()
 
 	FileID dep_file = GetDepFile();
 	// If the dep file is out of date, read it. The dirty state depends on its content.
+	// Note: This is updating the InputOf/OutputOf lists in FileInfos, which isn't thread safe, so it can't be done on the Cooking Threads.
 	if (dep_file.IsValid() && dep_file.GetFile().mLastChangeUSN != mLastDepFileRead)
 	{
 		if (ReadDepFile())
 		{
-			// Update the last cook USN. This is normally updated just after cooking the command,
-			// but when there's a dep file, we don't know all the inputs at that point.
-			// Note: we also can't read the dep file at that point because it's happening on a cooking thread
-			// and updating the list of inputs/outputs isn't thread safe.
+			// Update the last cook USN again now that we know all the inputs.
 			// TODO this does not work if multiple drives are involved, we can only compare USNs from the same journal
 			USN max_input_usn = 0;
 			for (FileID input_id : GetAllInputs())
@@ -1325,8 +1323,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	const CookingRule& rule    = ioCommand.GetRule();
 
 	// Update the last cook USN (used later know if this command needs to cook again).
-	// Note: when there's a DepFile, we don't know the full list of inputs before reading it, so it will be done later, after reading it.
-	if (!rule.UseDepFile())
+	// Note: when there's a DepFile, we don't know the full list of inputs before reading it, so it will be done again later, after reading it.
 	{
 		// Get the max USN of all inputs.
 		// TODO this does not work if multiple drives are involved, we can only compare USNs from the same journal
@@ -1346,26 +1343,11 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	defer
 	{
-		// If the command ends in error, we need to make sure that:
-		// - its last cook USN is updated
-		// - its state is updated
+		// If the command ends in error, we need to make sure that its dirty state is updated.
 		// That normally happens when the outputs (and the dep file) are written, but that might not happen at all if there is an error.
 		// This is important to then properly detect when the inputs change again and the command can re-cook.
 		if (log_entry.mCookingState.Load() == CookingState::Error)
 		{
-			// If the last cook USN wasn't updated because there's a dep file, do it now with the currently known inputs.
-			if (rule.UseDepFile())
-			{
-				// Get the max USN of all inputs.
-				// TODO this does not work if multiple drives are involved, we can only compare USNs from the same journal
-				USN max_input_usn = 0;
-				for (FileID input_id : ioCommand.GetAllInputs())
-					max_input_usn = gMax(max_input_usn, input_id.GetFile().mLastChangeUSN);
-				
-				// Set the inputs USN on the command.
-				ioCommand.mLastCookUSN = max_input_usn;
-			}
-
 			// Queue for a dirty state update.
 			QueueUpdateDirtyState(ioCommand.mID);
 		}
