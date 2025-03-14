@@ -293,13 +293,11 @@ static void sParseDepFileAssetCooker(StringView inDepFileContent, TempVector<Dep
 			// Go to next line.
 			dep_file_content.RemovePrefix(line_size);
 
-			while (!dep_file_content.Empty() && sIsEndOfLine(dep_file_content.Front()))
-				dep_file_content.RemovePrefix(1);
+			gRemoveLeading(dep_file_content, "\r\n");
 		};
 
 		// Remove leading white space.
-		while (!line.Empty() && sIsSpace(line.Front()))
-			line.RemovePrefix(1);
+		gRemoveLeading(line, " \t");
 
 		// Empty lines are allowed, just skip them.
 		if (line.Empty())
@@ -328,10 +326,8 @@ static void sParseDepFileAssetCooker(StringView inDepFileContent, TempVector<Dep
 		}
 
 		// Remove leading and trailing spaces.
-		while (!dep.mPath.Empty() && sIsSpace(dep.mPath.Front()))
-			dep.mPath.RemovePrefix(1);
-		while (!dep.mPath.Empty() && sIsSpace(dep.mPath.Back()))
-			dep.mPath.RemoveSuffix(1);
+		gRemoveLeading(dep.mPath, " \t");
+		gRemoveTrailing(dep.mPath, " \t");
 
 		if (dep.mPath.Empty())
 		{
