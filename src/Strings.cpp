@@ -95,3 +95,30 @@ OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 	return WStringView{ ioBuffer.Data(), (size_t)written_wchars };
 }
 
+
+REGISTER_TEST("gRemoveTrailing")
+{
+	StringView test = "test !!";
+	gRemoveTrailing(test, " !");
+	TEST_TRUE(test == "test");
+
+	gRemoveTrailing(test, "o");
+	TEST_TRUE(test == "test");
+
+	gRemoveTrailing(test, "tes");
+	TEST_TRUE(test == "");
+};
+
+
+REGISTER_TEST("gRemoveLeading")
+{
+	StringView test = "!! test";
+	gRemoveLeading(test, " !");
+	TEST_TRUE(test == "test");
+
+	gRemoveLeading(test, "o");
+	TEST_TRUE(test == "test");
+
+	gRemoveLeading(test, "tes");
+	TEST_TRUE(test == "");
+};
