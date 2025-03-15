@@ -45,7 +45,7 @@ Then run `premake.bat` to generate AssetCooke.sln, and use Visual Studio to comp
 
 ### Running
 
-You will need two to create two files before Asset Cooker can do anything: a config file and a rules file. 
+You will need to create two files before Asset Cooker can do anything: a config file and a rules file. 
 
 A minimal example is provided in the example/minimal directory. You can copy AssetCooker.exe there to play with it. Read on for the explanations.
 
