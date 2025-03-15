@@ -3,7 +3,11 @@
 
 ![Asset Cooker](data/icons/chef-hat-heart/chef-hat-heart.png)
 
-Asset Cooker is a build system aimed at game assets, for custom engines. It leverages Windows' USN journals to robustly track which files change, and only cook what needs to be cooked.
+Asset Cooker is a build system aimed at game assets, for custom engines. 
+
+It's FAST! It generally starts in less than a second, even with hundred of thousands of files. 
+
+It uses Windows' USN journals to robustly track which files change, and only cook what needs to be cooked. 
 
 [Release Trailer](https://www.youtube.com/watch?v=hvbVC4m6BOo)
 [![Asset Cooker - Release Trailer](https://img.youtube.com/vi/hvbVC4m6BOo/0.jpg)](https://www.youtube.com/watch?v=hvbVC4m6BOo)
