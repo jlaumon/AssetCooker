@@ -409,7 +409,7 @@ static bool sParseDepFileAssetCooker(FileID inDepFileID, StringView inDepFileCon
 		FileRepo* repo = gFileSystem.FindRepoByPath(abs_path);
 		if (repo == nullptr)
 		{
-			errors.PushBack(gFormat(R"(Path doesn't beling in any Repo ("%s"))", abs_path.AsCStr()));
+			errors.PushBack(gFormat(R"(Path doesn't belong in any Repo ("%s"))", abs_path.AsCStr()));
 		}
 
 		// Skip the repo path to get the file part.
