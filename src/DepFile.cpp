@@ -48,11 +48,6 @@ static bool sIsSpace(char inChar)
 	return inChar == ' ' || inChar == '\t';
 }
 
-static bool sIsEndOfLine(char inChar)
-{
-	return inChar == '\r' || inChar == '\n';
-}
-
 static bool sMakeEscapedWithBackslash(char inChar)
 {
 	return inChar == ' ' || inChar == '\\' || inChar == ':' || inChar == '[' || inChar == ']' || inChar == '#';
