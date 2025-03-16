@@ -419,8 +419,19 @@ static bool sParseDepFileAssetCooker(FileID inDepFileID, StringView inDepFileCon
 		// The file probably exists, but we can't be sure of that (maybe we're reading the dep file after it was deleted).
 		FileID     file_id = repo->GetOrAddFile(file_path, FileType::File, {}).mID;
 
-		// Add it to the input list, while making sure there are no duplicates.
-		gEmplaceSorted(outInputs, file_id);
+		// Add it to the input/output lists, while making sure there are no duplicates.
+		switch (dep.mType)
+		{
+		case Dependency::Input:
+			gEmplaceSorted(outInputs, file_id);
+			break;
+		case Dependency::Output:
+			gEmplaceSorted(outOutputs, file_id);
+			break;
+		default:
+			gAssert(false);
+			break;
+		}
 	}
 
 	if (!errors.Empty())
