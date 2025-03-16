@@ -968,11 +968,11 @@ void gDrawSelectedCookingLogEntry()
 	{
 		const CookingCommand& command      = gCookingSystem.GetCommand(log_entry.mCommandID);
 		const CookingRule&    rule         = command.GetRule();
-		Optional<String>      command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(command.GetMainInput()));
-		if (command_line)
+		TempString            command_line;
+		if (gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(command.GetMainInput()), command_line))
 		{
 			ImGui::LogToClipboard();
-			ImGui::LogText("%s", command_line->AsCStr());
+			ImGui::LogText("%s", command_line.AsCStr());
 			ImGui::LogFinish();
 		}
 	}

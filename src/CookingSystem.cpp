@@ -36,118 +36,194 @@ constexpr bool gPushBackUnique(taContainer& ioContainer, const taValue& inElem)
 }
 
 
-
-static bool sIsSpace(char inChar)
+static bool sParseArgument(StringView& ioFormatStr, StringView& outArgument)
 {
-	return inChar == ' ' || inChar == '\t';
+	gAssert(ioFormatStr.Front() == '{');
+	ioFormatStr.RemovePrefix(1);
+
+	int closed_bracket = ioFormatStr.Find('}');
+	if (closed_bracket == -1)
+		return false;
+
+	StringView arg = ioFormatStr.SubStr(0, closed_bracket);
+
+	// Remove leading and trailing space
+	gRemoveLeading(arg, " \t");
+	gRemoveTrailing(arg, " \t");
+
+	if (arg.Empty())
+		return false;
+
+	// Update buffer to point after the closing bracket.
+	ioFormatStr.RemovePrefix(closed_bracket + 1);
+
+	outArgument = arg;
+	return true;
 }
 
 
-// Return a StringView on the text part of {text}.
-static StringView sParseArgument(const char*& ioPtr, const char* inPtrEnd)
+REGISTER_TEST("ParseCommandVariableArgument")
 {
-	gAssert(*ioPtr == '{');
-	ioPtr++;
-
-	// Skip white space before the argument.
-	while (ioPtr != inPtrEnd && sIsSpace(*ioPtr))
-		++ioPtr;
-
-	const char* arg_begin = ioPtr;
-	const char* arg_end   = ioPtr;
-
-	while (ioPtr != inPtrEnd)
 	{
-		if (*ioPtr == '}' || sIsSpace(*ioPtr))
-		{
-			arg_end = ioPtr;
-			++ioPtr;
-			break;
-		}
+		StringView test = "{   arg    }!   ";
+		StringView arg;
+		bool success = sParseArgument(test, arg);
 
-		ioPtr++;
+		TEST_TRUE(success);
+		TEST_TRUE(arg == "arg");
+		TEST_TRUE(test.Front() == '!');
 	}
 
-	// Skip white space and } after the argument.
-	while (ioPtr != inPtrEnd && (*ioPtr == '}' || sIsSpace(*ioPtr)))
-		++ioPtr;
-
-	return { arg_begin, arg_end };
-}
-
-
-template<class taFormatter>
-static Optional<TempString> sParseCommandVariables(StringView inFormatStr, const taFormatter& inFormatter)
-{
-	TempString str;
-	const char* p_begin = inFormatStr.Data();
-	const char* p_end   = inFormatStr.End();
-	const char* p       = p_begin;
-
-	while (p != p_end)
 	{
-		if (*p == '{')
+		StringView test = "{   arg    o";
+		StringView arg;
+		bool success = sParseArgument(test, arg);
+
+		TEST_FALSE(success);
+		TEST_TRUE(arg.Empty());
+	}
+};
+
+
+// Format inFormatStr into outString by calling inFormatter any time a CommandVariable is encountered.
+// Return true on success. Output is always an empty string on failure.
+// FIXME should use a FunctionRef instead of template
+template<class taFormatter>
+static bool sParseCommandVariables(StringView inFormatStr, taFormatter&& inFormatter, TempString& outString)
+{
+	// Make sure the output is cleared, the function should return empty string on failure.
+	outString.Clear();
+
+	TempString out_string;
+	while (true)
+	{
+		int open_brace_pos = inFormatStr.FindFirstOf("{");
+		if (open_brace_pos == -1)
 		{
-			str.Append({ p_begin, p });
+			// No more arguments.
+			out_string.Append(inFormatStr);
 
-			StringView arg = sParseArgument(p, p_end);
+			// Move the result to the actual output.
+			outString = gMove(out_string);
+			return true;
+		}
 
-			// sParseArgument made p point after the argument itself.
-			p_begin = p;
+		out_string.Append(inFormatStr.SubStr(0, open_brace_pos));
+		inFormatStr.RemovePrefix(open_brace_pos);
 
-			if (gStartsWith(arg, gToStringView(CommandVariables::Repo)))
-			{
-				arg.RemovePrefix(gToStringView(CommandVariables::Repo).Size());
+		StringView arg;
+		if (!sParseArgument(inFormatStr, arg))
+		{
+			// Failed to parse argument.
+			return false;
+		}
 
-				if (arg.Size() < 2 || arg[0] != ':')
-					return {}; // Failed to get the repo name part.
-			
-				StringView repo_name = arg.SubStr(1);
+		if (arg.StartsWith(gToStringView(CommandVariables::Repo)))
+		{
+			arg.RemovePrefix(gToStringView(CommandVariables::Repo).Size());
 
-				if (!inFormatter(CommandVariables::Repo, repo_name, { p, p_end }, str))
-					return {}; // Formatter says error.
-			}
-			else
-			{
-				bool matched = false;
-				for (int i = 0; i < (int)CommandVariables::_Count; ++i)
-				{
-					CommandVariables var = (CommandVariables)i;
+			if (arg.Size() < 2 || arg[0] != ':')
+				return false; // Failed to get the repo name part.
+		
+			StringView repo_name = arg.SubStr(1);
 
-					if (var == CommandVariables::Repo)
-						continue; // Treated separately.
-
-					if (arg == gToStringView(var))
-					{
-						matched = true;
-						if (!inFormatter(var, "", { p, p_end }, str))
-							return {}; // Formatter says error.
-
-						break;
-					}
-				}
-
-				if (!matched)
-					return {}; // Invalid variable name.
-			}
+			if (!inFormatter(CommandVariables::Repo, repo_name, inFormatStr, out_string))
+				return false; // Formatter says error.
 		}
 		else
 		{
-			p++;
+			bool matched = false;
+			for (int i = 0; i < (int)CommandVariables::_Count; ++i)
+			{
+				CommandVariables var = (CommandVariables)i;
+
+				if (var == CommandVariables::Repo)
+					continue; // Treated separately.
+
+				if (arg == gToStringView(var))
+				{
+					matched = true;
+					if (!inFormatter(var, "", inFormatStr, out_string))
+						return false; // Formatter says error.
+
+					break;
+				}
+			}
+
+			if (!matched)
+				return false; // Invalid variable name.
 		}
 	}
-
-	str.Append({ p_begin, p });
-
-	return str;
 }
 
 
+REGISTER_TEST("ParseCommandVariables")
+{
+	// Make sure temp memory is initialized or the tests will fail.
+	TEST_INIT_TEMP_MEMORY(1_KiB);
+
+	auto test_formatter = [](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr)
+	{
+		outStr.Append(gToStringView(inVar));
+
+		if (inVar == CommandVariables::Repo)
+			outStr.Append(inRepoName);
+
+		return true;
+	};
+
+	{
+		TempString result;
+		bool success = sParseCommandVariables("OH! { Repo:Test} AH!", test_formatter, result);
+		TEST_TRUE(success);
+		TEST_TRUE(result == "OH! RepoTest AH!");
+	}
+
+	{
+		TempString result;
+		bool success = sParseCommandVariables("{   File    }{Ext}{\tExt\t}{Dir } ", test_formatter, result);
+		TEST_TRUE(success);
+		TEST_TRUE(result == "FileExtExtDir ");
+	}
+
+	{
+		TempString result;
+		bool success = sParseCommandVariables("{ Repo:! }\n\n{Dir_NoTrailingSlash}\t{Path}", test_formatter, result);
+		TEST_TRUE(success);
+		TEST_TRUE(result == "Repo!\n\nDir_NoTrailingSlash\tPath");
+	}
+
+	{
+		TempString result;
+		bool success = sParseCommandVariables("JustText", test_formatter, result);
+		TEST_TRUE(success);
+		TEST_TRUE(result == "JustText");
+	}
+
+	{
+		TempString result = "previous text";
+		bool success = sParseCommandVariables("", test_formatter, result);
+		TEST_TRUE(success);
+		TEST_TRUE(result == "");
+	}
+
+	TempString result;
+	TEST_FALSE(sParseCommandVariables("{ Repo: }", test_formatter, result));
+	TEST_FALSE(sParseCommandVariables("{ Repo }", test_formatter, result));
+	TEST_FALSE(sParseCommandVariables("{ Repo Test }", test_formatter, result));
+	TEST_FALSE(sParseCommandVariables("{ File and more things", test_formatter, result));
+	TEST_FALSE(sParseCommandVariables("{}", test_formatter, result));
+	TEST_FALSE(sParseCommandVariables("{        }", test_formatter, result));
+	TEST_FALSE(sParseCommandVariables("{ file }", test_formatter, result));
+};
+
+
+
 // TODO add an output error string to help understand why it fails
-Optional<TempString> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
+bool gFormatCommandString(StringView inFormatStr, const FileInfo& inFile, TempString& outString)
 {
 	if (inFormatStr.Empty())
-		return {}; // Consider empty format string is an error.
+		return false; // Consider empty format string is an error.
 
 	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
 	{
@@ -200,14 +276,16 @@ Optional<TempString> gFormatCommandString(StringView inFormatStr, const FileInfo
 		}
 
 		return true;
-	});
+	}, outString);
 }
 
 
-Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile)
+bool gFormatFilePath(StringView inFormatStr, const FileInfo& inFile, RepoAndFilePath& outRepoAndPath)
 {
-	FileRepo*            repo = nullptr;
-	Optional<TempString> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
+	FileRepo*  repo = nullptr;
+	TempString out_path;
+
+	bool success = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
 	{
 		switch (inVar)
 		{
@@ -239,23 +317,25 @@ Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo
 		}
 
 		return true;
-	});
+	}, out_path);
 
-	if (!path)
-		return {};
+	if (!success)
+		return false;
 
-	return RepoAndFilePath{ *repo, gMove(*path) };
+	outRepoAndPath = { repo, gMove(out_path) };
+	return true;
 }
 
 
 FileID gGetOrAddFileFromFormat(StringView inFormatStr, const FileInfo& inFile)
 {
-	Optional repo_and_path = gFormatFilePath(inFormatStr, inFile);
-	if (!repo_and_path)
+	RepoAndFilePath repo_and_path;
+
+	if (!gFormatFilePath(inFormatStr, inFile, repo_and_path))
 		return FileID::cInvalid();
 
-	auto& [repo, path] = *repo_and_path;
-	return repo.GetOrAddFile(path, FileType::File, {}).mID;
+	auto& [repo, path] = repo_and_path;
+	return repo->GetOrAddFile(path, FileType::File, {}).mID;
 }
 
 
@@ -1009,18 +1089,19 @@ bool CookingSystem::ValidateRules()
 			}
 		}
 
-		// Dummy file info use to test path formatting.
-		FileInfo dummy_file(FileID{ 0, 0 }, "dir\\dummy.txt", Hash128{ 0, 0 }, FileType::File, {});
+		// Dummy file info and string use to test path formatting.
+		FileInfo   dummy_file(FileID{ 0, 0 }, "dir\\dummy.txt", Hash128{ 0, 0 }, FileType::File, {});
+		TempString dummy_result;
 
 		// Validate the command line.
-		if (rule.mCommandType == CommandType::CommandLine && !gFormatCommandString(rule.mCommandLine, dummy_file))
+		if (rule.mCommandType == CommandType::CommandLine && !gFormatCommandString(rule.mCommandLine, dummy_file, dummy_result))
 		{
 			errors++;
 			gAppLogError(R"(Rule %s: Failed to parse CommandLine "%s")", rule.mName.AsCStr(), rule.mCommandLine.AsCStr());
 		}
 
 		// Validate the dep file path.
-		if (rule.UseDepFile() && !gFormatCommandString(rule.mDepFilePath, dummy_file))
+		if (rule.UseDepFile() && !gFormatCommandString(rule.mDepFilePath, dummy_file, dummy_result))
 		{
 			errors++;
 			gAppLogError(R"(Rule %s: Failed to parse DepFilePath "%s")", rule.mName.AsCStr(), rule.mDepFilePath.AsCStr());
@@ -1029,7 +1110,7 @@ bool CookingSystem::ValidateRules()
 		// Validate the input paths.
 		for (int i = 0; i < rule.mInputPaths.Size(); ++i)
 		{
-			if (!gFormatCommandString(rule.mInputPaths[i], dummy_file))
+			if (!gFormatCommandString(rule.mInputPaths[i], dummy_file, dummy_result))
 			{
 				errors++;
 				gAppLogError(R"(Rule %s: Failed to parse InputPaths[%d] "%s")", rule.mName.AsCStr(), i, rule.mInputPaths[i].AsCStr());
@@ -1039,7 +1120,7 @@ bool CookingSystem::ValidateRules()
 		// Validate the output paths.
 		for (int i = 0; i < rule.mOutputPaths.Size(); ++i)
 		{
-			if (!gFormatCommandString(rule.mOutputPaths[i], dummy_file))
+			if (!gFormatCommandString(rule.mOutputPaths[i], dummy_file, dummy_result))
 			{
 				errors++;
 				gAppLogError(R"(Rule %s: Failed to parse OutputPaths[%d] "%s")", rule.mName.AsCStr(), i, rule.mOutputPaths[i].AsCStr());
@@ -1407,11 +1488,10 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	
 	// If there is a dep file command line, build it.
-	Optional<String> dep_command_line;
+	TempString dep_command_line;
 	if (!rule.mDepFileCommandLine.Empty())
 	{
-		dep_command_line = gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
-		if (!dep_command_line)
+		if (!gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()), dep_command_line))
 		{
 			output_str.Append("[error] Failed to format dep file command line.\n");
 			log_entry.mOutput = output_str.AsStringView();
@@ -1424,8 +1504,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	if (rule.mCommandType == CommandType::CommandLine)
 	{
 		// Build the command line.
-		Optional<String> command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
-		if (!command_line)
+		TempString command_line;
+		if (!gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()), command_line))
 		{
 			output_str.Append("[error] Failed to format command line.\n");
 			log_entry.mOutput = output_str.AsStringView();
@@ -1434,7 +1514,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		}
 
 		// Run the command line.
-		success = sRunCommandLine(*command_line, output_str, mJobObject);
+		success = sRunCommandLine(command_line, output_str, mJobObject);
 	}
 	else
 	{
@@ -1452,10 +1532,10 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	}
 
 	// If there's a dep file command line, run it next.
-	if (success && dep_command_line)
+	if (success && !dep_command_line.Empty())
 	{
 		output_str.Append("\nDep File "); // No end line on purpose, we want to prepend the line added inside the sRunCommandLine.
-		success = sRunCommandLine(*dep_command_line, output_str, mJobObject);
+		success = sRunCommandLine(dep_command_line, output_str, mJobObject);
 	}
 
 	// Set the end time and add the duration at the end of the log.
