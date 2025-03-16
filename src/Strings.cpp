@@ -76,7 +76,7 @@ TempString gWideCharToUtf8(WStringView inWString)
 
 
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
-OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
+WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 {
 	// Reserve 1 byte for the null terminator.
 	int available_wchars = ioBuffer.Size() - 1;
