@@ -36,27 +36,247 @@ constexpr bool gPushBackUnique(taContainer& ioContainer, const taValue& inElem)
 }
 
 
-static bool sParseArgument(StringView& ioFormatStr, StringView& outArgument)
+static bool sToDigit(char inChar, int& outNumber)
 {
-	gAssert(ioFormatStr.Front() == '{');
-	ioFormatStr.RemovePrefix(1);
+	outNumber = inChar - '0';
+	return outNumber >= 0 && outNumber <= 9;
+}
 
-	int closed_bracket = ioFormatStr.Find('}');
-	if (closed_bracket == -1)
+
+static bool sParseInt(StringView inStr, int& outInt)
+{
+	outInt = 0;
+	bool negative = false;
+
+	if (!inStr.Empty() && inStr.Front() == '-')
+	{
+		negative = true;
+		inStr.RemovePrefix(1);
+	}
+
+	if (inStr.Empty()) [[unlikely]]
+	{
+		outInt = 0;
+		return false;
+	}
+
+	do
+	{
+		int digit;
+		if (!sToDigit(inStr.Front(), digit)) [[unlikely]]
+		{
+			outInt = 0;
+			return false;
+		}
+
+		outInt = outInt * 10 + digit;
+
+		inStr.RemovePrefix(1);
+
+	} while (!inStr.Empty());
+
+	if (negative)
+		outInt = -outInt;
+
+	return true;
+}
+
+
+REGISTER_TEST("ParseInt")
+{
+	int i;
+	TEST_TRUE(sParseInt("123", i));
+	TEST_TRUE(i == 123);
+
+	TEST_TRUE(sParseInt("-123", i));
+	TEST_TRUE(i == -123);
+
+	TEST_TRUE(sParseInt("0", i));
+	TEST_TRUE(i == 0);
+
+	TEST_TRUE(sParseInt("-0", i));
+	TEST_TRUE(i == 0);
+
+	TEST_TRUE(sParseInt("0000", i));
+	TEST_TRUE(i == 0);
+
+	TEST_TRUE(sParseInt("00001", i));
+	TEST_TRUE(i == 1);
+
+	TEST_TRUE(sParseInt("123456789", i));
+	TEST_TRUE(i == 123456789);
+
+	TEST_TRUE(sParseInt("2147483647", i));
+	TEST_TRUE(i == cMaxInt);
+	
+	TEST_TRUE(sParseInt("-2147483648", i));
+	TEST_TRUE(i == -2147483648);
+
+	TEST_FALSE(sParseInt("", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("-", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("a", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("-a", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("123a", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("-123a", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("123 ", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("- 123", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("--123", i));
+	TEST_TRUE(i == 0);
+
+	TEST_FALSE(sParseInt("+123", i)); // We could support that, but at the same time, why would we
+	TEST_TRUE(i == 0);
+};
+
+
+struct Slice
+{
+	int mStart = 0;
+	int mEnd   = cMaxInt;
+
+	bool operator==(const Slice&) const = default;
+};
+
+
+// Parse a python-like slice, ie. "[start:end]".
+// Both start and end are optional. The column is optional too if only start is provided.
+static bool sParseSlice(StringView inSliceStr, Slice& outSlice)
+{
+	gAssert(inSliceStr.Front() == '[' && inSliceStr.Back() == ']');
+	outSlice = {};
+
+	// Remove the brackets.
+	inSliceStr.RemovePrefix(1);
+	inSliceStr.RemoveSuffix(1);
+
+	int column_pos = inSliceStr.Find(':');
+
+	// Parse the start if it's there.
+	StringView start_str = inSliceStr.SubStr(0, column_pos);
+	gRemoveLeading(start_str, " \t");
+	gRemoveTrailing(start_str, " \t");
+	if (!start_str.Empty())
+	{
+		if (!sParseInt(start_str, outSlice.mStart)) [[unlikely]]
+		{
+			outSlice = {};
+			return false;
+		}
+	}
+
+	// Parse the end if it's there.
+	if (column_pos != -1)
+	{
+		StringView end_str = inSliceStr.SubStr(column_pos + 1);
+		gRemoveLeading(end_str, " \t");
+		gRemoveTrailing(end_str, " \t");
+		if (!end_str.Empty())
+		{
+			if (!sParseInt(end_str, outSlice.mEnd)) [[unlikely]]
+			{
+				outSlice = {};
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+
+REGISTER_TEST("ParseSlice")
+{
+	Slice slice;
+	TEST_TRUE(sParseSlice("[123:321]", slice));
+	TEST_TRUE(slice.mStart == 123);
+	TEST_TRUE(slice.mEnd == 321);
+
+	TEST_TRUE(sParseSlice("[ 123  :   321    ]", slice));
+	TEST_TRUE(slice.mStart == 123);
+	TEST_TRUE(slice.mEnd == 321);
+
+	TEST_TRUE(sParseSlice("[:321]", slice));
+	TEST_TRUE(slice.mStart == 0);
+	TEST_TRUE(slice.mEnd == 321);
+
+	TEST_TRUE(sParseSlice("[123:]", slice));
+	TEST_TRUE(slice.mStart == 123);
+	TEST_TRUE(slice.mEnd == cMaxInt);
+
+	TEST_TRUE(sParseSlice("[:]", slice)); // Arguable if we should allow this
+	TEST_TRUE(slice == Slice());
+
+	TEST_TRUE(sParseSlice("[]", slice)); // Arguable if we should allow this
+	TEST_TRUE(slice == Slice());
+
+	TEST_TRUE(sParseSlice("[-123:-321]", slice));
+	TEST_TRUE(slice.mStart == -123);
+	TEST_TRUE(slice.mEnd == -321);
+
+	TEST_FALSE(sParseSlice("[123x:-321]", slice));
+	TEST_TRUE(slice == Slice());
+
+	TEST_FALSE(sParseSlice("[123:-321x]", slice));
+	TEST_TRUE(slice == Slice());
+};
+
+
+static bool sParseArgument(StringView& ioFormatStr, StringView& outArgument, Slice& outSlice)
+{
+	outArgument = "";
+	outSlice    = {};
+
+	StringView format_str = ioFormatStr;
+	gAssert(format_str.Front() == '{');
+	format_str.RemovePrefix(1);
+
+	int curly_close_pos = format_str.Find('}');
+	if (curly_close_pos == -1) [[unlikely]]
 		return false;
 
-	StringView arg = ioFormatStr.SubStr(0, closed_bracket);
+	StringView arg = format_str.SubStr(0, curly_close_pos);
 
 	// Remove leading and trailing space
 	gRemoveLeading(arg, " \t");
 	gRemoveTrailing(arg, " \t");
 
-	if (arg.Empty())
+	if (arg.Empty()) [[unlikely]]
 		return false;
 
-	// Update buffer to point after the closing bracket.
-	ioFormatStr.RemovePrefix(closed_bracket + 1);
+	// Check if there's a slice (eg. [0:3]) after the argument.
+	int square_open_pos = arg.Find('[');
+	if (square_open_pos != -1)
+	{
+		// There should be nothing else after the slice.
+		if (arg.Back() != ']') [[unlikely]]
+			return false;
 
+		StringView slice_str = arg.SubStr(square_open_pos);
+		arg.RemoveSuffix(slice_str.Size());
+
+		if (!sParseSlice(slice_str, outSlice)) [[unlikely]]
+			return false;
+	}
+
+	// Update buffer to point after the closing curly bracket.
+	format_str.RemovePrefix(curly_close_pos + 1);
+
+	ioFormatStr = format_str;
 	outArgument = arg;
 	return true;
 }
@@ -64,24 +284,51 @@ static bool sParseArgument(StringView& ioFormatStr, StringView& outArgument)
 
 REGISTER_TEST("ParseCommandVariableArgument")
 {
-	{
-		StringView test = "{   arg    }!   ";
-		StringView arg;
-		bool success = sParseArgument(test, arg);
+	StringView test = "{   arg    }!   ";
+	StringView arg;
+	Slice slice;
 
-		TEST_TRUE(success);
-		TEST_TRUE(arg == "arg");
-		TEST_TRUE(test.Front() == '!');
-	}
+	// Successes ---
 
-	{
-		StringView test = "{   arg    o";
-		StringView arg;
-		bool success = sParseArgument(test, arg);
+	TEST_TRUE(sParseArgument(test, arg, slice));
+	TEST_TRUE(arg == "arg");
+	TEST_TRUE(test.Front() == '!');
+	TEST_TRUE(slice == Slice());
 
-		TEST_FALSE(success);
-		TEST_TRUE(arg.Empty());
-	}
+	test = "{   arg[1:3] }!  ";
+	TEST_TRUE(sParseArgument(test, arg, slice));
+	TEST_TRUE(arg == "arg");
+	TEST_TRUE(test.Front() == '!');
+	TEST_TRUE(slice.mStart == 1);
+	TEST_TRUE(slice.mEnd == 3);
+
+	test = "{   arg[1] }!  ";
+	TEST_TRUE(sParseArgument(test, arg, slice));
+	TEST_TRUE(arg == "arg");
+	TEST_TRUE(test.Front() == '!');
+	TEST_TRUE(slice.mStart == 1);
+	TEST_TRUE(slice.mEnd == cMaxInt);
+
+	test = "{   arg1:3] }!  "; // Valid only for the purpose of parsing, error will be detected when trying to identify the arg
+	TEST_TRUE(sParseArgument(test, arg, slice));
+	TEST_TRUE(arg == "arg1:3]");
+	TEST_TRUE(test.Front() == '!');
+	TEST_TRUE(slice == Slice());
+
+	// Failures ---
+
+	test = "{   arg    o";
+	TEST_FALSE(sParseArgument(test, arg, slice));
+	TEST_TRUE(arg.Empty());
+	TEST_TRUE(test.Front() == '{');
+	TEST_TRUE(slice == Slice());
+
+	test = "{   arg[1:3 }";
+	TEST_FALSE(sParseArgument(test, arg, slice));
+	TEST_TRUE(arg.Empty());
+	TEST_TRUE(test.Front() == '{');
+	TEST_TRUE(slice == Slice());
+
 };
 
 
@@ -112,7 +359,8 @@ static bool sParseCommandVariables(StringView inFormatStr, taFormatter&& inForma
 		inFormatStr.RemovePrefix(open_brace_pos);
 
 		StringView arg;
-		if (!sParseArgument(inFormatStr, arg))
+		Slice      slice;
+		if (!sParseArgument(inFormatStr, arg, slice)) [[unlikely]]
 		{
 			// Failed to parse argument.
 			return false;
@@ -122,12 +370,12 @@ static bool sParseCommandVariables(StringView inFormatStr, taFormatter&& inForma
 		{
 			arg.RemovePrefix(gToStringView(CommandVariables::Repo).Size());
 
-			if (arg.Size() < 2 || arg[0] != ':')
+			if (arg.Size() < 2 || arg[0] != ':') [[unlikely]]
 				return false; // Failed to get the repo name part.
 		
 			StringView repo_name = arg.SubStr(1);
 
-			if (!inFormatter(CommandVariables::Repo, repo_name, inFormatStr, out_string))
+			if (!inFormatter(CommandVariables::Repo, repo_name, slice, inFormatStr, out_string)) [[unlikely]]
 				return false; // Formatter says error.
 		}
 		else
@@ -143,14 +391,14 @@ static bool sParseCommandVariables(StringView inFormatStr, taFormatter&& inForma
 				if (arg == gToStringView(var))
 				{
 					matched = true;
-					if (!inFormatter(var, "", inFormatStr, out_string))
+					if (!inFormatter(var, "", slice, inFormatStr, out_string)) [[unlikely]]
 						return false; // Formatter says error.
 
 					break;
 				}
 			}
 
-			if (!matched)
+			if (!matched) [[unlikely]]
 				return false; // Invalid variable name.
 		}
 	}
@@ -162,12 +410,25 @@ REGISTER_TEST("ParseCommandVariables")
 	// Make sure temp memory is initialized or the tests will fail.
 	TEST_INIT_TEMP_MEMORY(1_KiB);
 
-	auto test_formatter = [](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr)
+	auto test_formatter = [](CommandVariables inVar, StringView inRepoName, Slice inSlice, StringView inRemainingFormatStr, TempString& outStr)
 	{
 		outStr.Append(gToStringView(inVar));
 
 		if (inVar == CommandVariables::Repo)
 			outStr.Append(inRepoName);
+
+		if (inSlice != Slice())
+		{
+			outStr.Append("[");
+
+			if (inSlice.mStart != 0)
+				gAppendFormat(outStr, "%d", inSlice.mStart);
+
+			if (inSlice.mEnd != cMaxInt)
+				gAppendFormat(outStr, ":%d", inSlice.mEnd);
+
+			outStr.Append("]");
+		}
 
 		return true;
 	};
@@ -195,6 +456,13 @@ REGISTER_TEST("ParseCommandVariables")
 
 	{
 		TempString result;
+		bool success = sParseCommandVariables("{   File[4:5] }{Ext[ : -1 ]}{\tExt[-2]\t}{Dir[100000:100001 ]}{Repo:A[10:70] } ", test_formatter, result);
+		TEST_TRUE(success);
+		TEST_TRUE(result == "File[4:5]Ext[:-1]Ext[-2]Dir[100000:100001]RepoA[10:70] ");
+	}
+
+	{
+		TempString result;
 		bool success = sParseCommandVariables("JustText", test_formatter, result);
 		TEST_TRUE(success);
 		TEST_TRUE(result == "JustText");
@@ -218,6 +486,80 @@ REGISTER_TEST("ParseCommandVariables")
 };
 
 
+static StringView sApplySlice(StringView inStr, Slice inSlice)
+{
+	int start;
+	if (inSlice.mStart >= 0)
+		start = gMin(inSlice.mStart, inStr.Size());
+	else
+		start = gMax(inStr.Size() + inSlice.mStart, 0);
+
+	int end;
+	if (inSlice.mEnd >= 0)
+		end = gMin(inSlice.mEnd, inStr.Size());
+	else
+		end = gMax(inStr.Size() + inSlice.mEnd, 0);
+
+	int count = gMax(0, end - start);
+	return inStr.SubStr(start, count);
+}
+
+
+REGISTER_TEST("ApplySlice")
+{
+	TEST_TRUE(sApplySlice("test!", {}) == "test!");
+	TEST_TRUE(sApplySlice("test!", { 0, 3 }) == "tes");
+	TEST_TRUE(sApplySlice("test!", { 0, 0 }) == "");
+	TEST_TRUE(sApplySlice("test!", { 1, 0 }) == "");
+	TEST_TRUE(sApplySlice("test!", { 2, 2 }) == "");
+	TEST_TRUE(sApplySlice("test!", { 3, 10 }) == "t!");
+	TEST_TRUE(sApplySlice("test!", { -1 }) == "!");
+	TEST_TRUE(sApplySlice("test!", { -4 }) == "est!");
+	TEST_TRUE(sApplySlice("test!", { 0,-1 }) == "test");
+	TEST_TRUE(sApplySlice("test!", { 1,-1 }) == "est");
+	TEST_TRUE(sApplySlice("test!", { -1,1 }) == "");
+	TEST_TRUE(sApplySlice("test!", { -1,-2 }) == "");
+	TEST_TRUE(sApplySlice("test!", { -2,-1 }) == "t");
+	TEST_TRUE(sApplySlice("test!", { -10 }) == "test!");
+	TEST_TRUE(sApplySlice("test!", { 0, -10 }) == "");
+};
+
+
+StringView sGetCommandVarString(CommandVariables inVar, const FileInfo& inFile)
+{
+	switch (inVar)
+	{
+	case CommandVariables::Ext:
+		return inFile.GetExtension();
+
+	case CommandVariables::File:
+		return inFile.GetNameNoExt();
+
+	case CommandVariables::Dir:
+		return inFile.GetDirectory();
+
+	case CommandVariables::Dir_NoTrailingSlash: 
+		{
+			StringView dir = inFile.GetDirectory();
+
+			// If the dir is not empty, there is a trailing slash. Remove it.
+			if (!dir.Empty()) [[likely]]
+				dir.RemoveSuffix(1);
+
+			return dir;
+		}
+	case CommandVariables::Path:
+		return inFile.mPath;
+
+	case CommandVariables::Repo:
+		return {}; // Repo needs to be handled separately.
+
+	default:
+		gAssert(false);
+		return {};
+	}
+}
+
 
 // TODO add an output error string to help understand why it fails
 bool gFormatCommandString(StringView inFormatStr, const FileInfo& inFile, TempString& outString)
@@ -225,54 +567,38 @@ bool gFormatCommandString(StringView inFormatStr, const FileInfo& inFile, TempSt
 	if (inFormatStr.Empty())
 		return false; // Consider empty format string is an error.
 
-	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
+	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, Slice inSlice, StringView inRemainingFormatStr, TempString& outStr) 
 	{
-		switch (inVar)
+		StringView var_str;
+
+		// Repo need to be treated separately, string is based on inRepoName rather than inFile.
+		if (inVar == CommandVariables::Repo)
 		{
-		case CommandVariables::Ext:
-			outStr.Append(inFile.GetExtension());
-			break;
-		case CommandVariables::File:
-			outStr.Append(inFile.GetNameNoExt());
-			break;
-		case CommandVariables::Dir:
-			if (!inFile.GetDirectory().Empty())
-				outStr.Append(inFile.GetDirectory());
-
-			// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
-			// Add a second backslash to avoid that.
-			// Note: we also do it if the first backslash wasn't added by the Dir itself (if Dir is empty) as it's often preceded by a Repo (which also ends with a '\').
-			if (!outStr.Empty() && outStr.Back() == '\\')
-			{
-				if (!inRemainingFormatStr.Empty() && inRemainingFormatStr[0] == '"')
-					outStr.Append("\\");
-			}
-			break;
-		case CommandVariables::Dir_NoTrailingSlash:
-			if (!inFile.GetDirectory().Empty())
-				outStr.Append(inFile.GetDirectory().SubStr(0, inFile.GetDirectory().Size() - 1));
-			break;
-		case CommandVariables::Path:
-			outStr.Append(inFile.mPath);
-			break;
-		case CommandVariables::Repo:
-			{
-				FileRepo* repo = gFileSystem.FindRepo(inRepoName);
-
+			if (FileRepo* repo = gFileSystem.FindRepo(inRepoName))
+				var_str = repo->mRootPath;
+			else
 				// Invalid repo name.
-				if (repo == nullptr)
-					return false;
+				return false;
+		}
+		else
+		{
+			// Get the string corresponding to this CommandVariable.
+			var_str = sGetCommandVarString(inVar, inFile);
+		}
 
-				outStr.Append(repo->mRootPath);
+		// Apply the slice to it.
+		sApplySlice(var_str, inSlice);
 
-				// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
-				// Add a second backslash to avoid that.
-				if (!inRemainingFormatStr.Empty() && inRemainingFormatStr[0] == '"')
-					outStr.Append("\\");
-			}
-			break;
-		default:
-			return false;
+		// Append to the output.
+		outStr.Append(var_str);
+
+		// If the string ends with a backslash and the following character is a quote, the backslash will escape it and the command line won't work.
+		// In this case, add another backslash to escape the first one.
+		if (outStr.EndsWith(R"(\)") &&
+			inRemainingFormatStr.StartsWith(R"(")") &&
+			!outStr.EndsWith(R"(\\)")) // Already added the double backslash
+		{
+			outStr.Append(R"(\)");
 		}
 
 		return true;
@@ -285,36 +611,36 @@ bool gFormatFilePath(StringView inFormatStr, const FileInfo& inFile, RepoAndFile
 	FileRepo*  repo = nullptr;
 	TempString out_path;
 
-	bool success = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
+	bool success = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, Slice inSlice, StringView inRemainingFormatStr, TempString& outStr) 
 	{
-		switch (inVar)
+		// Repo need to be treated separately, string is based on inRepoName rather than inFile.
+		if (inVar == CommandVariables::Repo)
 		{
-		case CommandVariables::Ext:
-			outStr.Append(inFile.GetExtension());
-			break;
-		case CommandVariables::File:
-			outStr.Append(inFile.GetNameNoExt());
-			break;
-		case CommandVariables::Dir:
-			outStr.Append(inFile.GetDirectory());
-			break;
-		case CommandVariables::Dir_NoTrailingSlash:
-			if (!inFile.GetDirectory().Empty())
-				outStr.Append(inFile.GetDirectory().SubStr(0, inFile.GetDirectory().Size() - 1));
-			break;
-		case CommandVariables::Path:
-			outStr.Append(inFile.mPath);
-			break;
-		case CommandVariables::Repo:
 			// There can only be 1 Repo arg and it should be at the very beginning of the path.
 			if (repo != nullptr || !outStr.Empty())
 				return false;
 
+			// Repo cannot be sliced.
+            if (inSlice != Slice())
+                return false;
+
 			repo = gFileSystem.FindRepo(inRepoName);
-			break;
-		default:
-			return false;
+
+			// Invalid repo name.
+			if (repo == nullptr)
+				return false;
 		}
+        else
+        {
+	        // Get the string corresponding to this CommandVariable.
+			StringView var_str = sGetCommandVarString(inVar, inFile);
+
+			// Apply the slice to it.
+			sApplySlice(var_str, inSlice);
+
+			// Append to the output.
+			outStr.Append(var_str);
+        }
 
 		return true;
 	}, out_path);
