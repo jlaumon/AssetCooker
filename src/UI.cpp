@@ -384,7 +384,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 			break;
 
 		case DependencyType::Output:
-			if (inFile.mLastChangeUSN < inContext.mLastCook)
+			if (inFile.mLastChangeUSN <= inContext.mLastCook)
 				file_state = Outdated;
 			break;
 		}

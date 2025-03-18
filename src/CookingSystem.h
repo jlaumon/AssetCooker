@@ -207,7 +207,7 @@ struct CookingCommand : NoCopy
 	bool                            mIsQueued            = false;
 	uint16                          mLastCookRuleVersion = CookingRule::cInvalidVersion;
 	USN                             mLastDepFileRead     = 0;
-	USN                             mLastCookUSN         = 0;
+	USN                             mLastCookUSN         = 0;		// Value that represents the last time this command was cooked. All outputs USN have to be greater than this for the command to be NotDirty.
 	FileTime                        mLastCookTime        = {};
 	CookingLogEntry*                mLastCookingLog      = nullptr;
 

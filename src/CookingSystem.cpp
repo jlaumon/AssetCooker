@@ -430,7 +430,7 @@ void CookingCommand::UpdateDirtyState()
 			USN max_input_usn = 0;
 			for (FileID input_id : GetAllInputs())
 				max_input_usn = gMax(max_input_usn, input_id.GetFile().mLastChangeUSN);
-			mLastCookUSN = max_input_usn;
+			mLastCookUSN = gMax(mLastCookUSN, max_input_usn);
 		}
 		else
 		{
@@ -442,20 +442,6 @@ void CookingCommand::UpdateDirtyState()
 	if (mLastCookRuleVersion != GetRule().mVersion)
 		dirty_state |= VersionMismatch;
 
-	USN last_cook = mLastCookUSN;
-
-	// If we don't have a last cook USN, estimate one.
-	// Normally this should be stored in the cached state and read on start up,
-	// but when doing an initial scan we use the oldest output (ie. min USN) as the
-	// probable last point when the command was cooked.
-	if (last_cook == 0 && !GetAllOutputs().Empty())
-	{
-		// TODO this does not work if multiple drives are involved, we can only compare USNs from the same journal
-		last_cook = cMaxUSN;
-		for (auto& file_id : GetAllOutputs())
-			last_cook = gMin(last_cook, file_id.GetFile().mLastChangeUSN);
-	}
-
 	for (FileID file_id : GetAllInputs())
 	{
 		const FileInfo& file = file_id.GetFile();
@@ -466,7 +452,7 @@ void CookingCommand::UpdateDirtyState()
 		}
 		else
 		{
-			if (file.mLastChangeUSN > last_cook)
+			if (file.mLastChangeUSN > mLastCookUSN)
 				dirty_state |= InputChanged;
 		}
 	}
@@ -486,7 +472,9 @@ void CookingCommand::UpdateDirtyState()
 			all_output_missing = false;
 
 		// TODO this comparison does not work if multiple drives are involved, we can only compare USNs from the same journal
-		if (file.mLastChangeUSN < mLastCookUSN)
+		// Note: if the last change USN is equal to the last cook USN, it means this output wasn't written (again) during last cook.
+		// See mLastCookUSN calculation including the previous outputs USNs in CookCommand.
+		if (file.mLastChangeUSN <= mLastCookUSN)
 			all_output_written = false;
 	}
 	
@@ -1330,9 +1318,16 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		USN max_input_usn = 0;
 		for (FileID input_id : ioCommand.GetAllInputs())
 			max_input_usn = gMax(max_input_usn, input_id.GetFile().mLastChangeUSN);
+
+		// Get the max of all the (previous) outputs.
+		// Note: We include the previous outputs to detect that all outputs are written again this time,
+		// even if the command runs because of a ForceCook or a rule version change (in which case inputs have not changed).
+		USN max_outputs_usn = 0;
+		for (FileID output_id : ioCommand.GetAllOutputs())
+			max_outputs_usn = gMax(max_outputs_usn, output_id.GetFile().mLastChangeUSN);
 		
-		// Set the inputs USN on the command.
-		ioCommand.mLastCookUSN = max_input_usn;
+		// Last cook USN is the max of both.
+		ioCommand.mLastCookUSN = gMax(max_outputs_usn, max_input_usn);
 	}
 
 	// Update the last cook time.
