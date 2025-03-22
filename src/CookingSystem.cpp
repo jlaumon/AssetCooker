@@ -8,6 +8,7 @@
 #include "Debug.h"
 #include "DepFile.h"
 #include "Notifications.h"
+#include "CommandVariables.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Algorithm.h>
 #include <Bedrock/Ticks.h>
@@ -33,229 +34,6 @@ constexpr bool gPushBackUnique(taContainer& ioContainer, const taValue& inElem)
 
 	ioContainer.PushBack(inElem);
 	return true;
-}
-
-
-
-static bool sIsSpace(char inChar)
-{
-	return inChar == ' ' || inChar == '\t';
-}
-
-
-// Return a StringView on the text part of {text}.
-static StringView sParseArgument(const char*& ioPtr, const char* inPtrEnd)
-{
-	gAssert(*ioPtr == '{');
-	ioPtr++;
-
-	// Skip white space before the argument.
-	while (ioPtr != inPtrEnd && sIsSpace(*ioPtr))
-		++ioPtr;
-
-	const char* arg_begin = ioPtr;
-	const char* arg_end   = ioPtr;
-
-	while (ioPtr != inPtrEnd)
-	{
-		if (*ioPtr == '}' || sIsSpace(*ioPtr))
-		{
-			arg_end = ioPtr;
-			++ioPtr;
-			break;
-		}
-
-		ioPtr++;
-	}
-
-	// Skip white space and } after the argument.
-	while (ioPtr != inPtrEnd && (*ioPtr == '}' || sIsSpace(*ioPtr)))
-		++ioPtr;
-
-	return { arg_begin, arg_end };
-}
-
-
-template<class taFormatter>
-static Optional<TempString> sParseCommandVariables(StringView inFormatStr, const taFormatter& inFormatter)
-{
-	TempString str;
-	const char* p_begin = inFormatStr.Data();
-	const char* p_end   = inFormatStr.End();
-	const char* p       = p_begin;
-
-	while (p != p_end)
-	{
-		if (*p == '{')
-		{
-			str.Append({ p_begin, p });
-
-			StringView arg = sParseArgument(p, p_end);
-
-			// sParseArgument made p point after the argument itself.
-			p_begin = p;
-
-			if (gStartsWith(arg, gToStringView(CommandVariables::Repo)))
-			{
-				arg.RemovePrefix(gToStringView(CommandVariables::Repo).Size());
-
-				if (arg.Size() < 2 || arg[0] != ':')
-					return {}; // Failed to get the repo name part.
-			
-				StringView repo_name = arg.SubStr(1);
-
-				if (!inFormatter(CommandVariables::Repo, repo_name, { p, p_end }, str))
-					return {}; // Formatter says error.
-			}
-			else
-			{
-				bool matched = false;
-				for (int i = 0; i < (int)CommandVariables::_Count; ++i)
-				{
-					CommandVariables var = (CommandVariables)i;
-
-					if (var == CommandVariables::Repo)
-						continue; // Treated separately.
-
-					if (arg == gToStringView(var))
-					{
-						matched = true;
-						if (!inFormatter(var, "", { p, p_end }, str))
-							return {}; // Formatter says error.
-
-						break;
-					}
-				}
-
-				if (!matched)
-					return {}; // Invalid variable name.
-			}
-		}
-		else
-		{
-			p++;
-		}
-	}
-
-	str.Append({ p_begin, p });
-
-	return str;
-}
-
-
-// TODO add an output error string to help understand why it fails
-Optional<TempString> gFormatCommandString(StringView inFormatStr, const FileInfo& inFile)
-{
-	if (inFormatStr.Empty())
-		return {}; // Consider empty format string is an error.
-
-	return sParseCommandVariables(inFormatStr, [&inFile](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
-	{
-		switch (inVar)
-		{
-		case CommandVariables::Ext:
-			outStr.Append(inFile.GetExtension());
-			break;
-		case CommandVariables::File:
-			outStr.Append(inFile.GetNameNoExt());
-			break;
-		case CommandVariables::Dir:
-			if (!inFile.GetDirectory().Empty())
-				outStr.Append(inFile.GetDirectory());
-
-			// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
-			// Add a second backslash to avoid that.
-			// Note: we also do it if the first backslash wasn't added by the Dir itself (if Dir is empty) as it's often preceded by a Repo (which also ends with a '\').
-			if (!outStr.Empty() && outStr.Back() == '\\')
-			{
-				if (!inRemainingFormatStr.Empty() && inRemainingFormatStr[0] == '"')
-					outStr.Append("\\");
-			}
-			break;
-		case CommandVariables::Dir_NoTrailingSlash:
-			if (!inFile.GetDirectory().Empty())
-				outStr.Append(inFile.GetDirectory().SubStr(0, inFile.GetDirectory().Size() - 1));
-			break;
-		case CommandVariables::Path:
-			outStr.Append(inFile.mPath);
-			break;
-		case CommandVariables::Repo:
-			{
-				FileRepo* repo = gFileSystem.FindRepo(inRepoName);
-
-				// Invalid repo name.
-				if (repo == nullptr)
-					return false;
-
-				outStr.Append(repo->mRootPath);
-
-				// If the following character is a quote, the backslash at the end of the dir will escape it and the command line won't work.
-				// Add a second backslash to avoid that.
-				if (!inRemainingFormatStr.Empty() && inRemainingFormatStr[0] == '"')
-					outStr.Append("\\");
-			}
-			break;
-		default:
-			return false;
-		}
-
-		return true;
-	});
-}
-
-
-Optional<RepoAndFilePath> gFormatFilePath(StringView inFormatStr, const FileInfo& inFile)
-{
-	FileRepo*            repo = nullptr;
-	Optional<TempString> path = sParseCommandVariables(inFormatStr, [&inFile, &repo](CommandVariables inVar, StringView inRepoName, StringView inRemainingFormatStr, TempString& outStr) 
-	{
-		switch (inVar)
-		{
-		case CommandVariables::Ext:
-			outStr.Append(inFile.GetExtension());
-			break;
-		case CommandVariables::File:
-			outStr.Append(inFile.GetNameNoExt());
-			break;
-		case CommandVariables::Dir:
-			outStr.Append(inFile.GetDirectory());
-			break;
-		case CommandVariables::Dir_NoTrailingSlash:
-			if (!inFile.GetDirectory().Empty())
-				outStr.Append(inFile.GetDirectory().SubStr(0, inFile.GetDirectory().Size() - 1));
-			break;
-		case CommandVariables::Path:
-			outStr.Append(inFile.mPath);
-			break;
-		case CommandVariables::Repo:
-			// There can only be 1 Repo arg and it should be at the very beginning of the path.
-			if (repo != nullptr || !outStr.Empty())
-				return false;
-
-			repo = gFileSystem.FindRepo(inRepoName);
-			break;
-		default:
-			return false;
-		}
-
-		return true;
-	});
-
-	if (!path)
-		return {};
-
-	return RepoAndFilePath{ *repo, gMove(*path) };
-}
-
-
-FileID gGetOrAddFileFromFormat(StringView inFormatStr, const FileInfo& inFile)
-{
-	Optional repo_and_path = gFormatFilePath(inFormatStr, inFile);
-	if (!repo_and_path)
-		return FileID::cInvalid();
-
-	auto& [repo, path] = *repo_and_path;
-	return repo.GetOrAddFile(path, FileType::File, {}).mID;
 }
 
 
@@ -1009,18 +787,19 @@ bool CookingSystem::ValidateRules()
 			}
 		}
 
-		// Dummy file info use to test path formatting.
-		FileInfo dummy_file(FileID{ 0, 0 }, "dir\\dummy.txt", Hash128{ 0, 0 }, FileType::File, {});
+		// Dummy file info and string use to test path formatting.
+		FileInfo   dummy_file(FileID{ 0, 0 }, "dir\\dummy.txt", Hash128{ 0, 0 }, FileType::File, {});
+		TempString dummy_result;
 
 		// Validate the command line.
-		if (rule.mCommandType == CommandType::CommandLine && !gFormatCommandString(rule.mCommandLine, dummy_file))
+		if (rule.mCommandType == CommandType::CommandLine && !gFormatCommandString(rule.mCommandLine, dummy_file, dummy_result))
 		{
 			errors++;
 			gAppLogError(R"(Rule %s: Failed to parse CommandLine "%s")", rule.mName.AsCStr(), rule.mCommandLine.AsCStr());
 		}
 
 		// Validate the dep file path.
-		if (rule.UseDepFile() && !gFormatCommandString(rule.mDepFilePath, dummy_file))
+		if (rule.UseDepFile() && !gFormatCommandString(rule.mDepFilePath, dummy_file, dummy_result))
 		{
 			errors++;
 			gAppLogError(R"(Rule %s: Failed to parse DepFilePath "%s")", rule.mName.AsCStr(), rule.mDepFilePath.AsCStr());
@@ -1029,7 +808,7 @@ bool CookingSystem::ValidateRules()
 		// Validate the input paths.
 		for (int i = 0; i < rule.mInputPaths.Size(); ++i)
 		{
-			if (!gFormatCommandString(rule.mInputPaths[i], dummy_file))
+			if (!gFormatCommandString(rule.mInputPaths[i], dummy_file, dummy_result))
 			{
 				errors++;
 				gAppLogError(R"(Rule %s: Failed to parse InputPaths[%d] "%s")", rule.mName.AsCStr(), i, rule.mInputPaths[i].AsCStr());
@@ -1039,7 +818,7 @@ bool CookingSystem::ValidateRules()
 		// Validate the output paths.
 		for (int i = 0; i < rule.mOutputPaths.Size(); ++i)
 		{
-			if (!gFormatCommandString(rule.mOutputPaths[i], dummy_file))
+			if (!gFormatCommandString(rule.mOutputPaths[i], dummy_file, dummy_result))
 			{
 				errors++;
 				gAppLogError(R"(Rule %s: Failed to parse OutputPaths[%d] "%s")", rule.mName.AsCStr(), i, rule.mOutputPaths[i].AsCStr());
@@ -1407,11 +1186,10 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	
 	// If there is a dep file command line, build it.
-	Optional<String> dep_command_line;
+	TempString dep_command_line;
 	if (!rule.mDepFileCommandLine.Empty())
 	{
-		dep_command_line = gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
-		if (!dep_command_line)
+		if (!gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()), dep_command_line))
 		{
 			output_str.Append("[error] Failed to format dep file command line.\n");
 			log_entry.mOutput = output_str.AsStringView();
@@ -1424,8 +1202,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	if (rule.mCommandType == CommandType::CommandLine)
 	{
 		// Build the command line.
-		Optional<String> command_line = gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()));
-		if (!command_line)
+		TempString command_line;
+		if (!gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()), command_line))
 		{
 			output_str.Append("[error] Failed to format command line.\n");
 			log_entry.mOutput = output_str.AsStringView();
@@ -1434,7 +1212,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		}
 
 		// Run the command line.
-		success = sRunCommandLine(*command_line, output_str, mJobObject);
+		success = sRunCommandLine(command_line, output_str, mJobObject);
 	}
 	else
 	{
@@ -1452,10 +1230,10 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	}
 
 	// If there's a dep file command line, run it next.
-	if (success && dep_command_line)
+	if (success && !dep_command_line.Empty())
 	{
 		output_str.Append("\nDep File "); // No end line on purpose, we want to prepend the line added inside the sRunCommandLine.
-		success = sRunCommandLine(*dep_command_line, output_str, mJobObject);
+		success = sRunCommandLine(dep_command_line, output_str, mJobObject);
 	}
 
 	// Set the end time and add the duration at the end of the log.

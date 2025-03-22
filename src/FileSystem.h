@@ -19,8 +19,6 @@
 #include <Bedrock/StringFormat.h>
 #include <Bedrock/HashMap.h>
 
-#include <optional>
-
 // Forward declarations.
 struct FileID;
 struct FileInfo;

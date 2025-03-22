@@ -47,16 +47,16 @@ PathHash gHashPath(StringView inAbsolutePath)
 	gAssert(gIsAbsolute(inAbsolutePath));
 
 	// Convert it to wide char.
-	PathBufferUTF16     wpath_buffer;
-	OptionalWStringView wpath = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
-	if (!wpath)
+	PathBufferUTF16 wpath_buffer;
+	WStringView     wpath = gUtf8ToWideChar(inAbsolutePath, wpath_buffer);
+	if (wpath.empty())
 		gAppFatalError("Failed to convert path %s to WideChar", inAbsolutePath.AsCStr());
 
 	// TODO use gToLowerCase instead?
 	// Convert it to uppercase.
 	// Note: LCMapStringA does not seem to work with UTF8 (or at least not with LOCALE_INVARIANT) so we are forced to use wchars here.
 	PathBufferUTF16 uppercase_buffer;
-	int uppercase_size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, wpath->data(), (int)wpath->size(), uppercase_buffer, gElemCount(uppercase_buffer) / 2, nullptr, nullptr, 0);
+	int uppercase_size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, wpath.data(), (int)wpath.size(), uppercase_buffer, gElemCount(uppercase_buffer) / 2, nullptr, nullptr, 0);
 	if (uppercase_size == 0)
 		gAppFatalError("Failed to convert path %s to uppercase", inAbsolutePath.AsCStr());
 
