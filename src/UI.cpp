@@ -393,7 +393,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 	if (file_state != None)
 		ImGui::PushStyleColor(ImGuiCol_Text, cFileStateData[file_state].mColor);
 
-	bool clicked = ImGui::Selectable(inFile.ToString(), false, ImGuiSelectableFlags_DontClosePopups);
+	bool clicked = ImGui::Selectable(inFile.ToString(), false, ImGuiSelectableFlags_NoAutoClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (file_state != None && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
@@ -623,7 +623,7 @@ void gDrawCookingCommand(const CookingCommand& inCommand)
 		pop_color++;
 	}
 
-	bool clicked = ImGui::Selectable(gToString(inCommand), false, ImGuiSelectableFlags_DontClosePopups);
+	bool clicked = ImGui::Selectable(gToString(inCommand), false, ImGuiSelectableFlags_NoAutoClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (clicked && inCommand.mLastCookingLog)
@@ -721,7 +721,7 @@ void gDrawCookingRule(const CookingRule& inRule)
 	defer { ImGui::PopID(); };
 
 	bool clicked = ImGui::Selectable(gTempFormat("%s (%d Commands)##%s", inRule.mName.AsCStr(), inRule.mCommandCount.Load(), inRule.mName.AsCStr()), 
-		false, ImGuiSelectableFlags_DontClosePopups);
+		false, ImGuiSelectableFlags_NoAutoClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
 	if (open)
@@ -1386,7 +1386,7 @@ void gDrawStatusBar()
 		StringView ui_stats(ICON_FK_TACHOMETER " UI");
 		stats_text_size += ImGui::CalcTextSize(ui_stats).x;
 
-		float available_size  = ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().ItemSpacing.x;
+		float available_size  = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x;
 		ImGui::SameLine(available_size - stats_text_size);
 		ImGui::TextUnformatted(cooking_stats);
 		ImGui::SameLine(0, 0);
@@ -1492,9 +1492,9 @@ ImGuiStyle sDarkTheme()
 	colors[ImGuiCol_ResizeGripActive]     = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
 	colors[ImGuiCol_Tab]                  = ImVec4(0.16f, 0.16f, 0.16f, 0.00f);
 	colors[ImGuiCol_TabHovered]           = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
-	colors[ImGuiCol_TabActive]            = ImVec4(0.20f, 0.41f, 0.68f, 1.00f);
-	colors[ImGuiCol_TabUnfocused]         = ImVec4(0.24f, 0.24f, 0.24f, 0.00f);
-	colors[ImGuiCol_TabUnfocusedActive]   = ImVec4(0.39f, 0.39f, 0.39f, 0.22f);
+	colors[ImGuiCol_TabSelected]          = ImVec4(0.20f, 0.41f, 0.68f, 1.00f);
+	colors[ImGuiCol_TabDimmed]            = ImVec4(0.24f, 0.24f, 0.24f, 0.00f);
+	colors[ImGuiCol_TabDimmedSelected]    = ImVec4(0.39f, 0.39f, 0.39f, 0.22f);
 #ifdef IMGUI_HAS_DOCK
 	colors[ImGuiCol_DockingPreview] = colors[ImGuiCol_HeaderActive];
 	colors[ImGuiCol_DockingPreview].w *= 0.4f;
@@ -1506,7 +1506,7 @@ ImGuiStyle sDarkTheme()
 	colors[ImGuiCol_PlotHistogramHovered]  = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
 	colors[ImGuiCol_TextSelectedBg]        = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
 	colors[ImGuiCol_DragDropTarget]        = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
-	colors[ImGuiCol_NavHighlight]          = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+	colors[ImGuiCol_NavCursor]             = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
 	colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
 	colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
 	colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.00f, 0.00f, 0.00f, 0.50f);
