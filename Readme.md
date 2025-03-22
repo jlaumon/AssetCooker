@@ -185,7 +185,24 @@ In the texture compression example above, consider a setup where the Repo `Sourc
 | `{ Path }`                | The path of the input file.                                        | `textures\brick_albedo.png` |
 | `{ Repo:Bin }`            | The path of the Repo named "Source".                               | `D:\bin`                    |
 
-So the OutputPath described as `'{ Repo:Bin }{ Dir }{ File }.dds' ]'` will become `D:\bin\textures\brick_albedo.dds`.
+So the OutputPath described as `'{ Repo:Bin }{ Dir }{ File }.dds'` will become `D:\bin\textures\brick_albedo.dds`.
+
+#### Slicing
+
+Command Variables also support a slice syntax similar to Python (eg. `{ File[1:3] }`).
+- The supported parameters are `[start:end]`
+- They are optional (default value for `start` is 0, default value for `end` is the length of the string)
+- They can index out-of-bounds (index is clamped)
+- They can be negative (index from the end of the string instead).
+
+| Example                | Result             |
+|------------------------|--------------------|
+| `{ File }`             | `brick_albedo`     |
+| `{ File[:5] }`         | `brick`            |
+| `{ File[6:] }`         | `albedo`           |
+| `{ File[5:6] }`        | `_`                |
+| `{ File[:-6] }`        | `albedo`           |
+| `{ File[1:1000] }`     | `rick_albedo`      |
 
 ## Contributing 
 Open an issue before doing a pull request. It's a hobby project, please be nice.
