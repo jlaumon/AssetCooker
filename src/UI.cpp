@@ -8,6 +8,7 @@
 
 #include "FileSystem.h"
 #include "CookingSystem.h"
+#include "CommandVariables.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
