@@ -463,7 +463,7 @@ REGISTER_TEST("ParseCommandVariables")
 };
 
 
-static StringView sApplySlice(StringView inStr, Slice inSlice)
+static [[nodiscard]] StringView sApplySlice(StringView inStr, Slice inSlice)
 {
 	int start;
 	if (inSlice.mStart >= 0)
@@ -564,7 +564,7 @@ bool gFormatCommandString(StringView inFormatStr, const FileInfo& inFile, TempSt
 		}
 
 		// Apply the slice to it.
-		sApplySlice(var_str, inSlice);
+		var_str = sApplySlice(var_str, inSlice);
 
 		// Append to the output.
 		outStr.Append(var_str);
@@ -614,7 +614,7 @@ bool gFormatFilePath(StringView inFormatStr, const FileInfo& inFile, FileRepo*& 
                 StringView var_str = sGetCommandVarString(inVar, inFile);
 
                 // Apply the slice to it.
-                sApplySlice(var_str, inSlice);
+                var_str = sApplySlice(var_str, inSlice);
 
                 // Append to the output.
                 outStr.Append(var_str);
