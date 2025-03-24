@@ -9,6 +9,7 @@
 #include "imgui_impl_dx11.h"
 #include <d3d11.h>
 #include <tchar.h>
+#include <map>
 
 #include "UI.h"
 #include "App.h"
@@ -34,6 +35,7 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+std::map<StringView, StringView> ParseArguments(StringView cmdLine);
 
 
 // Helper struct to measure CPU/GPU times of the UI updates.
@@ -191,10 +193,22 @@ int WinMain(
 	gThreadInitTempMemory(gMemAlloc(1_MiB));
 	defer { gMemFree(gThreadExitTempMemory()); };
 
+	// Extract flags from command line
+	auto args = ParseArguments(lpCmdLine);
+
 	// Check if we only want to run the tests.
-	if (StringView(lpCmdLine).Contains("-test"))
+	if (args.find("-test") != args.end())
 	{
 		return (gRunTests() == TestResult::Success) ? 0 : 1;
+	}
+
+	// Get redirector path
+	TempString redirectorPath;
+	if (args.find("-path") != args.end())
+	{
+		redirectorPath = args["-path"];
+
+		App::SetRedirectorPath(args["-path"]);
 	}
 
 	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.
@@ -584,4 +598,49 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	}
 			
 	return ::DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+std::map<StringView, StringView> ParseArguments(StringView cmdLine)
+{
+    std::map<StringView, StringView> args;
+    int pos = 0;
+
+    while (pos < cmdLine.Size())
+    {
+        // Skip spaces
+        while (pos < cmdLine.Size() && cmdLine[pos] == ' ')
+            pos++;
+
+        // Find next space or end of string
+        int start = pos;
+        while (pos < cmdLine.Size() && cmdLine[pos] != ' ')
+            pos++;
+
+        // Extract the token
+        StringView token = cmdLine.SubStr(start, pos - start);
+
+        if (!token.Empty() && token.Front() == '-') // It's a flag
+        {
+            // Peek at next token to check if it's a value (not another flag)
+            while (pos < cmdLine.Size() && cmdLine[pos] == ' ') 
+                pos++;
+
+            int valueStart = pos;
+            while (pos < cmdLine.Size() && cmdLine[pos] != ' ') 
+                pos++;
+
+            StringView value = cmdLine.SubStr(valueStart, pos - valueStart);
+
+            if (value.Empty() || value.Front() == '-') 
+            {
+                args[token] = ""; // Flag without value
+            }
+            else
+            {
+                args[token] = value; // Flag with value
+            }
+        }
+    }
+
+    return args;
 }

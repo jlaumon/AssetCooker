@@ -1,0 +1,10 @@
+[[Rule]]
+Name = "CombineTest"
+Priority = 1
+
+InputFilters = [
+    { Repo = "Source", PathPattern = "*_r.txt" }
+]
+
+DepFile = { Path = '{ Repo:DepFiles }{ Dir }{ File }.dep', Format = 'AssetCooker' }
+CommandLine = '{ Repo:Scripts }combine.bat "{ File }" "{ Repo:Source }" "{ Repo:Bin }" "{ Repo:DepFiles }"'

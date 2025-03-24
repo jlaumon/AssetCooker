@@ -1,0 +1,15 @@
+[[Repo]]
+Name = "Source"
+Path = 'data/source'
+
+[[Repo]]
+Name = "Bin"
+Path = 'data/bin'
+
+[[Repo]]
+Name = "Scripts"
+Path = 'Scripts'
+
+[[Repo]]
+Name = "DepFiles"
+Path = 'DepFiles'

@@ -11,13 +11,14 @@
 
 void gReadConfigFile(StringView inPath)
 {
-	gAppLog(R"(Reading Config file "%s".)", inPath.AsCStr());
+	TempString configPath = gGetAbsolutePath(inPath);
+	gAppLog(R"(Reading Config file "%s".)", configPath.AsCStr());
 
 	// Parse the toml file.
 	TomlReader reader;
-	if (!reader.Init(inPath, &gCookingSystem.GetStringPool()))
+	if (!reader.Init(configPath, &gCookingSystem.GetStringPool()))
 	{
-		gApp.SetInitError(gTempFormat(R"(Failed to parse Config file "%s". See log for details.)", inPath.AsCStr()));
+		gApp.SetInitError(gTempFormat(R"(Failed to parse Config file "%s". See log for details.)", configPath.AsCStr()));
 		return;
 	}
 
@@ -57,6 +58,7 @@ void gReadConfigFile(StringView inPath)
 		TempString rule_file_path;
 		if (reader.TryRead("RuleFile", rule_file_path))
 			gApp.mRuleFilePath = rule_file_path;
+		gApp.mRuleFilePath = gGetAbsolutePath(gApp.mRuleFilePath);
 	}
 
 	// Log directory path
@@ -73,6 +75,7 @@ void gReadConfigFile(StringView inPath)
 
 			gApp.mLogDirectory = log_dir;
 		}
+		gApp.mLogDirectory = gGetAbsolutePath(gApp.mLogDirectory);
 	}
 
 	// Cache directory path
@@ -89,6 +92,7 @@ void gReadConfigFile(StringView inPath)
 
 			gApp.mCacheDirectory = cache_dir;
 		}
+		gApp.mCacheDirectory = gGetAbsolutePath(gApp.mCacheDirectory);
 	}
 
 	// Read the window title.

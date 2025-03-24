@@ -22,20 +22,27 @@ TempString gGetAbsolutePath(StringView inPath)
 	TempString abs_path;
 	abs_path.Reserve(4096); // Should be enough for everyone.
 
+	// If the redirectorPath is provided, extend the path
+	StringView redirectorPath = App::GetRedirectorPath();
+	String redirectorString = redirectorPath;
+	String pathString = inPath;
+	redirectorString += pathString;
+	StringView path(redirectorString);
+
 	// Note: if size is < capacity then it doesn't contain the null term
 	//       if size is > capacity then it's the capacity needed (including null term)
 	//       size == capacity cannot happen ¯\_(ツ)_/¯
-	int size = GetFullPathNameA(inPath.AsCStr(), abs_path.Capacity(), abs_path.Data(), nullptr);
+	int size = GetFullPathNameA(path.AsCStr(), abs_path.Capacity(), abs_path.Data(), nullptr);
 
 	if (size > abs_path.Capacity())
 	{
 		// Reserve as needed and try again.
 		abs_path.Reserve(size);
-		size = GetFullPathNameA(inPath.AsCStr(), abs_path.Capacity(), abs_path.Data(), nullptr);
+		size = GetFullPathNameA(path.AsCStr(), abs_path.Capacity(), abs_path.Data(), nullptr);
 	}
 
 	if (size == 0 || size > abs_path.Capacity())
-		gAppFatalError(R"(Failed get absolute path for %s")", inPath.AsCStr());
+		gAppFatalError(R"(Failed get absolute path for %s")", path.AsCStr());
 
 	gAssert(size < abs_path.Capacity()); // Don't think that can happen, but if it does it means we might be missing the last char?
 	abs_path.Resize(size);

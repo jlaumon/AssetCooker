@@ -56,12 +56,16 @@ struct App
 	void                            OpenLogFile();
 	void                            CloseLogFile();
 
+	static StringView GetRedirectorPath();
+	static void SetRedirectorPath(StringView path);
+
 	String                          mMainWindowTitle       = "Asset Cooker";
 	void*                           mMainWindowHwnd        = nullptr;
 	void*                           mNotifMenuHmenu        = nullptr;
 	bool                            mMainWindowIsMinimized = false;
 	bool                            mExitRequested         = false;
 	bool                            mExitReady             = false;
+	String                          mConfigFilePath        = "config.toml";
 	String                          mUserPrefsFilePath     = "prefs.toml";
 	String                          mRuleFilePath          = "rules.toml";
 	LogLevel                        mLogFSActivity         = LogLevel::Normal;
@@ -79,6 +83,9 @@ struct App
 	NotifEnabled                    mEnableNotifSound           = NotifEnabled::Always; // Play a sound when a notification is shown.
 
 	OwnedHandle                     mSingleInstanceMutex; // Inter-process mutex making sure we can't run multiple instances of AssetCooker at the same time
+
+private:
+	static StringView mRedirectorPath;
 };
 
 inline App gApp;
