@@ -62,7 +62,6 @@ struct App
 	bool                            mMainWindowIsMinimized = false;
 	bool                            mExitRequested         = false;
 	bool                            mExitReady             = false;
-	String                          mConfigFilePath        = "config.toml";
 	String                          mUserPrefsFilePath     = "prefs.toml";
 	String                          mRuleFilePath          = "rules.toml";
 	LogLevel                        mLogFSActivity         = LogLevel::Normal;
