@@ -9,7 +9,6 @@
 #include "imgui_impl_dx11.h"
 #include <d3d11.h>
 #include <tchar.h>
-#include <map>
 #include <string>
 
 #include "UI.h"
@@ -36,7 +35,7 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-std::map<StringView, StringView> ParseArguments(StringView cmdLine);
+HashMap<StringView, StringView> ParseArguments(StringView cmdLine);
 
 
 // Helper struct to measure CPU/GPU times of the UI updates.
@@ -198,16 +197,18 @@ int WinMain(
 	auto args = ParseArguments(lpCmdLine);
 
 	// Check if we only want to run the tests.
-	if (args.find("-test") != args.end())
+	if (args.Find("-test") != args.end())
 	{
 		return (gRunTests() == TestResult::Success) ? 0 : 1;
 	}
 
 	// Get redirector path
-	if (args.find("-path") != args.end())
+	if (args.Find("-path") != args.end())
 	{
-		std::wstring wPath(args["-path"].begin(), args["-path"].end());
-		SetCurrentDirectory(wPath.c_str());
+		wchar_t	redirector_path_wchar_buffer[4096];
+		auto	redirector_path_wchar = gUtf8ToWideChar(args["-path"], redirector_path_wchar_buffer).value();
+
+		SetCurrentDirectory(redirector_path_wchar.data());
 	}
 
 	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.
@@ -599,9 +600,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-std::map<StringView, StringView> ParseArguments(StringView cmdLine)
+HashMap<StringView, StringView> ParseArguments(StringView cmdLine)
 {
-    std::map<StringView, StringView> args;
+    HashMap<StringView, StringView> args;
     int pos = 0;
 
     while (pos < cmdLine.Size())
