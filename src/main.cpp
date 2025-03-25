@@ -10,6 +10,7 @@
 #include <d3d11.h>
 #include <tchar.h>
 #include <map>
+#include <string>
 
 #include "UI.h"
 #include "App.h"
@@ -203,12 +204,10 @@ int WinMain(
 	}
 
 	// Get redirector path
-	TempString redirectorPath;
 	if (args.find("-path") != args.end())
 	{
-		redirectorPath = args["-path"];
-
-		App::SetRedirectorPath(args["-path"]);
+		std::wstring wPath(args["-path"].begin(), args["-path"].end());
+		SetCurrentDirectory(wPath.c_str());
 	}
 
 	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.

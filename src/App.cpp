@@ -27,8 +27,6 @@
 #include <algorithm> // for std::sort
 #include <stdarg.h>
 
-StringView App::mRedirectorPath = {};
-
 void App::Init()
 {
 	mLog.mAutoAddTime = true;
@@ -334,14 +332,4 @@ void App::CloseLogFile()
 
 	fclose(mLogFile);
 	mLogFile = nullptr;
-}
-
-StringView App::GetRedirectorPath()
-{
-	return mRedirectorPath;
-}
-
-void App::SetRedirectorPath(StringView path)
-{
-	mRedirectorPath = path;
 }
