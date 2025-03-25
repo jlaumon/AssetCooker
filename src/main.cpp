@@ -9,7 +9,6 @@
 #include "imgui_impl_dx11.h"
 #include <d3d11.h>
 #include <tchar.h>
-#include <string>
 
 #include "UI.h"
 #include "App.h"
