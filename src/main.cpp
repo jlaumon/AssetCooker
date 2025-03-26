@@ -202,10 +202,10 @@ int WinMain(
 	}
 
 	// Get redirector path
-	if (args.Find("-path") != args.end())
+	if (args.Find("-working_dir") != args.end())
 	{
 		wchar_t	redirector_path_wchar_buffer[4096];
-		auto	redirector_path_wchar = gUtf8ToWideChar(args["-path"], redirector_path_wchar_buffer).value();
+		auto	redirector_path_wchar = gUtf8ToWideChar(args["-working_dir"], redirector_path_wchar_buffer).value();
 
 		SetCurrentDirectory(redirector_path_wchar.data());
 	}
