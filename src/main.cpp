@@ -34,7 +34,7 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-HashMap<StringView, StringView> ParseArguments(StringView cmdLine);
+static HashMap<StringView, StringView> sParseArguments(StringView inCommandLine);
 
 
 // Helper struct to measure CPU/GPU times of the UI updates.
@@ -193,21 +193,21 @@ int WinMain(
 	defer { gMemFree(gThreadExitTempMemory()); };
 
 	// Extract flags from command line
-	auto args = ParseArguments(lpCmdLine);
+	HashMap args = sParseArguments(lpCmdLine);
 
 	// Check if we only want to run the tests.
-	if (args.Find("-test") != args.end())
+	if (args.Contains("-test"))
 	{
 		return (gRunTests() == TestResult::Success) ? 0 : 1;
 	}
 
-	// Get redirector path
-	if (args.Find("-working_dir") != args.end())
+	// Check if we want to change the working directory.
+	// Note: This has to be done before gApp.Init() since that changes where the config.toml file is read from.
+	if (auto working_dir = args.Find("-working_dir"); working_dir != args.End())
 	{
-		wchar_t	redirector_path_wchar_buffer[4096];
-		auto	redirector_path_wchar = gUtf8ToWideChar(args["-working_dir"], redirector_path_wchar_buffer).value();
-
-		SetCurrentDirectory(redirector_path_wchar.data());
+		TempString abs_working_dir = gGetAbsolutePath(working_dir->mValue);
+		if (!SetCurrentDirectoryA(abs_working_dir.AsCStr()))
+			gAppFatalError(R"(Failed to set working directory to "%s")", abs_working_dir.AsCStr());
 	}
 
 	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.
@@ -599,36 +599,36 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-HashMap<StringView, StringView> ParseArguments(StringView cmdLine)
+HashMap<StringView, StringView> sParseArguments(StringView inCommandLine)
 {
     HashMap<StringView, StringView> args;
     int pos = 0;
 
-    while (pos < cmdLine.Size())
+    while (pos < inCommandLine.Size())
     {
         // Skip spaces
-        while (pos < cmdLine.Size() && cmdLine[pos] == ' ')
+        while (pos < inCommandLine.Size() && inCommandLine[pos] == ' ')
             pos++;
 
         // Find next space or end of string
         int start = pos;
-        while (pos < cmdLine.Size() && cmdLine[pos] != ' ')
+        while (pos < inCommandLine.Size() && inCommandLine[pos] != ' ')
             pos++;
 
         // Extract the token
-        StringView token = cmdLine.SubStr(start, pos - start);
+        StringView token = inCommandLine.SubStr(start, pos - start);
 
         if (!token.Empty() && token.Front() == '-') // It's a flag
         {
             // Peek at next token to check if it's a value (not another flag)
-            while (pos < cmdLine.Size() && cmdLine[pos] == ' ') 
+            while (pos < inCommandLine.Size() && inCommandLine[pos] == ' ') 
                 pos++;
 
-            int valueStart = pos;
-            while (pos < cmdLine.Size() && cmdLine[pos] != ' ') 
+            int value_start = pos;
+            while (pos < inCommandLine.Size() && inCommandLine[pos] != ' ') 
                 pos++;
 
-            StringView value = cmdLine.SubStr(valueStart, pos - valueStart);
+            StringView value = inCommandLine.SubStr(value_start, pos - value_start);
 
             if (value.Empty() || value.Front() == '-') 
             {
