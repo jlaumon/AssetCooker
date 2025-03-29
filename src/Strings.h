@@ -8,7 +8,6 @@
 #include "Core.h"
 
 #include <string_view>
-#include <optional>
 
 #include <Strings.h>
 #include <Bedrock/StringView.h>
@@ -40,8 +39,24 @@ struct MutStringView : Span<char>
 // WStringView.
 using WStringView = std::wstring_view;
 
-// Typedefs for Optional StringViews.
-using OptionalWStringView = Optional<WStringView>;
+
+// Remove any inCharacters at the end of ioString
+constexpr void gRemoveTrailing(StringView& ioString, StringView inCharacters)
+{
+	int pos = ioString.FindLastNotOf(inCharacters);
+	ioString = ioString.SubStr(0, pos + 1);
+}
+
+// Remove any inCharacters at the start of ioString
+constexpr void gRemoveLeading(StringView& ioString, StringView inCharacters)
+{
+	int pos = ioString.FindFirstNotOf(inCharacters);
+
+	if (pos == -1)
+		ioString = {};
+	else
+		ioString = ioString.SubStr(pos);
+}
 
 
 // Return true if inString1 and inString2 are identical.
@@ -148,7 +163,7 @@ inline TempString gFormatSizeInBytes(int64 inBytes)
 TempString gWideCharToUtf8(WStringView inWString);
 
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
-OptionalWStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer);
+WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer);
 
 
 

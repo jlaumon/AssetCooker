@@ -223,7 +223,10 @@ int WinMain(
 	TempString window_title = gTempFormat("%s - Build: %s %s", gApp.mMainWindowTitle.AsCStr(), __DATE__, __TIME__);
 
 	wchar_t     window_title_wchar_buffer[256];
-	auto        window_title_wchar = gUtf8ToWideChar(window_title, window_title_wchar_buffer).value_or(L"Asset Cooker");
+	WStringView window_title_wchar = gUtf8ToWideChar(window_title, window_title_wchar_buffer);
+
+	if (window_title_wchar.empty())
+		window_title_wchar = L"Asset Cooker";
 
 	// TODO move that inside App?
 	// TODO load window size/pos from config file?

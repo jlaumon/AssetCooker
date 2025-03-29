@@ -222,9 +222,9 @@ void App::_LogV(LogType inType, StringView inFormat, va_list inArgs)
 	{
 		wchar_t message_buffer[4096];
 		auto wchar_message = gUtf8ToWideChar(formatted_str, message_buffer);
-		gAssert(wchar_message); // Buffer too small? Why would you log something that long?
+		gAssert(!wchar_message.empty()); // Buffer too small? Why would you log something that long?
 
-		if (wchar_message)
+		if (!wchar_message.empty())
 		{
 			// Write the message to the output.
 			OutputDebugStringW(message_buffer);
