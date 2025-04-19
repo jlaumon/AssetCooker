@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers on version tags like v1.0.0
+
+env:
+  # Path to the solution file relative to the root of the project.
+  SOLUTION_FILE_PATH: AssetCooker.sln
+
+  # Configuration type to build.
+  BUILD_CONFIGURATION: Release
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+  
+      - name: Generate Solution
+        shell: cmd
+        run: premake.bat
+  
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1.1.3
+
+      - name: Build
+        run: msbuild /m /p:Configuration=Release ${{env.SOLUTION_FILE_PATH}}
+
+      # Archive the build artifacts
+      - name: Archive build artifacts
+        shell: powershell
+        run: Compress-Archive -Path "bin\x64\Release\*" -DestinationPath AssetCooker.zip
+
+      # Create a new release
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1.1.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true         # Set draft to true and publish manually later
+          prerelease: false
+
+      # Upload the artifact to the release
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: AssetCooker.zip
+          asset_name: AssetCooker-${{ github.ref_name }}.zip
+          asset_content_type: application/zip
