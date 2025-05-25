@@ -20,19 +20,28 @@ enum class LogLevel : uint8
 	_Count,
 };
 
+StringView gToStringView(LogLevel inVar);
 
-constexpr StringView gToStringView(LogLevel inVar)
+
+enum class DumpMode : int8
 {
-	constexpr StringView cStrings[]
-	{
-		"None",
-		"Normal",
-		"Verbose",
-	};
-	static_assert(gElemCount(cStrings) == (size_t)LogLevel::_Count);
-
-	return cStrings[(int)inVar];
+	Mini,
+	Full,
+	_Count,
 };
+
+StringView gToStringView(DumpMode inVar);
+
+
+enum class SaveDumpOnCrash : int8
+{
+	No,
+	Ask,
+	Always,
+	_Count,
+};
+
+StringView gToStringView(SaveDumpOnCrash inVar);
 
 
 // Manages the initialization and life time of the application.
@@ -79,6 +88,8 @@ struct App
 	NotifEnabled                    mEnableNotifOnCookingFinish = NotifEnabled::WhenMinimized; // Show a notification when cooking finishes.
 	NotifEnabled                    mEnableNotifOnCookingError  = NotifEnabled::Always; // Show a notification when a cooking error occurs (even if cooking isn't finished yet).
 	NotifEnabled                    mEnableNotifSound           = NotifEnabled::Always; // Play a sound when a notification is shown.
+	DumpMode                        mDumpMode                   = DumpMode::Mini;
+	SaveDumpOnCrash                 mSaveDumpOnCrash            = SaveDumpOnCrash::Ask;
 
 	OwnedHandle                     mSingleInstanceMutex; // Inter-process mutex making sure we can't run multiple instances of AssetCooker at the same time
 };
