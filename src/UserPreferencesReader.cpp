@@ -90,6 +90,18 @@ void gReadUserPreferencesFile(StringView inPath)
 		if (reader.TryRead("EnableNotifSound", enable_str))
 			gStringViewToEnum(enable_str, gApp.mEnableNotifSound);
 	}
+
+	// Dumps
+	{
+		TempString str;
+		if (reader.TryRead("DumpMode", str))
+			gStringViewToEnum(str, gApp.mDumpMode);
+	}
+	{
+		TempString str;
+		if (reader.TryRead("SaveDumpOnCrash", str))
+			gStringViewToEnum(str, gApp.mSaveDumpOnCrash);
+	}
 }
 
 
@@ -116,6 +128,9 @@ void gWriteUserPreferencesFile(StringView inPath)
 	prefs_toml.insert("EnableNotifOnCookingError", std::string_view(gToStringView(gApp.mEnableNotifOnCookingError).AsCStr()));
 	prefs_toml.insert("EnableNotifOnCookingFinish", std::string_view(gToStringView(gApp.mEnableNotifOnCookingFinish).AsCStr()));
 	prefs_toml.insert("EnableNotifSound", std::string_view(gToStringView(gApp.mEnableNotifSound).AsCStr()));
+
+	prefs_toml.insert("DumpMode", std::string_view(gToStringView(gApp.mDumpMode).AsCStr()));
+	prefs_toml.insert("SaveDumpOnCrash", std::string_view(gToStringView(gApp.mSaveDumpOnCrash).AsCStr()));
 
 	std::stringstream sstream;
 	sstream << prefs_toml;

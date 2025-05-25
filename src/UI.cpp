@@ -292,6 +292,8 @@ void gDrawMainMenuBar()
 			sMenuEnum("Enable Notif On Cooking Finish", gApp.mEnableNotifOnCookingFinish);
 			sMenuEnum("Enable Notif On Cooking Error", gApp.mEnableNotifOnCookingError);
 			sMenuEnum("Enable Notif Sound", gApp.mEnableNotifSound);
+			sMenuEnum("Save Dump On Crash", gApp.mSaveDumpOnCrash);
+			sMenuEnum("Dump Mode", gApp.mDumpMode);
 
 			float ui_scale = gUIScale.mFromSettings;
 			if (ImGui::DragFloat("UI Scale", &ui_scale, 0.01f, UIScale::cMin, UIScale::cMax, "%.1f"))
@@ -316,6 +318,8 @@ void gDrawMainMenuBar()
 
 			ImGui::EndMenu();
 		}
+		
+		bool confirm_crash = false;
 
 		if (ImGui::BeginMenu("Debug"))
 		{
@@ -333,7 +337,34 @@ void gDrawMainMenuBar()
 			}
 #endif
 
+			if (ImGui::MenuItem("Crash now!"))
+				confirm_crash = true;
+
 			ImGui::EndMenu();
+		}
+
+		if (confirm_crash)
+			ImGui::OpenPopup("Crash now?");
+
+		// Always center this window when appearing
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+		if (ImGui::BeginPopupModal("Crash now?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Asset Cooker is going to crash.");
+			ImGui::Text("Are you sure?");
+
+			if (ImGui::Button("Yes", ImVec2(120, 0)))
+				gCrash("Test crash");
+
+			ImGui::SetItemDefaultFocus();
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+				ImGui::CloseCurrentPopup();
+
+			ImGui::EndPopup();
 		}
 
 		ImGui::EndMainMenuBar();

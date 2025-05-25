@@ -11,3 +11,6 @@
 // Get last error as a string.
 TempString GetLastErrorString();
 
+// Write a dump file.
+struct _EXCEPTION_POINTERS;
+bool gWriteDump(StringView inPath, uint32 inCrashingThreadID, _EXCEPTION_POINTERS* inExceptionInfo);
