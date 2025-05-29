@@ -1,4 +1,4 @@
-﻿---
+---
 BasedOnStyle: Microsoft
 AccessModifierOffset: '-4'
 AlignConsecutiveAssignments: AcrossEmptyLines
@@ -6,7 +6,7 @@ AlignEscapedNewlines: Left
 Cpp11BracedListStyle: 'false'
 PointerAlignment: Left
 TabWidth: '4'
-UseTab: ForContinuationAndIndentation
+UseTab: Always
 ColumnLimit: 180
 AlignTrailingComments:
   Kind: Always
