@@ -77,6 +77,8 @@ Path = 'data/source' # Path to the repo (mandatory). Can be absolute or relative
 [[Repo]]
 Name = "Bin"
 Path = 'data/bin'
+NoOrphanFiles = true # True if the Repo should only contain files that are used by Commands (optional, default: false). 
+                     # See Tools -> Find Orphan Files to delete files that are not used by any Command.
 ```
 
 It is generally a good idea to have at least one Repo for inputs and one for outputs (and perhaps also one for intermediate files).
