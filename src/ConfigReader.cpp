@@ -47,8 +47,12 @@ void gReadConfigFile(StringView inPath)
 			TempString path;
 			reader.Read("Path", path);
 
-			if (!name.Empty() && !path.Empty())
-				gFileSystem.AddRepo(name, path);
+			if (name.Empty() || path.Empty())
+				continue;
+			
+			FileRepo& repo = gFileSystem.AddRepo(name, path);
+
+			reader.TryRead("NoOrphanFiles", repo.mNoOrphanFiles);
 		}
 	}
 

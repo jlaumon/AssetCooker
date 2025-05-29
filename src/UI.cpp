@@ -16,44 +16,48 @@
 #include <Bedrock/Ticks.h>
 #include <Bedrock/Random.h>
 #include <Bedrock/StringFormat.h>
+#include <Bedrock/FunctionRef.h>
 
 #include "win32/misc.h"
 #include "win32/window.h"
 
-extern "C" __declspec(dllimport) HINSTANCE WINAPI ShellExecuteA(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShowCmd);
+
+extern "C" __declspec(dllimport)
+HINSTANCE WINAPI ShellExecuteA(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShowCmd);
 
 
 // TODO add open path button even if file doesn't exist (just open the folder, and maybe even create it?)
 // TODO add copy command line button to command popup
 
-static ImGuiStyle      sDarkTheme();
-ImGuiStyle             gStyle = sDarkTheme();
+static ImGuiStyle	  sDarkTheme();
+ImGuiStyle			  gStyle						   = sDarkTheme();
 
-bool                   gOpenImGuiDemo                   = false;
-bool                   gOpenDebugWindow                 = false;
-bool                   gOpenCookingThreadsWindow        = false;
-CookingLogEntryID      gSelectedCookingLogEntry         = {};
-bool                   gScrollToSelectedCookingLogEntry = false;
-int                    gFirstCookingLogEntryIndex       = 0;
+bool				  gOpenImGuiDemo				   = false;
+bool				  gOpenDebugWindow				   = false;
+bool				  gOpenCookingThreadsWindow		   = false;
+bool				  gOpenOrphanFilesWindow		   = false;
+CookingLogEntryID	  gSelectedCookingLogEntry		   = {};
+bool				  gScrollToSelectedCookingLogEntry = false;
+int					  gFirstCookingLogEntryIndex	   = 0;
 
-constexpr const char*  cWindowNameAppLog                = "App Log";
-constexpr const char*  cWindowNameCommandOutput         = "Command Output";
-constexpr const char*  cWindowNameCommandSearch         = "Command Search";
-constexpr const char*  cWindowNameFileSearch            = "File Search";
-constexpr const char*  cWindowNameWorkerThreads         = "Worker Threads";
-constexpr const char*  cWindowNameCookingQueue          = "Cooking Queue";
-constexpr const char*  cWindowNameCookingLog            = "Cooking Log";
+constexpr const char* cWindowNameAppLog				   = "App Log";
+constexpr const char* cWindowNameCommandOutput		   = "Command Output";
+constexpr const char* cWindowNameCommandSearch		   = "Command Search";
+constexpr const char* cWindowNameFileSearch			   = "File Search";
+constexpr const char* cWindowNameWorkerThreads		   = "Worker Threads";
+constexpr const char* cWindowNameCookingQueue		   = "Cooking Queue";
+constexpr const char* cWindowNameCookingLog			   = "Cooking Log";
 
-int64                  gCurrentTimeInTicks              = 0;
+int64				  gCurrentTimeInTicks			   = 0;
 
 // TODO these colors are terrible
-constexpr uint32       cColorTextError                  = IM_COL32(255, 100, 100, 255);
-constexpr uint32       cColorTextSuccess                = IM_COL32( 98, 214,  86, 255);
-constexpr uint32       cColorFrameBgError               = IM_COL32(150,  60,  60, 255);
+constexpr uint32	  cColorTextError		  = IM_COL32(255, 100, 100, 255);
+constexpr uint32	  cColorTextSuccess		  = IM_COL32(98, 214, 86, 255);
+constexpr uint32	  cColorFrameBgError	  = IM_COL32(150, 60, 60, 255);
 
-constexpr uint32       cColorTextFileDeleted            = IM_COL32(170, 170, 170, 255);
-constexpr uint32       cColorTextInputModified          = IM_COL32( 65, 171, 240, 255);
-constexpr uint32       cColorTextOuputOutdated          = IM_COL32(255, 100, 100, 255);
+constexpr uint32	  cColorTextFileDeleted	  = IM_COL32(170, 170, 170, 255);
+constexpr uint32	  cColorTextInputModified = IM_COL32(65, 171, 240, 255);
+constexpr uint32	  cColorTextOuputOutdated = IM_COL32(255, 100, 100, 255);
 
 
 
@@ -212,6 +216,22 @@ void gDrawMainMenuBar()
 			if (ImGui::DragFloat("UI Scale", &ui_scale, 0.01f, UIScale::cMin, UIScale::cMax, "%.1f"))
 				gUISetUserScale(ui_scale);
 
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Tools"))
+		{
+			ImGui::MenuItem("Find Orphan Files", nullptr, &gOpenOrphanFilesWindow);
+
+			if (ImGui::BeginItemTooltip())
+			{
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 50.0f);
+				ImGui::TextUnformatted("Orphan files are not used by any Command (not inputs and not outputs).");
+				ImGui::TextUnformatted("In Repos that store outputs, it's generally fine to delete them, and this tool is here to help.");
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
 
 			ImGui::EndMenu();
 		}
@@ -1183,6 +1203,127 @@ void gDrawCookingThreads()
 	ImGui::End();
 }
 
+
+// Window that displays the list of files that are not used by any command, and buttons to delete them.
+void gDrawOrphanFilesWindow()
+{
+	defer { ImGui::End(); };
+
+	if (!ImGui::Begin("Find Orphan Files", &gOpenOrphanFilesWindow, ImGuiWindowFlags_NoDocking))
+		return;
+
+	if (gFileSystem.GetRepos().Empty() || gFileSystem.GetInitState() != FileSystem::InitState::Ready)
+		return;
+
+	TempVector<const char*> repos;
+	for (const FileRepo& repo : gFileSystem.GetRepos())
+	{
+		if (repo.mNoOrphanFiles)
+			repos.PushBack(repo.mName.AsCStr());
+	}
+
+	if (repos.Empty())
+	{
+		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextUnformatted("Orphan files are not used by any Command (not inputs and not outputs).");
+		ImGui::TextUnformatted("\n");
+		ImGui::TextUnformatted("In Repos that store outputs, it's generally fine to delete them, and this tool is here to help.");
+		ImGui::TextUnformatted("\n");
+		ImGui::TextUnformatted("Start by adding 'NoOrphanFiles = true' on Repos where necessary in your Config.toml.");
+		ImGui::PopTextWrapPos();
+		return;
+	}
+
+	static bool			   update_file_list = true;
+	static int			   selected_repo	= 0;
+	static Vector<FileID>  orphan_files;
+	static ImGuiTextFilter filter;
+
+	if (ImGui::ListBox("Repos", &selected_repo, repos.Data(), repos.Size()))
+		update_file_list = true;
+
+	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
+		update_file_list = true;
+
+	// Build/update the list of orphan files.
+	if (update_file_list)
+	{
+		update_file_list = false;
+		orphan_files.Clear();
+
+		const FileRepo& repo = *gFileSystem.FindRepo(StringView(repos[selected_repo]));
+
+		for (const FileInfo& file : repo.mFiles)
+		{
+			if (file.IsDeleted() || file.IsDirectory())
+				continue;
+
+			if (!file.mInputOf.Empty() || !file.mOutputOf.Empty())
+				continue; // Not an orphan file.
+
+			if (filter.PassFilter(file.ToString()))
+				orphan_files.PushBack(file.mID);
+		}
+	}
+
+	ImGui::AlignTextToFramePadding();
+	ImGui::Text("%d items", orphan_files.Size());
+
+	// Add the delete all button.
+	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Delete All " ICON_FK_TRASH_O).x);
+	if (ImGui::Button("Delete All " ICON_FK_TRASH_O))
+	{
+		for (int i = orphan_files.Size() - 1; i >= 0; i--)
+		{
+			if (gFileSystem.DeleteFile(orphan_files[i]))
+				orphan_files.Erase(i);
+		}
+	}
+
+	// Draw the file list.
+	if (ImGui::BeginTable("OrphanFiles", 2, ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersOuter))
+	{
+		ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Delete", ImGuiTableColumnFlags_WidthFixed);
+
+		ImGui::TableNextRow();
+
+		int deleted_file_index = -1;
+
+		ImGuiListClipper clipper;
+		clipper.Begin(orphan_files.Size());
+		while (clipper.Step())
+		{
+			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+			{
+				// Draw the file.
+				ImGui::TableNextColumn();
+				gDrawFileInfo(orphan_files[i].GetFile());
+
+				// Draw the delete button.
+				ImGui::TableNextColumn();
+				ImGui::PushID(i);
+				if (ImGui::Button(ICON_FK_TRASH_O))
+				{
+					// Delete the file.
+					if (gFileSystem.DeleteFile(orphan_files[i]))
+						deleted_file_index = i;
+				}
+				ImGui::PopID();
+			}
+		}
+		clipper.End();
+
+		ImGui::EndTable();
+
+		// Remove the file immediately from the list.
+		// The FileSystem won't know that the file is deleted for maybe another second, so it's too soon to update the list.
+		if (deleted_file_index != -1)
+			orphan_files.Erase(deleted_file_index);
+	}
+}
+
+
 extern bool gDebugFailCookingRandomly;
 extern bool gDebugFailOpenFileRandomly;
 
@@ -1255,7 +1396,7 @@ void gDrawDebugWindow()
 		clipper.End();
 	}
 
-	for (FileRepo& repo : gFileSystem.mRepos)
+	for (const FileRepo& repo : gFileSystem.GetRepos())
 	{
 		ImGui::PushID(&repo);
 		if (ImGui::CollapsingHeader(gTempFormat("%s (%s) - %d Files##Repo", repo.mName.AsCStr(), repo.mRootPath.AsCStr(), repo.mFiles.Size())))
@@ -1441,6 +1582,9 @@ void gDrawMain()
 
 	if (gOpenImGuiDemo)
 		ImGui::ShowDemoWindow(&gOpenImGuiDemo);
+
+	if (gOpenOrphanFilesWindow)
+		gDrawOrphanFilesWindow();
 
 	// If the App failed to Init, set the focus on the Log because it will contain the errors details.
 	// Doesn't work until the windows have been drawn once (not sure why), so do it at the end.

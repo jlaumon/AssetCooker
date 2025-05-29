@@ -272,15 +272,16 @@ struct FileRepo : NoCopy
 	};
 	void                ScanFile(FileInfo& ioFile, RequestedAttributes inRequestedAttributes);
 
-	uint32              mIndex = 0;    // The index of this repo.
-	StringView          mName;         // A named used to identify the repo.
-	StringView          mRootPath;     // Absolute path to the repo. Starts with the drive letter, ends with a slash.
-	FileDrive&          mDrive;        // The drive this repo is on.
-	FileID              mRootDirID;    // The FileID of the root dir.
+	uint32				mIndex = 0;				// The index of this repo.
+	StringView			mName;					// A named used to identify the repo.
+	StringView			mRootPath;				// Absolute path to the repo. Starts with the drive letter, ends with a slash.
+	FileDrive&			mDrive;					// The drive this repo is on.
+	FileID				mRootDirID;				// The FileID of the root dir.
+	bool				mNoOrphanFiles = false; // True when the repo is not supposed to contain orphan files (files that are neither inputs or outputs of any command).
 
-	VMemArray<FileInfo> mFiles;        // All the files in this repo.
+	VMemArray<FileInfo> mFiles;					// All the files in this repo.
 
-	StringPool          mStringPool;   // Pool for storing all the paths.
+	StringPool			mStringPool;			// Pool for storing all the paths.
 };
 
 
@@ -317,7 +318,7 @@ struct FileDrive : NoCopy
 
 struct FileSystem : NoCopy
 {
-	void            AddRepo(StringView inName, StringView inRootPath);	// Path can be absolute or relative to current directory.
+	FileRepo&       AddRepo(StringView inName, StringView inRootPath);	// Path can be absolute or relative to current directory.
 
 	void            StartMonitoring(); // Only call after adding all repos.
 	void            StopMonitoring();
@@ -327,6 +328,7 @@ struct FileSystem : NoCopy
 
 	FileRepo&		GetRepo(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex]; }
 	FileInfo&		GetFile(FileID inFileID)			{ return mRepos[inFileID.mRepoIndex].GetFile(inFileID); }
+	Span<const FileRepo> GetRepos() const				{ return mRepos; }
 
 	FileRepo*       FindRepo(StringView inRepoName);                   // Find a repo by name. Return nullptr if not found.
 	FileRepo*       FindRepoByPath(StringView inAbsolutePath);         // Find a repo by path. The path can be of a file inside the repo. Return nullptr if not found.

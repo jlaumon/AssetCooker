@@ -1042,7 +1042,8 @@ FileID FileSystem::FindFileIDByPathHash(PathHash inPathHash) const
 	return {};
 }
 
-void FileSystem::AddRepo(StringView inName, StringView inRootPath)
+
+FileRepo& FileSystem::AddRepo(StringView inName, StringView inRootPath)
 {
 	gAssert(!IsMonitoringStarted()); // Can't add repos once the threads have started, it's not thread safe!
 	gAssert(gIsNullTerminated(inRootPath));
@@ -1082,7 +1083,7 @@ void FileSystem::AddRepo(StringView inName, StringView inRootPath)
 		}
 	}
 
-	mRepos.Emplace({}, (uint32)mRepos.Size(), inName, root_path, GetOrAddDrive(root_path[0]));
+	return mRepos.Emplace({}, (uint32)mRepos.Size(), inName, root_path, GetOrAddDrive(root_path[0]));
 }
 
 
