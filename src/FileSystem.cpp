@@ -1547,7 +1547,7 @@ void FileSystem::LoadCache()
 		return;
 	}
 
-	Vector<StringView> all_valid_repos;
+	Vector<StringView> valid_repos;
 	int total_repo_count = 0;
 
 	// Read all drives and repos.
@@ -1599,12 +1599,20 @@ void FileSystem::LoadCache()
 			}
 		}
 
+		if (!rescan_needed)
+		{
+			// Remember we're loading this drive from the cache to skip the initial scan
+			// (unless a rescan is needed, then we explicitly don't want to skip it!)
+			drive->mLoadedFromCache = true;
+
+			// Set the next USN we should read.
+			// (If a rescan is needed, don't overwrite mNextUSN. next_usn is too old and we're going to read everything anyway).
+			drive->mNextUSN = next_usn;
+		}
+
 		uint16 repo_count = 0;
 		bin.Read(repo_count);
 		total_repo_count += repo_count;
-
-		TempVector<StringView> valid_repos;
-		valid_repos.Reserve(repo_count);
 
 		for (int repo_index = 0; repo_index < (int)repo_count; ++repo_index)
 		{
@@ -1633,26 +1641,9 @@ void FileSystem::LoadCache()
 				}
 			}
 
+			// Add the repos names to the list of valid repos so that we read their content later.
 			if (drive_valid && repo_valid)
 				valid_repos.PushBack(repo->mName);
-		}
-
-		// If all repos for this drive are valid, we can use the cached state.
-		if (drive_valid && valid_repos.Size() == drive->mRepos.Size())
-		{
-			if (!rescan_needed)
-			{
-				// Remember we're loading this drive from the cache to skip the initial scan
-				// (unless a rescan is needed, then we explicitly don't want to skip it!)
-				drive->mLoadedFromCache = true;
-
-				// Set the next USN we should read.
-				// (If a rescan is needed, don't overwrite mNextUSN. next_usn is too old and we're going to read everything anyway).
-				drive->mNextUSN = next_usn;
-			}
-
-			// Add the repos names to the list of valid repos so that we read their content later.
-			all_valid_repos.Insert(all_valid_repos.Size(), valid_repos);
 		}
 	}
 
@@ -1672,7 +1663,7 @@ void FileSystem::LoadCache()
 
 		FileRepo* repo = FindRepo(repo_name);
 
-		const bool repo_valid    = gContains(all_valid_repos, repo_name);
+		const bool repo_valid    = gContains(valid_repos, repo_name);
 		const bool rescan_needed = repo_valid && !repo->mDrive.mLoadedFromCache;
 
 		if (!bin.ExpectLabel("STRINGS"))
@@ -1733,8 +1724,8 @@ void FileSystem::LoadCache()
 	Vector<ErroredCommand> errored_commands;
 
 	// Read the commands.
-	int total_commands = 0;
-	uint16 rule_count     = 0;
+	int	   total_commands = 0;
+	uint16 rule_count	  = 0;
 	bin.Read(rule_count);
 	for (int rule_index = 0; rule_index < (int)rule_count; ++rule_index)
 	{
@@ -1746,7 +1737,7 @@ void FileSystem::LoadCache()
 
 		// This info is also in the CookingRule but we serialize it to be able to
 		// properly skip the serialized data if the rule was changed.
-		bool rule_use_dep_file;
+		bool rule_use_dep_file = false;
 		bin.Read(rule_use_dep_file);
 
 		uint16 rule_version = 0;
