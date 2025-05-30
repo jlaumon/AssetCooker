@@ -38,7 +38,7 @@ void App::Init()
 	gAppLog("UTF8 is %s.", GetACP() == CP_UTF8 ? "supported. Noice" : "not supported");
 
 	// Read the config file.
-	gReadConfigFile("config.toml");
+	gReadConfigFile(mConfigFilePath);
 
 	// Read the user prefs file.
 	gReadUserPreferencesFile(mUserPrefsFilePath);

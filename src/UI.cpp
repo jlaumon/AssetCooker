@@ -191,6 +191,12 @@ void gDrawMainMenuBar()
 	{
 		if (ImGui::BeginMenu("File"))
 		{
+			if (ImGui::MenuItem("Open Config File"))
+				ShellExecuteA(nullptr, "open", gApp.mConfigFilePath.AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
+
+			if (ImGui::MenuItem("Open Rules File"))
+				ShellExecuteA(nullptr, "open", gApp.mRuleFilePath.AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
+;
 			if (ImGui::MenuItem("Exit", "Alt + F4"))
 				gApp.RequestExit();
 

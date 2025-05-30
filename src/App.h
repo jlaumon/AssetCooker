@@ -56,20 +56,21 @@ struct App
 	void                            OpenLogFile();
 	void                            CloseLogFile();
 
-	String                          mMainWindowTitle       = "Asset Cooker";
-	void*                           mMainWindowHwnd        = nullptr;
-	void*                           mNotifMenuHmenu        = nullptr;
-	bool                            mMainWindowIsMinimized = false;
-	bool                            mExitRequested         = false;
-	bool                            mExitReady             = false;
-	String                          mUserPrefsFilePath     = "prefs.toml";
-	String                          mRuleFilePath          = "rules.toml";
-	LogLevel                        mLogFSActivity         = LogLevel::Normal;
+	String							mMainWindowTitle	   = "Asset Cooker";
+	void*							mMainWindowHwnd		   = nullptr;
+	void*							mNotifMenuHmenu		   = nullptr;
+	bool							mMainWindowIsMinimized = false;
+	bool							mExitRequested		   = false;
+	bool							mExitReady			   = false;
+	String							mConfigFilePath		   = "config.toml";
+	String							mUserPrefsFilePath	   = "prefs.toml";
+	String							mRuleFilePath		   = "rules.toml";
+	LogLevel						mLogFSActivity		   = LogLevel::Normal;
 	struct Log                      mLog;
-	FILE*                           mLogFile        = nullptr;
-	String                          mLogDirectory   = "Logs";
-	String                          mCacheDirectory = "Cache";
-	String                          mInitError;
+	FILE*							mLogFile		= nullptr;
+	String							mLogDirectory	= "Logs";
+	String							mCacheDirectory = "Cache";
+	String							mInitError;
 
 	bool                            mHideWindowOnMinimize       = true; // Hide the window when minimizing it.
 	bool                            mStartMinimized             = false; // Start with the window minimized (or hidden if mHideWindowOnMinimize is set).
