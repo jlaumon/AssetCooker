@@ -1405,8 +1405,13 @@ void gDrawDebugWindow()
 	for (const FileRepo& repo : gFileSystem.GetRepos())
 	{
 		ImGui::PushID(&repo);
-		if (ImGui::CollapsingHeader(gTempFormat("%s (%s) - %d Files##Repo", repo.mName.AsCStr(), repo.mRootPath.AsCStr(), repo.mFiles.Size())))
+		if (ImGui::CollapsingHeader(gTempFormat("Repo %s (%s) - %d Files%s##Repo", 
+			repo.mName.AsCStr(), 
+			repo.mRootPath.AsCStr(), 
+			repo.mFiles.Size(), 
+			repo.mLoadedFromCache ? " (loaded from cache)" : "")))
 		{
+
 			ImGuiListClipper clipper;
 			clipper.Begin(repo.mFiles.Size());
 			while (clipper.Step())
