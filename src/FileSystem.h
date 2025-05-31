@@ -272,16 +272,17 @@ struct FileRepo : NoCopy
 	};
 	void                ScanFile(FileInfo& ioFile, RequestedAttributes inRequestedAttributes);
 
-	uint32				mIndex = 0;				// The index of this repo.
-	StringView			mName;					// A named used to identify the repo.
-	StringView			mRootPath;				// Absolute path to the repo. Starts with the drive letter, ends with a slash.
-	FileDrive&			mDrive;					// The drive this repo is on.
-	FileID				mRootDirID;				// The FileID of the root dir.
-	bool				mNoOrphanFiles = false; // True when the repo is not supposed to contain orphan files (files that are neither inputs or outputs of any command).
+	uint32				mIndex = 0;				  // The index of this repo.
+	StringView			mName;					  // A named used to identify the repo.
+	StringView			mRootPath;				  // Absolute path to the repo. Starts with the drive letter, ends with a slash.
+	FileDrive&			mDrive;					  // The drive this repo is on.
+	FileID				mRootDirID;				  // The FileID of the root dir.
+	bool				mNoOrphanFiles	 = false; // True when the repo is not supposed to contain orphan files (files that are neither inputs or outputs of any command).
+	bool				mLoadedFromCache = false; // True when the content of this repo was loaded from the cache.
 
-	VMemArray<FileInfo> mFiles;					// All the files in this repo.
+	VMemArray<FileInfo> mFiles;					  // All the files in this repo.
 
-	StringPool			mStringPool;			// Pool for storing all the paths.
+	StringPool			mStringPool;			  // Pool for storing all the paths.
 };
 
 
@@ -305,7 +306,6 @@ struct FileDrive : NoCopy
 	uint64                 mUSNJournalID = 0; // Journal ID, needed to query the USN journal.
 	USN                    mFirstUSN     = 0;
 	USN                    mNextUSN      = 0;
-	bool                   mLoadedFromCache = false;
 	Vector<FileRepo*>      mRepos;
 
 	using FilesByRefNumberMap = VMemHashMap<FileRefNumber, FileID>;

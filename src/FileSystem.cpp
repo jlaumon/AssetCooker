@@ -1144,7 +1144,7 @@ int FileSystem::GetFileCount() const
 void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBufferUSN)
 {
 	// Early out if we have everything from the cache already.
-	if (gAllOf(mDrives, [](const FileDrive& inDrive) { return inDrive.mLoadedFromCache; }))
+	if (gAllOf(mRepos, [](const FileRepo& inRepo) { return inRepo.mLoadedFromCache; }))
 		return;
 
 	gAppLog("Starting initial scan.");
@@ -1165,7 +1165,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 	for (FileRepo& repo : mRepos)
 	{
 		// Skip repos that were already loaded from the cache.
-		if (repo.mDrive.mLoadedFromCache)
+		if (repo.mLoadedFromCache)
 			continue;
 
 		scan_queue.Push(repo.mRootDirID);
@@ -1207,7 +1207,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 	int total_files = 0;
 	for (auto& repo : mRepos)
-		if (!repo.mDrive.mLoadedFromCache)
+		if (!repo.mLoadedFromCache)
 			total_files += repo.mFiles.SizeRelaxed();
 
 	gAppLog("Done. Found %d files in %.2f seconds.", 
@@ -1215,10 +1215,12 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 	mInitState.Store(InitState::ReadingUSNJournal);
 
+	// Read the entire USN journal to get the last USN for as many files as possible.
+	// This is faster than requesting USN for individual files even though we have to browse a lot of record.
 	for (FileDrive& drive : mDrives)
 	{
 		// Skip drives that were already loaded from the cache.
-		if (drive.mLoadedFromCache)
+		if (gAllOf(drive.mRepos, [](const FileRepo* inRepo) { return inRepo->mLoadedFromCache; }))
 			continue;
 
 		timer.Reset();
@@ -1226,8 +1228,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 
 		int file_count = 0;
 
-		// Read the entire USN journal to get the last USN for as many files as possible.
-		// This is faster than requesting USN for individual files even though we have to browse a lot of record.
+		// Read the entire USN journal.
 		USN start_usn = 0;
 		drive.ReadUSNJournal(start_usn, ioBufferUSN, [this, &drive, &file_count](const USN_RECORD_V3& inRecord) 
 		{
@@ -1249,7 +1250,7 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 	for (auto& repo : mRepos)
 	{
 		// Skip repos that were loaded from the cache.
-		if (repo.mDrive.mLoadedFromCache)
+		if (repo.mLoadedFromCache)
 			continue;
 
 		for (auto& file : repo.mFiles)
@@ -1344,11 +1345,12 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 	// Load the cached state.
 	LoadCache();
 
-	// For drives initialized from the cache, read all the changes since the cache was saved.
+	// For drives that have repos initialized from the cache, read all the changes since the cache was saved.
 	// This needs to be done before processing dirty states/starting cooking, as we don't know the final state of the files yet.
+	// Repos not loaded from the cache should be empty by this point, so the changes will be ignored/overriden by the inital scan.
 	for (auto& drive : mDrives)
 	{
-		if (drive.mLoadedFromCache == false)
+		if (gNoneOf(drive.mRepos, [](const FileRepo* inRepo) { return inRepo->mLoadedFromCache; }))
 			continue;
 
 		// Process the queue.
@@ -1601,10 +1603,6 @@ void FileSystem::LoadCache()
 
 		if (!rescan_needed)
 		{
-			// Remember we're loading this drive from the cache to skip the initial scan
-			// (unless a rescan is needed, then we explicitly don't want to skip it!)
-			drive->mLoadedFromCache = true;
-
 			// Set the next USN we should read.
 			// (If a rescan is needed, don't overwrite mNextUSN. next_usn is too old and we're going to read everything anyway).
 			drive->mNextUSN = next_usn;
@@ -1629,7 +1627,7 @@ void FileSystem::LoadCache()
 			bool      repo_valid = true;
 			if (repo == nullptr)
 			{
-				gAppLogError(R"(Repo "%s" is listed in the cache but doesn't exist anymore, ignoring cache.)", repo_name.AsCStr());
+				gAppLogError(R"(Repo "%s" is listed in the cache but doesn't exist anymore.)", repo_name.AsCStr());
 				repo_valid = false;
 			}
 			else
@@ -1643,7 +1641,14 @@ void FileSystem::LoadCache()
 
 			// Add the repos names to the list of valid repos so that we read their content later.
 			if (drive_valid && repo_valid)
+			{
 				valid_repos.PushBack(repo->mName);
+
+				// Remember we're loading this repo from the cache to skip the initial scan
+				// (unless a rescan is needed, then we explicitly don't want to skip it!)
+				if (!rescan_needed)
+					repo->mLoadedFromCache = true;
+			}
 		}
 	}
 
@@ -1664,7 +1669,7 @@ void FileSystem::LoadCache()
 		FileRepo* repo = FindRepo(repo_name);
 
 		const bool repo_valid    = gContains(valid_repos, repo_name);
-		const bool rescan_needed = repo_valid && !repo->mDrive.mLoadedFromCache;
+		const bool rescan_needed = repo_valid && !repo->mLoadedFromCache;
 
 		if (!bin.ExpectLabel("STRINGS"))
 			break;
@@ -1855,8 +1860,8 @@ void FileSystem::LoadCache()
 
 	int total_files = 0;
 	for (auto& repo : mRepos)
-		if (repo.mDrive.mLoadedFromCache)
-			total_files += (int)repo.mFiles.SizeRelaxed();
+		if (repo.mLoadedFromCache)
+			total_files += repo.mFiles.SizeRelaxed();
 
 	gAppLog("Done. Found %d Files and %d Commands in %.2f seconds.", 
 		total_files, total_commands, gTicksToSeconds(timer.GetTicks()));
