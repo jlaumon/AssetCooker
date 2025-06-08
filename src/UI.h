@@ -11,6 +11,7 @@ void gUISetDPIScale(float inDPIScale);
 void gUISetUserScale(float inScale);
 float gUIGetUserScale();
 void gUIUpdate();
+void gUIClearState(); // Clear all internal state to make sure the UI doesn't keep FileIDs, CookingCommandIDs, etc.
 
 void gDrawMainMenuBar();
 void gDrawMain();

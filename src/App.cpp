@@ -69,6 +69,9 @@ void App::Exit()
 
 	gAppLog("Au revoir.");
 	CloseLogFile();
+	mLog.Clear();
+
+	mSingleInstanceMutex = {};
 }
 
 
@@ -252,7 +255,7 @@ void App::OpenLogFile()
 
 	// Build the log file name.
 	LocalTime  current_time = gGetLocalTime();
-	TempString new_log_file = gTempFormat("%s\\%s%04u-%02u-%02u_%02u-%02u-%02u%s",
+	mLogFilePath = gTempFormat("%s\\%s%04u-%02u-%02u_%02u-%02u-%02u%s",
 		mLogDirectory.AsCStr(), log_file_prefix.AsCStr(),
 		current_time.mYear, current_time.mMonth, current_time.mDay,
 		current_time.mHour, current_time.mMinute, current_time.mSecond,
@@ -263,7 +266,7 @@ void App::OpenLogFile()
 		// Do it inside the log lock because we want to dump the current log into the file before more is added.
 		LockGuard lock(mLog.mMutex);
 
-		mLogFile = fopen(new_log_file.AsCStr(), "wt");
+		mLogFile = fopen(mLogFilePath.AsCStr(), "wt");
 		
 		if (mLogFile)
 		{
@@ -276,7 +279,7 @@ void App::OpenLogFile()
 	}
 
 	if (mLogFile == nullptr)
-		gAppLogError(R"(Failed to open log file "%s" - %s)", new_log_file.AsCStr(), GetLastErrorString().AsCStr());
+		gAppLogError(R"(Failed to open log file "%s" - %s)", mLogFilePath.AsCStr(), GetLastErrorString().AsCStr());
 
 	// Clean up old log files.
 	{

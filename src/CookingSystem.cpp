@@ -906,6 +906,7 @@ void CookingSystem::StopCooking()
 
 	for (auto& thread : mCookingThreads)
 		thread.mThread.Join();
+	mCookingThreads.Clear();
 
 	mJobObject = {};
 
