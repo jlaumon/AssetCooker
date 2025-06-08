@@ -10,10 +10,13 @@
 #include "win32/io.h"
 #include "win32/misc.h"
 
-OwnedHandle::~OwnedHandle()
+void OwnedHandle::Close()
 {
 	if (mHandle != cInvalid)
+	{
 		CloseHandle(mHandle);
+		mHandle = cInvalid;
+	}
 }
 
 

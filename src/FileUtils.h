@@ -15,12 +15,13 @@ struct OwnedHandle : NoCopy
 
 	OwnedHandle()									= default;
 	OwnedHandle(void* inHandle)						{ mHandle = inHandle; }
-	~OwnedHandle();									// Close the handle.
+	~OwnedHandle()									{ Close(); }								
 	OwnedHandle(OwnedHandle&& ioOther)				{ mHandle = ioOther.mHandle; ioOther.mHandle = cInvalid; }
-	OwnedHandle& operator=(OwnedHandle&& ioOther)	{ mHandle = ioOther.mHandle; ioOther.mHandle = cInvalid; return *this; }
+	OwnedHandle& operator=(OwnedHandle&& ioOther)	{ Close(); mHandle = ioOther.mHandle; ioOther.mHandle = cInvalid; return *this; }
 
 	operator void*() const							{ return mHandle; }
 	bool IsValid() const							{ return mHandle != cInvalid; }
+	void Close();									// Close the handle.
 
 	void* mHandle = cInvalid;
 };
