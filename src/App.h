@@ -66,8 +66,9 @@ struct App
 	String							mUserPrefsFilePath	   = "prefs.toml";
 	String							mRuleFilePath		   = "rules.toml";
 	LogLevel						mLogFSActivity		   = LogLevel::Normal;
-	struct Log                      mLog;
-	FILE*							mLogFile		= nullptr;
+	struct Log						mLog;
+	FILE*							mLogFile = nullptr;
+	String							mLogFilePath;
 	String							mLogDirectory	= "Logs";
 	String							mCacheDirectory = "Cache";
 	String							mInitError;

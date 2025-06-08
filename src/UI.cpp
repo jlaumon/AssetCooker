@@ -17,6 +17,7 @@
 #include <Bedrock/Random.h>
 #include <Bedrock/StringFormat.h>
 #include <Bedrock/FunctionRef.h>
+#include <Bedrock/Storage.h>
 
 #include "win32/misc.h"
 #include "win32/window.h"
@@ -49,6 +50,7 @@ constexpr const char* cWindowNameCookingQueue		   = "Cooking Queue";
 constexpr const char* cWindowNameCookingLog			   = "Cooking Log";
 
 int64				  gCurrentTimeInTicks			   = 0;
+int64				  gUIStartTicks					   = gProcessStartTicks;
 
 // TODO these colors are terrible
 constexpr uint32	  cColorTextError		  = IM_COL32(255, 100, 100, 255);
@@ -59,6 +61,36 @@ constexpr uint32	  cColorTextFileDeleted	  = IM_COL32(170, 170, 170, 255);
 constexpr uint32	  cColorTextInputModified = IM_COL32(65, 171, 240, 255);
 constexpr uint32	  cColorTextOuputOutdated = IM_COL32(255, 100, 100, 255);
 
+
+// A silly hack to keep track of in-function static variables and be able to re-initialize them.
+// This is useful when reloading config/rules files, because we want to reinitialize everything.
+struct StaticStorageManager
+{
+	template <class taType>
+	void EnsureCreated(Storage<taType>& ioVariable)
+	{
+		if (ioVariable.IsCreated())
+			return; // Nothing to do.
+
+		// Construct the variable and store a callback to its destructor.
+		ioVariable.Create();
+		mDestructors.PushBack([&ioVariable] { ioVariable.Destroy(); });
+	}
+
+	void Clear()
+	{
+		// Call all the destructors.
+		for (auto& dtor : mDestructors)
+			dtor();
+
+		// Clear the list.
+		mDestructors.Clear();
+	}
+
+private:
+	Vector<Function<void()>> mDestructors;
+};
+StaticStorageManager gUIStateManager;
 
 
 const char* gGetAnimatedHourglass()
@@ -170,6 +202,12 @@ void gUIUpdate()
 	}
 }
 
+void gUIClearState()
+{
+	// Reset all the static variables in the UI functions.
+	gUIStateManager.Clear();
+}
+
 
 template <typename taEnumType>
 static void sMenuEnum(StringView inLabel, taEnumType& ioValue)
@@ -196,7 +234,44 @@ void gDrawMainMenuBar()
 
 			if (ImGui::MenuItem("Open Rules File"))
 				ShellExecuteA(nullptr, "open", gApp.mRuleFilePath.AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
-;
+
+			if (ImGui::MenuItem("Open Log File"))
+				ShellExecuteA(nullptr, "open", gApp.mLogFilePath.AsCStr(), nullptr, nullptr, SW_SHOWDEFAULT);
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Restart " ICON_FK_UNDO))
+			{
+				// Stop all the threads.
+				gFileSystem.StopMonitoring();
+
+				// Clear the UI state (don't keep lists of FileID, etc.)
+				gUIClearState();
+
+				// Destroy the globals.
+				gApp.Exit();
+				gFileSystem.~FileSystem();
+				gCookingSystem.~CookingSystem();
+
+				// Reset the UI start ticks, otherwise the "Init complete in %.2f seconds" message will be wrong.
+				gUIStartTicks = gGetTickCount();
+
+				// Recreate the globals.
+				gPlacementNew(gFileSystem);
+				gPlacementNew(gCookingSystem);
+
+				// Start again.
+				gApp.Init();
+			}
+
+			if (ImGui::BeginItemTooltip())
+			{
+				ImGui::TextUnformatted("Reloads the Config File and Rules File.");
+				ImGui::EndTooltip();
+			}
+
+			ImGui::Separator();
+
 			if (ImGui::MenuItem("Exit", "Alt + F4"))
 				gApp.RequestExit();
 
@@ -1026,26 +1101,32 @@ void gDrawCommandSearch()
 		return;
 	}
 
-	static ImGuiTextFilter              filter;
-	static VMemVector<CookingCommandID> filtered_list;
+	struct CommandSearchState
+	{
+		ImGuiTextFilter              mFilter;
+		VMemVector<CookingCommandID> mFilteredList;
+	};
 
-	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
+	static Storage<CommandSearchState> state;
+	gUIStateManager.EnsureCreated(state);
+
+	if (state->mFilter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
 	{
 		// Rebuild the filtered list.
-		filtered_list.Clear();
+		state->mFilteredList.Clear();
 		for (const CookingCommand& command : gCookingSystem.mCommands)
 		{
 			auto command_str = gToString(command);
-			if (filter.PassFilter(command_str))
-				filtered_list.PushBack(command.mID);
+			if (state->mFilter.PassFilter(command_str))
+				state->mFilteredList.PushBack(command.mID);
 		}
 	}
 
 	if (ImGui::Button("Cook All"))
 	{
-		if (filter.IsActive())
+		if (state->mFilter.IsActive())
 		{
-			for (CookingCommandID command_id : filtered_list)
+			for (CookingCommandID command_id : state->mFilteredList)
 				gCookingSystem.ForceCook(command_id);
 		}
 		else
@@ -1057,21 +1138,21 @@ void gDrawCommandSearch()
 
 	ImGui::SameLine();
 	ImGui::AlignTextToFramePadding();
-	ImGui::Text("%d items", filter.IsActive() ? filtered_list.Size() : gCookingSystem.mCommands.Size());
+	ImGui::Text("%d items", state->mFilter.IsActive() ? state->mFilteredList.Size() : gCookingSystem.mCommands.Size());
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
 		ImGuiListClipper clipper;
 
-		if (filter.IsActive())
+		if (state->mFilter.IsActive())
 		{
 			// Draw the filtered list.
-			clipper.Begin(filtered_list.Size());
+			clipper.Begin(state->mFilteredList.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-					gDrawCookingCommand(gCookingSystem.GetCommand(filtered_list[i]));
+					gDrawCookingCommand(gCookingSystem.GetCommand(state->mFilteredList[i]));
 			}
 			clipper.End();
 		}
@@ -1103,37 +1184,43 @@ void gDrawFileSearch()
 		return;
 	}
 
-	static ImGuiTextFilter    filter;
-	static VMemVector<FileID> filtered_list;
+	struct FileSearchState
+	{
+		ImGuiTextFilter	   mFilter;
+		VMemVector<FileID> mFilteredList;
+	};
 
-	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
+	static Storage<FileSearchState> state;
+	gUIStateManager.EnsureCreated(state);
+
+	if (state->mFilter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
 	{
 		// Rebuild the filtered list.
-		filtered_list.Clear();
+		state->mFilteredList.Clear();
 		for (const FileRepo& repo : gFileSystem.mRepos)
 			for (const FileInfo& file : repo.mFiles)
 			{
 				auto file_str = file.ToString();
-				if (filter.PassFilter(file_str))
-					filtered_list.PushBack(file.mID);
+				if (state->mFilter.PassFilter(file_str))
+					state->mFilteredList.PushBack(file.mID);
 			}
 	}
 
-	ImGui::Text("%d items", filter.IsActive() ? filtered_list.Size() : gFileSystem.GetFileCount());
+	ImGui::Text("%d items", state->mFilter.IsActive() ? state->mFilteredList.Size() : gFileSystem.GetFileCount());
 
 	if (ImGui::BeginChild("ScrollingRegion"))
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 1));
 		ImGuiListClipper clipper;
 
-		if (filter.IsActive())
+		if (state->mFilter.IsActive())
 		{
 			// Draw the filtered list.
-			clipper.Begin(filtered_list.Size());
+			clipper.Begin(state->mFilteredList.Size());
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-					gDrawFileInfo(filtered_list[i].GetFile());
+					gDrawFileInfo(state->mFilteredList[i].GetFile());
 			}
 			clipper.End();
 		}
@@ -1240,24 +1327,30 @@ void gDrawOrphanFilesWindow()
 		return;
 	}
 
-	static bool			   update_file_list = true;
-	static int			   selected_repo	= 0;
-	static Vector<FileID>  orphan_files;
-	static ImGuiTextFilter filter;
+	struct OrphanFilesState
+	{
+		bool			mUpdateFileList = true;
+		int				mSelectedRepo	= 0;
+		Vector<FileID>	mOrphanFiles;
+		ImGuiTextFilter mFilter;
+	};
 
-	if (ImGui::ListBox("Repos", &selected_repo, repos.Data(), repos.Size()))
-		update_file_list = true;
+	static Storage<OrphanFilesState> state;
+	gUIStateManager.EnsureCreated(state);
 
-	if (filter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
-		update_file_list = true;
+	if (ImGui::ListBox("Repos", &state->mSelectedRepo, repos.Data(), repos.Size()))
+		state->mUpdateFileList = true;
+
+	if (state->mFilter.Draw(R"(Filter ("incl,-excl") ("texture"))", 400))
+		state->mUpdateFileList = true;
 
 	// Build/update the list of orphan files.
-	if (update_file_list)
+	if (state->mUpdateFileList)
 	{
-		update_file_list = false;
-		orphan_files.Clear();
+		state->mUpdateFileList = false;
+		state->mOrphanFiles.Clear();
 
-		const FileRepo& repo = *gFileSystem.FindRepo(StringView(repos[selected_repo]));
+		const FileRepo& repo = *gFileSystem.FindRepo(StringView(repos[state->mSelectedRepo]));
 
 		for (const FileInfo& file : repo.mFiles)
 		{
@@ -1267,22 +1360,22 @@ void gDrawOrphanFilesWindow()
 			if (!file.mInputOf.Empty() || !file.mOutputOf.Empty())
 				continue; // Not an orphan file.
 
-			if (filter.PassFilter(file.ToString()))
-				orphan_files.PushBack(file.mID);
+			if (state->mFilter.PassFilter(file.ToString()))
+				state->mOrphanFiles.PushBack(file.mID);
 		}
 	}
 
 	ImGui::AlignTextToFramePadding();
-	ImGui::Text("%d items", orphan_files.Size());
+	ImGui::Text("%d items", state->mOrphanFiles.Size());
 
 	// Add the delete all button.
 	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Delete All " ICON_FK_TRASH_O).x);
 	if (ImGui::Button("Delete All " ICON_FK_TRASH_O))
 	{
-		for (int i = orphan_files.Size() - 1; i >= 0; i--)
+		for (int i = state->mOrphanFiles.Size() - 1; i >= 0; i--)
 		{
-			if (gFileSystem.DeleteFile(orphan_files[i]))
-				orphan_files.Erase(i);
+			if (gFileSystem.DeleteFile(state->mOrphanFiles[i]))
+				state->mOrphanFiles.Erase(i);
 		}
 	}
 
@@ -1297,14 +1390,14 @@ void gDrawOrphanFilesWindow()
 		int deleted_file_index = -1;
 
 		ImGuiListClipper clipper;
-		clipper.Begin(orphan_files.Size());
+		clipper.Begin(state->mOrphanFiles.Size());
 		while (clipper.Step())
 		{
 			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 			{
 				// Draw the file.
 				ImGui::TableNextColumn();
-				gDrawFileInfo(orphan_files[i].GetFile());
+				gDrawFileInfo(state->mOrphanFiles[i].GetFile());
 
 				// Draw the delete button.
 				ImGui::TableNextColumn();
@@ -1312,7 +1405,7 @@ void gDrawOrphanFilesWindow()
 				if (ImGui::Button(ICON_FK_TRASH_O))
 				{
 					// Delete the file.
-					if (gFileSystem.DeleteFile(orphan_files[i]))
+					if (gFileSystem.DeleteFile(state->mOrphanFiles[i]))
 						deleted_file_index = i;
 				}
 				ImGui::PopID();
@@ -1325,7 +1418,7 @@ void gDrawOrphanFilesWindow()
 		// Remove the file immediately from the list.
 		// The FileSystem won't know that the file is deleted for maybe another second, so it's too soon to update the list.
 		if (deleted_file_index != -1)
-			orphan_files.Erase(deleted_file_index);
+			state->mOrphanFiles.Erase(deleted_file_index);
 	}
 }
 
@@ -1510,7 +1603,7 @@ void gDrawStatusBar()
 	double seconds_since_ready = gTicksToSeconds(gGetTickCount() - gFileSystem.mInitStats.mReadyTicks);
 	if (seconds_since_ready < 8.0)
 	{
-		ImGui::TextUnformatted(gTempFormat(ICON_FK_THUMBS_O_UP " Init complete in %.2f seconds. ",	gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gProcessStartTicks)));
+		ImGui::TextUnformatted(gTempFormat(ICON_FK_THUMBS_O_UP " Init complete in %.2f seconds. ",	gTicksToSeconds(gFileSystem.mInitStats.mReadyTicks - gUIStartTicks)));
 	}
 	else
 	{
