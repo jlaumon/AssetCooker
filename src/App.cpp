@@ -72,6 +72,7 @@ void App::Exit()
 	mLog.Clear();
 
 	mSingleInstanceMutex = {};
+	mInitError			 = {};
 }
 
 
