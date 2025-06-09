@@ -289,11 +289,19 @@ void gDrawMainMenuBar()
 		{
 			ImGui::MenuItem("Hide Window On Minimize", nullptr, &gApp.mHideWindowOnMinimize);
 			ImGui::MenuItem("Start With Window Minimized", nullptr, &gApp.mStartMinimized);
+
+			ImGui::Separator();
+
 			sMenuEnum("Enable Notif On Cooking Finish", gApp.mEnableNotifOnCookingFinish);
 			sMenuEnum("Enable Notif On Cooking Error", gApp.mEnableNotifOnCookingError);
 			sMenuEnum("Enable Notif Sound", gApp.mEnableNotifSound);
+
+			ImGui::Separator();
+
 			sMenuEnum("Save Dump On Crash", gApp.mSaveDumpOnCrash);
 			sMenuEnum("Dump Mode", gApp.mDumpMode);
+
+			ImGui::Separator();
 
 			float ui_scale = gUIScale.mFromSettings;
 			if (ImGui::DragFloat("UI Scale", &ui_scale, 0.01f, UIScale::cMin, UIScale::cMax, "%.1f"))
