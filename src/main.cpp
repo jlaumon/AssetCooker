@@ -623,15 +623,17 @@ HashMap<StringView, StringView> sParseArguments(StringView inCommandLine)
 
         if (!token.Empty() && token.Front() == '-') // It's a flag
         {
+			int peek_pos = pos;
+
             // Peek at next token to check if it's a value (not another flag)
-            while (pos < inCommandLine.Size() && inCommandLine[pos] == ' ') 
-                pos++;
+            while (peek_pos < inCommandLine.Size() && inCommandLine[peek_pos] == ' ') 
+                peek_pos++;
 
-            int value_start = pos;
-            while (pos < inCommandLine.Size() && inCommandLine[pos] != ' ') 
-                pos++;
+            int value_start = peek_pos;
+            while (peek_pos < inCommandLine.Size() && inCommandLine[peek_pos] != ' ') 
+                peek_pos++;
 
-            StringView value = inCommandLine.SubStr(value_start, pos - value_start);
+            StringView value = inCommandLine.SubStr(value_start, peek_pos - value_start);
 
             if (value.Empty() || value.Front() == '-') 
             {
@@ -640,6 +642,9 @@ HashMap<StringView, StringView> sParseArguments(StringView inCommandLine)
             else
             {
                 args[token] = value; // Flag with value
+
+				// Skip directly to after the value
+				pos = peek_pos;
             }
         }
     }
