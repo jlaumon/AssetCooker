@@ -236,7 +236,7 @@ struct CookingThreadsQueue : CookingQueue
 {
 	void                    Push(CookingCommandID inCommandID, PushPosition inPosition = PushPosition::Back);
 	CookingCommandID        Pop();
-	void                    FinishedCooking(CookingCommandID inCommandID);
+	void                    FinishedCooking(const CookingLogEntry& inLogEntry);
 
 	void                    RequestStop();
 
@@ -280,8 +280,11 @@ struct CookingSystem : NoCopy
 	bool                                  IsCookingPaused() const { return mCookingPaused; }
 	void                                  SetCookingThreadCount(int inThreadCount) { mWantedCookingThreadCount = inThreadCount; }
 	int                                   GetCookingThreadCount() const { return mWantedCookingThreadCount; }
+	int									  GetCookingErrorCount() const { return mCookingErrors.Load(); }
 
 	int                                   GetCommandCount() const { return mCommands.Size(); } // Total number of commands, for debug/display.
+	int									  GetDirtyCommandCount() const { return mCommandsDirty.GetSize(); }
+	int									  GetCookedCommandCount() const { return mCookingLog.Size(); }
 
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
 	void                                  QueueUpdateDirtyState(CookingCommandID inCommandID);

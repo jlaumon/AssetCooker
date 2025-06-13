@@ -1449,8 +1449,16 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 		// Launch notifications if there are errors or cooking is finished.
 		gCookingSystem.UpdateNotifications();
 
-		if (!any_work_done															// If there was any work done, do another loop before declaring the thread idle.
-			&& mMonitorDirThreadSignal.WaitFor(0) == SyncSignal::WaitResult::Timeout)	// Check if the signal is already set without waiting.
+		// If running without UI, we want to exit when cooking is finished.
+		if (gApp.mNoUI)
+		{
+			// Note: Cooking should probably never be paused when running without UI, but if it is don't exit (it's probably for debugging?)
+			if (gCookingSystem.IsIdle() && !gCookingSystem.IsCookingPaused())
+				gApp.RequestExit();
+		}
+
+		if (!any_work_done															  // If there was any work done, do another loop before declaring the thread idle.
+			&& mMonitorDirThreadSignal.WaitFor(0) == SyncSignal::WaitResult::Timeout) // Check if the signal is already set without waiting.
 		{
 			// Going idle here.
 			mIsMonitorDirThreadIdle.Store(true);
@@ -1850,6 +1858,12 @@ void FileSystem::LoadCache()
 			log_entry.mCookingState.Store(CookingState::Error);
 
 			command.mLastCookingLog    = &log_entry;
+
+			// If running without UI, force all errored commands to recook.
+			// They should error again and that error will be reported on exit.
+			// Is that really better than considering them to be errors without trying again? Not sure.
+			if (gApp.mNoUI)
+				command.mLastCookRuleVersion = CookingRule::cInvalidVersion;
 		}
 	}
 	

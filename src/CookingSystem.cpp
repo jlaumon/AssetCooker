@@ -9,17 +9,18 @@
 #include "DepFile.h"
 #include "Notifications.h"
 #include "CommandVariables.h"
+#include "UI.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Algorithm.h>
 #include <Bedrock/Ticks.h>
 #include <Bedrock/Random.h>
+#include <Bedrock/StringFormat.h>
 
 #include "subprocess/subprocess.h"
 #include "win32/file.h"
 #include "win32/misc.h"
 #include "win32/process.h"
 
-#include <Bedrock/StringFormat.h>
 
 // Debug toggle to fake cooking failures, to test error handling.
 bool gDebugFailCookingRandomly = false;
@@ -272,7 +273,14 @@ void CookingCommand::UpdateDirtyState()
 		if ((!last_cook_is_cleanup && all_output_written) ||
 			(last_cook_is_cleanup && all_output_missing))
 		{
-			mLastCookingLog->mCookingState.Store(CookingState::Success);
+			CookingLogEntry& log_entry = *mLastCookingLog;
+
+			// TODO: setting the state to Success/Error should probably be grouped with mCommandsToCook.FinishedCooking into a function
+			log_entry.mCookingState.Store(CookingState::Success);
+
+			// Notify the system that this command has officially finished cooking.
+			gCookingSystem.mCommandsToCook.FinishedCooking(log_entry);
+
 			last_cook_is_waiting = false;
 		}
 	}
@@ -536,11 +544,26 @@ CookingCommandID CookingThreadsQueue::Pop()
 }
 
 
-void CookingThreadsQueue::FinishedCooking(CookingCommandID inCommandID)
+void CookingThreadsQueue::FinishedCooking(const CookingLogEntry& inLogEntry)
 {
-	const CookingCommand& command  = gCookingSystem.GetCommand(inCommandID);
+#ifdef ASSERTS_ENABLED
+	{
+		// At this poing the command should have finished cooking and be in either Success/Error.
+		CookingState cooking_state = inLogEntry.mCookingState.Load();
+		gAssert(cooking_state == CookingState::Success || cooking_state == CookingState::Error);
+	}
+#endif
+
+	const CookingCommand& command  = gCookingSystem.GetCommand(inLogEntry.mCommandID);
 	int                   priority = gCookingSystem.GetRule(command.mRuleID).mPriority;
 	bool                  notify   = false;
+
+	// When running without UI, print a line for each cooked command.
+	if (gApp.mNoUI)
+	{
+		LogType log_type = (inLogEntry.mCookingState.Load() == CookingState::Error) ? LogType::Error : LogType::Normal;
+		gApp._Log(log_type, gTempFormat("Cooked %s - %s", gToString(command).AsCStr(), gToStringView(inLogEntry.mCookingState.Load()).AsCStr()));
+	}
 
 	{
 		LockGuard lock(mMutex);
@@ -1074,16 +1097,7 @@ bool sRunCopyFile(const CookingCommand& inCommand, StringPool::ResizableStringVi
 
 void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThread)
 {
-	CookingLogEntry& log_entry = AllocateCookingLogEntry(ioCommand.mID);
-
-	// Set the start time.
-	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
-
-	ioThread.mCurrentLogEntry.Store(log_entry.mID);
-	defer { ioThread.mCurrentLogEntry.Store(CookingLogEntryID::cInvalid()); };
-
-	// Set the log entry on the command.
-	ioCommand.mLastCookingLog = &log_entry;
+	CookingLogEntry& log_entry = *ioCommand.mLastCookingLog;
 
 	// Allocate a resizable string for the output.
 	StringPool::ResizableStringView output_str = ioThread.mStringPool.CreateResizableString();
@@ -1115,18 +1129,6 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Update the last cook version.
 	ioCommand.mLastCookRuleVersion = rule.mVersion;
-
-	defer
-	{
-		// If the command ends in error, we need to make sure that its dirty state is updated.
-		// That normally happens when the outputs (and the dep file) are written, but that might not happen at all if there is an error.
-		// This is important to then properly detect when the inputs change again and the command can re-cook.
-		if (log_entry.mCookingState.Load() == CookingState::Error)
-		{
-			// Queue for a dirty state update.
-			QueueUpdateDirtyState(ioCommand.mID);
-		}
-	};
 
 	// Sleep to make things slow (for debugging).
 	// Note: use the command main input path as seed to make it consistent accross runs (useful if we want to add loading bars).
@@ -1267,17 +1269,9 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioThread)
 {
-	CookingLogEntry& log_entry = AllocateCookingLogEntry(ioCommand.mID);
+	CookingLogEntry& log_entry = *ioCommand.mLastCookingLog;
+
 	log_entry.mIsCleanup       = true;
-
-	// Set the start time.
-	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
-
-	ioThread.mCurrentLogEntry.Store(log_entry.mID);
-	defer { ioThread.mCurrentLogEntry.Store(CookingLogEntryID::cInvalid()); };
-
-	// Set the log entry on the command.
-	ioCommand.mLastCookingLog = &log_entry;
 
 	StringPool::ResizableStringView output_str = ioThread.mStringPool.CreateResizableString();
 
@@ -1374,6 +1368,9 @@ void CookingSystem::TimeOutUpdateThread()
 
 					// Update the total count of errors.
 					mCookingErrors.Add(1);
+
+					// Notify the system that this command has officially finished cooking.
+					mCommandsToCook.FinishedCooking(*log_entry);
 
 					// Update the dirty state so that it's set to Error.
 					QueueUpdateDirtyState(log_entry->mCommandID);
@@ -1474,18 +1471,36 @@ void CookingSystem::CookingThreadFunction(CookingThread& ioThread)
 
 		if (command_id.IsValid())
 		{
-			auto& command = GetCommand(command_id);
+			CookingCommand&	 command   = GetCommand(command_id);
+			CookingLogEntry& log_entry = AllocateCookingLogEntry(command_id);
+
+			// Set the log entry on the command.
+			command.mLastCookingLog = &log_entry;
+
+			// Set the current log entry for the cooking thread.
+			ioThread.mCurrentLogEntry.Store(log_entry.mID);
+
 			if (command.mDirtyState & CookingCommand::AllStaticInputsMissing)
 				CleanupCommand(command, ioThread);
 			else
 				CookCommand(command, ioThread);
 
-			// Update the total count of errors.
-			if (command.GetCookingState() == CookingState::Error)
+			if (log_entry.mCookingState.Load() == CookingState::Error)
+			{
+				// Update the total count of errors.
 				mCookingErrors.Add(1);
 
-			// TODO is this ok or should we actually wait until the command is in success/error state rather than waiting state?
-			mCommandsToCook.FinishedCooking(command_id);
+				// Notify the system that this command has officially finished cooking.
+				mCommandsToCook.FinishedCooking(log_entry);
+
+				// If the command ends in error, we need to make sure that its dirty state is updated.
+				// That normally happens when the outputs (and the dep file) are written, but that might not happen at all if there is an error.
+				// This is important to then properly detect when the inputs change again and the command can re-cook.
+				QueueUpdateDirtyState(command_id);
+			}
+
+			// Remove the current log entry for the cooking thread.
+			ioThread.mCurrentLogEntry.Store(CookingLogEntryID::cInvalid());
 		}
 	}
 }
@@ -1499,6 +1514,9 @@ CookingLogEntry& CookingSystem::AllocateCookingLogEntry(CookingCommandID inComma
 	log_entry.mID              = { (uint32)mCookingLog.SizeRelaxed() - 1 };
 	log_entry.mCommandID       = inCommandID;
 	log_entry.mCookingState.Store(CookingState::Cooking);
+
+	// Set the start time.
+	log_entry.mTimeStart       = gGetSystemTimeAsFileTime();
 
 	return log_entry;
 }

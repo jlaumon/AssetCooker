@@ -37,6 +37,22 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 static HashMap<String, String> sParseArguments(StringView inCommandLine);
 
 
+static BOOL WINAPI sCtrlHandler(DWORD inEvent)
+{
+	switch (inEvent)
+	{
+	case CTRL_C_EVENT:
+	case CTRL_CLOSE_EVENT:
+	case CTRL_BREAK_EVENT:
+		gApp.RequestExit();
+		return TRUE;
+
+	default:
+		return FALSE;
+	}
+}
+
+
 // Helper struct to measure CPU/GPU times of the UI updates.
 struct FrameTimer
 {
@@ -201,6 +217,24 @@ int WinMain(
 		return (gRunTests() == TestResult::Success) ? 0 : 1;
 	}
 
+	// Check if we only want to run without UI.
+	gApp.mNoUI = args.Contains("-no_ui");
+	if (gApp.mNoUI)
+	{
+		// Make sure there's a console so we can printf to it.
+		if (!AttachConsole(ATTACH_PARENT_PROCESS))
+			AllocConsole();
+
+		// Redirect the std io to the console.
+		FILE* dummy;
+		freopen_s(&dummy, "CONIN$", "r", stdin);
+		freopen_s(&dummy, "CONOUT$", "w", stderr);
+		freopen_s(&dummy, "CONOUT$", "w", stdout);
+
+		// Set a ctrl handler to gracefully exit on Ctrl+C, etc.
+		SetConsoleCtrlHandler(sCtrlHandler, TRUE);
+	}
+
 	// Check if we want to change the working directory.
 	// Note: This has to be done before gApp.Init() since that changes where the config.toml file is read from.
 	if (auto working_dir = args.Find("-working_dir"); working_dir != args.End())
@@ -312,23 +346,23 @@ int WinMain(
 	int           idle_frames      = 0;
 
 	// Main loop
-	while (!gApp.IsExitReady())
+	while (!gApp.IsExitRequested())
 	{
 		if (!gCookingSystem.IsIdle())
 			idle_frames = 0;
 		else
 			idle_frames++;
 
-		// We've been idle enough time, don't draw the UI and wait for a window event instead.
+		// We've been idle enough time, don't draw the UI and wait for something to happen instead.
 		if (idle_frames > cIdleFramesDelay)
 		{
-			Timer idle_timer;
 			while (true)
 			{
-				// Wait one second for a window event.
-				constexpr int timeout = 1000; // One second.
-				if (MsgWaitForMultipleObjects(0, nullptr, FALSE, timeout, QS_ALLINPUT) == WAIT_OBJECT_0)
-					break; // There's an event in the queue, go call PeekMessage!
+				// Wait for either a window event (QS_ALLINPUT), exit being requested, or one second.
+				constexpr int timeout_ms = 1000;
+				HANDLE		  handles[]	 = { gApp.mExitRequestedEvent.GetOSHandle() };
+				if (MsgWaitForMultipleObjects(1, handles, FALSE, timeout_ms, QS_ALLINPUT) != WAIT_TIMEOUT)
+					break; // Something happened, stop idling!
 
 				// After one second, check if the cooking system is still idle (files may have been modified).
 				if (!gCookingSystem.IsIdle())
@@ -337,6 +371,8 @@ int WinMain(
 
 			idle_frames = 0;
 		}
+		if (gApp.IsExitRequested())
+			break;
 
 		frame_timer.StartFrame();
 
@@ -351,7 +387,7 @@ int WinMain(
 			::TranslateMessage(&msg);
 			::DispatchMessage(&msg);
 		}
-		if (gApp.IsExitReady())
+		if (gApp.IsExitRequested())
 			break;
 
 		// If the window is minimized, never draw.
@@ -416,9 +452,33 @@ int WinMain(
 	::DestroyWindow(hwnd);
 	::UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
+	int exit_code = 0;
+
+	// If running without UI, print some stats and return failure if there were cooking errors.
+	if (gApp.mNoUI)
+	{
+		int cooked_count = gCookingSystem.GetCookedCommandCount();
+		int error_count = gCookingSystem.GetCookingErrorCount();
+		int dirty_count = gCookingSystem.GetDirtyCommandCount();
+
+		gAppLog("Cooked %d commands.", gCookingSystem.GetCookedCommandCount());
+
+		if (error_count > 0)
+		{
+			gAppLogError("[error] There were %d cooking errors!", error_count);
+			exit_code = 1;
+		}
+
+		if (dirty_count > 0)
+		{
+			gAppLogError("[error] Not all commands were cooked, %d dirty commands remaining!", dirty_count);
+			exit_code = 1;
+		}
+	}
+
 	gApp.Exit();
 
-	return 0;
+	return exit_code;
 }
 
 // Helper functions
