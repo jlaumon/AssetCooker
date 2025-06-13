@@ -7,6 +7,9 @@
 
 #include "CookingSystemIDs.h"
 
+struct CookingCommand;
+struct CookingLogEntry;
+
 void gUISetDPIScale(float inDPIScale);
 void gUISetUserScale(float inScale);
 float gUIGetUserScale();
@@ -16,6 +19,9 @@ void gUIClearState(); // Clear all internal state to make sure the UI doesn't ke
 void gDrawMainMenuBar();
 void gDrawMain();
 void gDrawCookingQueue();
+
+TempString gToString(const CookingCommand& inCommand);
+TempString gToString(const CookingLogEntry& inLogEntry);
 
 void gSelectCookingLogEntry(CookingLogEntryID inLogEntryID, bool inScrollLog);
 
