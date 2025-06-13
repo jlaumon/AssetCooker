@@ -99,6 +99,27 @@ void App::Init()
 	// Read the user prefs file.
 	gReadUserPreferencesFile(mUserPrefsFilePath);
 
+	// If we want to run without UI, some user preferences need to be overriden. They won't be saved on exit.
+	if (mNoUI)
+	{
+		// Hide the main window.
+		mStartMinimized				= true;
+		mHideWindowOnMinimize		= true;
+
+		// Disable notifications.
+		mEnableNotifOnHideWindow	= NotifEnabled::Never;
+		mEnableNotifOnCookingFinish = NotifEnabled::Never;
+		mEnableNotifOnCookingError	= NotifEnabled::Never;
+		mEnableNotifSound			= NotifEnabled::Never;
+
+		// Disable crash dump pop ups.
+		if (mSaveDumpOnCrash == SaveDumpOnCrash::Ask)
+			mSaveDumpOnCrash = SaveDumpOnCrash::Always;
+
+		// Don't start with cooking paused.
+		gCookingSystem.SetCookingPaused(false); 
+	}
+
 	// Open the log file after reading the config since it can change the log directory.
 	OpenLogFile();
 
@@ -121,7 +142,9 @@ void App::Init()
 
 void App::Exit()
 {
-	gWriteUserPreferencesFile(mUserPrefsFilePath);
+	// When running without UI, some user pref settings are overriden. Don't save the settings.
+	if (!mNoUI)
+		gWriteUserPreferencesFile(mUserPrefsFilePath);
 
 	// Remove exception handler.
 	SetUnhandledExceptionFilter(nullptr);
@@ -137,21 +160,15 @@ void App::Exit()
 
 void App::RequestExit()
 {
-	mExitRequested = true;
-
-	// At the moment we're ready immediately, but in the future we'll need to save cooking state which might take a long time.
-	mExitReady = true;
+	mExitRequestedEvent.Set();
 }
+
 
 bool App::IsExitRequested() const
 {
-	return mExitRequested;
+	return mExitRequestedEvent.TryWait();
 }
 
-bool App::IsExitReady() const
-{
-	return mExitReady;
-}
 
 namespace Details
 {
@@ -238,9 +255,8 @@ void App::_FatalError(StringView inFormat, ...)
 		BREAKPOINT;
 	else
 	{
-		// Don't make popups when running tests.
-		// TODO: also if running in command line mode/no UI mode
-		if (!gIsRunningTest())
+		// Don't make popups when running tests or running in no-UI mode.
+		if (!gIsRunningTest() && !mNoUI)
 		{
 			MessageBoxA(nullptr, 
 				gTempFormatV(inFormat.AsCStr(), args).AsCStr(), 
@@ -274,10 +290,34 @@ void App::_LogV(LogType inType, StringView inFormat, va_list inArgs)
 	StringView formatted_str = mLog.Add(inType, inFormat, inArgs);
 
 	// If running tests, print to stdout (otherwise we don't care).
-	// TODO: also if running in command line mode/no UI mode
-	if (gIsRunningTest())
+	if (gIsRunningTest() || mNoUI)
 	{
-		fwrite(formatted_str.Data(), 1, formatted_str.Size(), stdout);
+		// Print the errors in red in the console.
+		static Mutex sConsoleColorMutex;
+		LockGuard lock(sConsoleColorMutex);
+		if (inType == LogType::Error)
+		{
+			HANDLE					   console = GetStdHandle(STD_OUTPUT_HANDLE);
+			CONSOLE_SCREEN_BUFFER_INFO console_info = {};
+			int						   saved_colors;
+
+			// Get the current color.
+			GetConsoleScreenBufferInfo(console, &console_info);
+			saved_colors = console_info.wAttributes;
+
+			// Change the color to red.
+			SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_INTENSITY);
+
+			// Print.
+			fwrite(formatted_str.Data(), 1, formatted_str.Size(), stdout);
+
+			// Restore the previous color.
+			SetConsoleTextAttribute(console, saved_colors);
+		}
+		else
+		{
+			fwrite(formatted_str.Data(), 1, formatted_str.Size(), stdout);
+		}
 	}
 
 	// If there's a debugger attached, convert to wide char to write to the debug output.

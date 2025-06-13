@@ -11,6 +11,7 @@
 #include "Notifications.h"
 
 #include <Bedrock/String.h>
+#include <Bedrock/Event.h>
 
 enum class LogLevel : uint8
 {
@@ -52,7 +53,6 @@ struct App
 
 	void RequestExit();
 	bool IsExitRequested() const;
-	bool IsExitReady() const;
 
 	bool HasInitError() const { return !mInitError.Empty(); }
 	void SetInitError(StringView inText) { mInitError = inText; }
@@ -69,8 +69,8 @@ struct App
 	void*							mMainWindowHwnd		   = nullptr;
 	void*							mNotifMenuHmenu		   = nullptr;
 	bool							mMainWindowIsMinimized = false;
-	bool							mExitRequested		   = false;
-	bool							mExitReady			   = false;
+	bool							mNoUI				   = false;					 // If true, run without UI and automatically exit when cooking is finished.
+	Event							mExitRequestedEvent	   = { Event::ManualReset }; // Event that gets set when exit is requested.
 	String							mConfigFilePath		   = "config.toml";
 	String							mUserPrefsFilePath	   = "prefs.toml";
 	String							mRuleFilePath		   = "rules.toml";
