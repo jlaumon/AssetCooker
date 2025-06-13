@@ -34,7 +34,7 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-static HashMap<StringView, StringView> sParseArguments(StringView inCommandLine);
+static HashMap<String, String> sParseArguments(StringView inCommandLine);
 
 
 // Helper struct to measure CPU/GPU times of the UI updates.
@@ -602,9 +602,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-HashMap<StringView, StringView> sParseArguments(StringView inCommandLine)
+HashMap<String, String> sParseArguments(StringView inCommandLine)
 {
-    HashMap<StringView, StringView> args;
+    HashMap<String, String> args;
     int pos = 0;
 
     while (pos < inCommandLine.Size())
