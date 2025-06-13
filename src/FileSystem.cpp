@@ -1186,10 +1186,11 @@ void FileSystem::InitialScan(const Thread& inInitialScanThread, Span<uint8> ioBu
 				{
 					FileRepo& repo = gFileSystem.GetRepo(dir_id);
 
-					repo.ScanDirectory(dir_id, scan_queue, buffer_scan);
-
+					// If exiting, skip scanning but keep emptying the queue to make sure others threads aren't stuck waiting inside Pop().
 					if (inInitialScanThread.IsStopRequested())
-						return;
+						continue;
+
+					repo.ScanDirectory(dir_id, scan_queue, buffer_scan);
 				}
 			});
 		}
