@@ -206,6 +206,12 @@ Command Variables also support a slice syntax similar to Python (eg. `{ File[1:3
 | `{ File[:-6] }`        | `albedo`           |
 | `{ File[1:1000] }`     | `rick_albedo`      |
 
+## Command Line Options
+
+- `-working_dir some/path`: Use `some/path` as the working directory (Current Directory in Windows terminology). The Config File is read from there, all relative paths are relative to there. Accepts both relative and absolute paths. 
+- `-no_ui`: Run without UI, cook everything then exit. Exit code is 0 on success. 
+- `-test`: Run unit tests then exit. Exit code is 0 on success. Note: Does nothing when Asset Cooker is compiled in Release mode (tests are disabled). 
+
 ## Contributing 
 Open an issue before doing a pull request. It's a hobby project, please be nice.
 
