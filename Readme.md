@@ -39,13 +39,15 @@ It is fast.
 
 ### Building
 
-Clone and **init the submodules**.
+See the [Releases](https://github.com/jlaumon/AssetCooker/releases) section to get a pre-built executable. 
 
-Then run `premake.bat` to generate AssetCooke.sln, and use Visual Studio to compile it.
+Otherwise:
+- Clone and **init the submodules**.
+- Run `premake.bat` to generate AssetCooke.sln, and use Visual Studio to compile it.
 
 ### Running
 
-You will need to create two files before Asset Cooker can do anything: a config file and a rules file. 
+You will need to create **two files** before Asset Cooker can do anything: a config file and a rules file. 
 
 A minimal example is provided in the example/minimal directory. You can copy AssetCooker.exe there to play with it. Read on for the explanations.
 
