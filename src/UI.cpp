@@ -94,6 +94,32 @@ private:
 StaticStorageManager gUIStateManager;
 
 
+// Essentially the function to reload the config/rules files.
+static void sRestartAssetCooker()
+{
+	// Stop all the threads.
+	gFileSystem.StopMonitoring();
+
+	// Clear the UI state (don't keep lists of FileID, etc.)
+	gUIClearState();
+
+	// Destroy the globals.
+	gApp.Exit();
+	gFileSystem.~FileSystem();
+	gCookingSystem.~CookingSystem();
+
+	// Reset the UI start ticks, otherwise the "Init complete in %.2f seconds" message will be wrong.
+	gUIStartTicks = gGetTickCount();
+
+	// Recreate the globals.
+	gPlacementNew(gFileSystem);
+	gPlacementNew(gCookingSystem);
+
+	// Start again.
+	gApp.Init();
+}
+
+
 const char* gGetAnimatedHourglass()
 {
 	// TODO probably should redraw as long as this is used, because it's the sign that something still needs to update (but could also perhaps lead to accidentally always redrawing?)
@@ -242,28 +268,7 @@ void gDrawMainMenuBar()
 			ImGui::Separator();
 
 			if (ImGui::MenuItem("Restart " ICON_FK_UNDO))
-			{
-				// Stop all the threads.
-				gFileSystem.StopMonitoring();
-
-				// Clear the UI state (don't keep lists of FileID, etc.)
-				gUIClearState();
-
-				// Destroy the globals.
-				gApp.Exit();
-				gFileSystem.~FileSystem();
-				gCookingSystem.~CookingSystem();
-
-				// Reset the UI start ticks, otherwise the "Init complete in %.2f seconds" message will be wrong.
-				gUIStartTicks = gGetTickCount();
-
-				// Recreate the globals.
-				gPlacementNew(gFileSystem);
-				gPlacementNew(gCookingSystem);
-
-				// Start again.
-				gApp.Init();
-			}
+				sRestartAssetCooker();
 
 			if (ImGui::BeginItemTooltip())
 			{
@@ -1755,6 +1760,34 @@ void gDrawMain()
 	{
 		// Do it just once though, otherwise we can't select other windows.
 		do_once { ImGui::SetWindowFocus(cWindowNameAppLog); };
+
+		// If the config file is missing, offer to go read the doc.
+		{
+			if (!gFileExists(gApp.mConfigFilePath) || !gFileExists(gApp.mRuleFilePath))
+				ImGui::OpenPopup("Getting Started?");
+		};
+
+		// Always center this window when appearing
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+		if (ImGui::BeginPopupModal("Getting Started?", nullptr, ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove))
+		{
+			ImGui::TextUnformatted("You need to create Config.toml and Rules.toml.");
+			ImGui::TextUnformatted("Have a look at the docs!");
+			if (ImGui::Button("Let's go! " ICON_FK_EXTERNAL_LINK))
+			{
+				ShellExecuteA(nullptr, "open", "https://github.com/jlaumon/AssetCooker#getting-started", nullptr, nullptr, SW_SHOWDEFAULT);
+			}
+
+			ImGui::SetItemDefaultFocus();
+			ImGui::SameLine();
+
+			if (ImGui::Button("Reload", ImVec2(120, 0)))
+				sRestartAssetCooker();
+
+			ImGui::EndPopup();
+		}
 	}
 }
 
