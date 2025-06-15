@@ -9,6 +9,7 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 #include "CommandVariables.h"
+#include "Version.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
@@ -347,6 +348,24 @@ void gDrawMainMenuBar()
 
 			if (ImGui::MenuItem("Crash now!"))
 				confirm_crash = true;
+
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Help"))
+		{
+			if (ImGui::MenuItem("Github " ICON_FK_GITHUB, nullptr, nullptr))
+				ShellExecuteA(nullptr, "open", "https://github.com/jlaumon/AssetCooker", nullptr, nullptr, SW_SHOWDEFAULT);
+
+			if constexpr (!StringView(ASSET_COOKER_VER_FULL).Empty())
+			{
+				if (ImGui::MenuItem(gTempFormat("Version %s " ICON_FK_FILES_O, ASSET_COOKER_VER_FULL), nullptr, nullptr))
+				{
+					ImGui::LogToClipboard();
+					ImGui::LogText("%s", ASSET_COOKER_VER_FULL);
+					ImGui::LogFinish();
+				}
+			}
 
 			ImGui::EndMenu();
 		}

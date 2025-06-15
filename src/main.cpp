@@ -16,6 +16,7 @@
 #include "FileSystem.h"
 #include "CookingSystem.h"
 #include "Notifications.h"
+#include "Version.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Ticks.h>
 #include <Bedrock/Trace.h>
@@ -254,7 +255,11 @@ int WinMain(
 
 	gApp.Init();
 
-	TempString window_title = gTempFormat("%s - Build: %s %s", gApp.mMainWindowTitle.AsCStr(), __DATE__, __TIME__);
+	TempString window_title = gApp.mMainWindowTitle;
+
+	// If we don't have a proper version, add the build time to the window title to help identify.
+	if constexpr (StringView(ASSET_COOKER_VER_FULL).Empty())
+		gAppendFormat(window_title, " - Build: %s %s", __DATE__, __TIME__);
 
 	wchar_t     window_title_wchar_buffer[256];
 	WStringView window_title_wchar = gUtf8ToWideChar(window_title, window_title_wchar_buffer);

@@ -27,6 +27,10 @@ jobs:
         with:
           submodules: recursive
   
+      - name: Generate Version
+        shell: powershell
+        run: .github/Generate-VersionHeader.ps1 ${{ github.ref_name }}
+  
       - name: Generate Solution
         shell: cmd
         run: premake.bat
