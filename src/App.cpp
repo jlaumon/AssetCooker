@@ -224,8 +224,8 @@ void App::_FatalError(StringView inFormat, ...)
 	// Log the error first.
 	_LogV(LogType::Error, inFormat, args);
 
-	// Suspend all other threads.
-	// This is to stop cooking/monitoring and also to avoid crashing when once we exit below.
+	// Suspend all other threads while we display the error popup (don't want to keep cooking, etc.)
+	// Note: Threads might be suspended with a mutex locked, do not call anything that might deadlock after this point!
 	{
 		TempVector<OwnedHandle> all_threads;
 		DWORD                   current_thread_id = GetCurrentThreadId();
@@ -266,8 +266,6 @@ void App::_FatalError(StringView inFormat, ...)
 	}
 
 	va_end(args);
-
-	_Log(LogType::Error, "Fatal error, exiting now.");
 
 	// Terminate the process now, don't try to cleanup anything.
 	TerminateProcess(GetCurrentProcess(), 1);
