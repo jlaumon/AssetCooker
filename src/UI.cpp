@@ -1762,10 +1762,8 @@ void gDrawMain()
 		do_once { ImGui::SetWindowFocus(cWindowNameAppLog); };
 
 		// If the config file is missing, offer to go read the doc.
-		{
-			if (!gFileExists(gApp.mConfigFilePath) || !gFileExists(gApp.mRuleFilePath))
-				ImGui::OpenPopup("Getting Started?");
-		};
+		if (!gFileExists(gApp.mConfigFilePath) || !gFileExists(gApp.mRuleFilePath))
+			ImGui::OpenPopup("Getting Started?");
 
 		// Always center this window when appearing
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
