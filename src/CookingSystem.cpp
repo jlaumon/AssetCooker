@@ -1561,7 +1561,7 @@ void CookingSystem::UpdateNotifications()
 	if (IsCookingPaused())
 		return;
 
-	size_t cooking_log_size = mCookingLog.SizeRelaxed();
+	int cooking_log_size = mCookingLog.SizeRelaxed();
 
 	// If no command was cooked since last time, nothing to do.
 	if (mLastNotifCookingLogSize == cooking_log_size)

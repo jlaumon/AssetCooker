@@ -341,7 +341,7 @@ private:
 
 	AtomicInt32                           mCookingErrors           = 0; // Total number of commands that ended in error.
 	int                                   mLastNotifCookingErrors  = 0;
-	size_t                                mLastNotifCookingLogSize = 0;
+	int									  mLastNotifCookingLogSize = 0;
 	int64                                 mLastNotifTicks          = 0;
 
 	HashSet<CookingLogEntry*>             mTimeOutCurrentBatch;
