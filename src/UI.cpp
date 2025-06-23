@@ -233,6 +233,10 @@ void gUIClearState()
 {
 	// Reset all the static variables in the UI functions.
 	gUIStateManager.Clear();
+
+	// Reset the global variables that need it.
+	gSelectedCookingLogEntry   = {};
+	gFirstCookingLogEntryIndex = 0;
 }
 
 
