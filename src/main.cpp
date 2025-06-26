@@ -60,7 +60,7 @@ struct FrameTimer
 	static constexpr int cGPUHistorySize                    = 8;
 	static constexpr int cCPUHistorySize                    = 8;
 
-    ID3D11Query*         mDisjointQuery[cGPUHistorySize]    = {};
+	ID3D11Query*         mDisjointQuery[cGPUHistorySize]    = {};
 	ID3D11Query*         mStartQuery   [cGPUHistorySize]    = {};
 	ID3D11Query*         mEndQuery     [cGPUHistorySize]    = {};
 	double               mGPUTimesMS   [cGPUHistorySize]    = {}; // In Milliseconds.
@@ -70,7 +70,7 @@ struct FrameTimer
 
 	void Init()
 	{
- 		for (auto& query : mDisjointQuery)
+		for (auto& query : mDisjointQuery)
 		{
 			D3D11_QUERY_DESC desc = { D3D11_QUERY_TIMESTAMP_DISJOINT };
 			g_pd3dDevice->CreateQuery(&desc, &query);
@@ -141,20 +141,20 @@ struct FrameTimer
 		// Get the GPU query data for the oldest frame.
 		// This is a bit sloppy, we don't check the return value, but it's unlikely to fail with >5 frames of history, and if it fails the GPU time will just be zero.
 		gpu_frame_index = mFrameIndex % cGPUHistorySize;
-        UINT64 start_time = 0;
+		UINT64 start_time = 0;
 		g_pd3dDeviceContext->GetData(mStartQuery[gpu_frame_index], &start_time, sizeof(start_time), 0);
 
-        UINT64 end_time = 0;
+		UINT64 end_time = 0;
 		g_pd3dDeviceContext->GetData(mEndQuery[gpu_frame_index], &end_time, sizeof(end_time), 0);
 
-        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data = { .Frequency = 1, .Disjoint = TRUE };
+		D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data = { .Frequency = 1, .Disjoint = TRUE };
 		g_pd3dDeviceContext->GetData(mDisjointQuery[gpu_frame_index], &disjoint_data, sizeof(disjoint_data), 0);
 
-        if (disjoint_data.Disjoint == FALSE)
-        {
-            UINT64 delta = end_time - start_time;
-            mGPUTimesMS[gpu_frame_index] = (double)delta * 1000.0 / (double)disjoint_data.Frequency;
-        }
+		if (disjoint_data.Disjoint == FALSE)
+		{
+			UINT64 delta = end_time - start_time;
+			mGPUTimesMS[gpu_frame_index] = (double)delta * 1000.0 / (double)disjoint_data.Frequency;
+		}
 		else
 		{
 			mGPUTimesMS[gpu_frame_index] = 0.0; // Better show 0 than an unreliable number.
@@ -669,50 +669,50 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 HashMap<String, String> sParseArguments(StringView inCommandLine)
 {
-    HashMap<String, String> args;
-    int pos = 0;
+	HashMap<String, String> args;
+	int pos = 0;
 
-    while (pos < inCommandLine.Size())
-    {
-        // Skip spaces
-        while (pos < inCommandLine.Size() && inCommandLine[pos] == ' ')
-            pos++;
+	while (pos < inCommandLine.Size())
+	{
+		// Skip spaces
+		while (pos < inCommandLine.Size() && inCommandLine[pos] == ' ')
+			pos++;
 
-        // Find next space or end of string
-        int start = pos;
-        while (pos < inCommandLine.Size() && inCommandLine[pos] != ' ')
-            pos++;
+		// Find next space or end of string
+		int start = pos;
+		while (pos < inCommandLine.Size() && inCommandLine[pos] != ' ')
+			pos++;
 
-        // Extract the token
-        StringView token = inCommandLine.SubStr(start, pos - start);
+		// Extract the token
+		StringView token = inCommandLine.SubStr(start, pos - start);
 
-        if (!token.Empty() && token.Front() == '-') // It's a flag
-        {
+		if (!token.Empty() && token.Front() == '-') // It's a flag
+		{
 			int peek_pos = pos;
 
-            // Peek at next token to check if it's a value (not another flag)
-            while (peek_pos < inCommandLine.Size() && inCommandLine[peek_pos] == ' ') 
-                peek_pos++;
+			// Peek at next token to check if it's a value (not another flag)
+			while (peek_pos < inCommandLine.Size() && inCommandLine[peek_pos] == ' ') 
+				peek_pos++;
 
-            int value_start = peek_pos;
-            while (peek_pos < inCommandLine.Size() && inCommandLine[peek_pos] != ' ') 
-                peek_pos++;
+			int value_start = peek_pos;
+			while (peek_pos < inCommandLine.Size() && inCommandLine[peek_pos] != ' ') 
+				peek_pos++;
 
-            StringView value = inCommandLine.SubStr(value_start, peek_pos - value_start);
+			StringView value = inCommandLine.SubStr(value_start, peek_pos - value_start);
 
-            if (value.Empty() || value.Front() == '-') 
-            {
-                args[token] = ""; // Flag without value
-            }
-            else
-            {
-                args[token] = value; // Flag with value
+			if (value.Empty() || value.Front() == '-') 
+			{
+				args[token] = ""; // Flag without value
+			}
+			else
+			{
+				args[token] = value; // Flag with value
 
 				// Skip directly to after the value
 				pos = peek_pos;
-            }
-        }
-    }
+			}
+		}
+	}
 
-    return args;
+	return args;
 }
