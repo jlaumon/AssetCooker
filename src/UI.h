@@ -10,6 +10,8 @@
 struct CookingCommand;
 struct CookingLogEntry;
 
+Span<const uint8> gGetEmbeddedFont(StringView inName);
+
 void gUISetDPIScale(float inDPIScale);
 void gUISetUserScale(float inScale);
 float gUIGetUserScale();

@@ -251,6 +251,7 @@ int WinMain(
 
 	gSetCurrentThreadName("Main Thread");
 
+	// Make process DPI aware and obtain main monitor scale
 	ImGui_ImplWin32_EnableDpiAwareness();
 
 	gApp.Init();
@@ -319,25 +320,47 @@ int WinMain(
 	//io.ConfigViewportsNoDefaultParent = true;
 	//io.ConfigDockingAlwaysTabBar = true;
 	//io.ConfigDockingTransparentPayload = true;
-	//io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;     // FIXME-DPI: Experimental. THIS CURRENTLY DOESN'T WORK AS EXPECTED. DON'T USE IN USER APP!
-	io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI: Experimental.
 
 	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
+	//ImGui::StyleColorsDark();
 	//ImGui::StyleColorsLight();
 
-#ifdef IMGUI_HAS_VIEWPORT
-	// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
+	// Set the DPI scale once, then it'll be updated by the WM_DPICHANGED message.
+	gUISetDPIScale(ImGui_ImplWin32_GetDpiScaleForHwnd(hwnd));
+
+	// Setup scaling
 	ImGuiStyle& style = ImGui::GetStyle();
+	//style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+	//style.FontScaleDpi = main_scale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
+	io.ConfigDpiScaleFonts = true;          // [Experimental] Automatically overwrite style.FontScaleDpi in Begin() when Monitor DPI changes. This will scale fonts but _NOT_ scale sizes/padding for now.
+	io.ConfigDpiScaleViewports = true;      // [Experimental] Scale Dear ImGui and Platform Windows when Monitor DPI changes.
+
+	// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 	{
 		style.WindowRounding = 0.0f;
 		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 	}
-#endif
+		
+	ImFontConfig font_config;
+	font_config.SizePixels			 = 14.0f;
+	font_config.FontDataOwnedByAtlas = false; // Fonts are embedded in the exe, they don't need to be released.
 
-	// Set the DPI scale once, then it'll be updated by the WM_DPICHANGED message.
-	gUISetDPIScale(ImGui_ImplWin32_GetDpiScaleForHwnd(hwnd));
+	// The main font.
+	{
+		auto cousine_ttf = gGetEmbeddedFont("cousine_regular");
+		io.Fonts->AddFontFromMemoryTTF((void*)cousine_ttf.Data(), cousine_ttf.Size(), 14.0f, &font_config);
+	}
+
+	// The icons font.
+	{
+		ImFontConfig icons_config          = font_config;
+		icons_config.MergeMode             = true; // Merge into the default font.
+		icons_config.GlyphOffset.y         = 0;
+
+		auto ttf_data = gGetEmbeddedFont("forkawesome");
+		io.Fonts->AddFontFromMemoryTTF((void*)ttf_data.Data(), ttf_data.Size(), 14.0f, &icons_config);
+	}
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(hwnd);
@@ -428,14 +451,13 @@ int WinMain(
 		g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-#ifdef IMGUI_HAS_VIEWPORT
 		// Update and Render additional Platform Windows
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 		{
 			ImGui::UpdatePlatformWindows();
 			ImGui::RenderPlatformWindowsDefault();
 		}
-#endif
+
 		frame_timer.EndFrame();
 
 		gUILastFrameStats.mCPUMilliseconds = frame_timer.GetCPUAverageMilliseconds();
@@ -601,15 +623,6 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			const float dpi_scale = (float)dpi / 96.0f;
 			gUISetDPIScale(dpi_scale);
 
-	#ifdef IMGUI_HAS_VIEWPORT
-			if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_DpiEnableScaleViewports)
-			{
-				//const int dpi = HIWORD(wParam);
-				//printf("WM_DPICHANGED to %d (%.0f%%)\n", dpi, (float)dpi / 96.0f * 100.0f);
-				const RECT* suggested_rect = (RECT*)lParam;
-				::SetWindowPos(hWnd, nullptr, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
-			}
-	#endif
 		}
 		break;
 	case WM_COMMAND:

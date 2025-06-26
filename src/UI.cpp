@@ -185,47 +185,16 @@ float gUIGetUserScale()
 
 void gUIUpdate()
 {
-	
-
 	if (gUIScale.mNeedUpdate)
 	{
 		gUIScale.mNeedUpdate = false;
 
-		ImGui::GetStyle() = gStyle;
-		ImGui::GetStyle().ScaleAllSizes(gUIScale.GetFinalScale());
+		ImGuiStyle& style = ImGui::GetStyle();
 
-		auto& io = ImGui::GetIO();
-
-		// Remove all the font data.
-		io.Fonts->Clear();
-		// Release the DX11 objects (font textures, but also everything else... might not be the most efficient).
-		ImGui_ImplDX11_InvalidateDeviceObjects();
-
-		// Fonts are embedded in the exe, they don't need to be released.
-		ImFontConfig font_config; 
-		font_config.FontDataOwnedByAtlas = false;
-
-		// Reload the fonts at the new scale.
-		// The main font.
-		{
-			auto cousine_ttf = gGetEmbeddedFont("cousine_regular");
-			io.Fonts->AddFontFromMemoryTTF((void*)cousine_ttf.Data(), cousine_ttf.Size(), 14.0f * gUIScale.GetFinalScale(), &font_config);
-		}
-
-		// The icons font.
-		{
-			ImFontConfig icons_config          = font_config;
-			icons_config.MergeMode             = true; // Merge into the default font.
-			icons_config.GlyphOffset.y         = 0;
-
-			static const ImWchar icon_ranges[] = { ICON_MIN_FK, ICON_MAX_FK, 0 };
-
-			auto ttf_data = gGetEmbeddedFont("forkawesome");
-			io.Fonts->AddFontFromMemoryTTF((void*)ttf_data.Data(), ttf_data.Size(), 14.0f * gUIScale.GetFinalScale(), &icons_config, icon_ranges);
-		}
-
-		// Re-create the DX11 objects.
-		ImGui_ImplDX11_CreateDeviceObjects();
+		style = gStyle;
+		style.ScaleAllSizes(gUIScale.GetFinalScale());
+		style.FontScaleMain = gUIScale.mFromSettings;
+		style.FontScaleDpi = gUIScale.mFromDPI;
 	}
 }
 
