@@ -318,8 +318,8 @@ private:
 	StringPool                            mStringPool = { 64ull * 1024 };
 	VMemArray<CookingCommand>             mCommands;
 
-	VMemHashSet<CookingCommandID>         mCommandsQueuedForUpdateDirtyState;
-	Mutex                                 mCommandsQueuedForUpdateDirtyStateMutex;
+	VMemHashSet<CookingCommandID>		  mCommandsQueuedForUpdateDirtyState;
+	mutable Mutex						  mCommandsQueuedForUpdateDirtyStateMutex;
 
 	CookingQueue                          mCommandsDirty;	// All dirty commands.
 	CookingThreadsQueue                   mCommandsToCook;	// Commands that will get cooked by the cooking threads.

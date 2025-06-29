@@ -1543,11 +1543,19 @@ bool CookingSystem::IsIdle() const
 				return false;
 	}
 
+	// If any command needs a dirty state update, we're not idle.
+	{
+		LockGuard lock(mCommandsQueuedForUpdateDirtyStateMutex);
+		if (!mCommandsQueuedForUpdateDirtyState.Empty())
+			return false;
+	}
+
 	// If we're still initializing, we're not idle.
 	if (gFileSystem.GetInitState() != FileSystem::InitState::Ready)
 		return false;
 
-	// TODO check if log is changed (don't need to redraw if filesystem isn't idle, unless it prints)
+	// Note: The filesystem monitoring might not be idle, but that's okay.
+	// If files we care about are modified, one of the tests above should catch it.
 
 	// Guess we're idle.
 	return true;
