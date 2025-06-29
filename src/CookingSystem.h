@@ -158,7 +158,6 @@ struct CookingCommand : NoCopy
 		VersionMismatch        = 0b1000000, // Rule version changed.
 	};
 
-	// TODO should also store last cook time here, so we can save it in the cached state (currently it's only in the log entries)
 	DirtyState                      mDirtyState          = NotDirty;
 	bool                            mIsQueued            = false;
 	uint16                          mLastCookRuleVersion = CookingRule::cInvalidVersion;
