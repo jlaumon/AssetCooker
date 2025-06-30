@@ -236,6 +236,7 @@ int WinMain(
 		SetConsoleCtrlHandler(sCtrlHandler, TRUE);
 	}
 
+	// DEPRECATED! Use -config_file instead.
 	// Check if we want to change the working directory.
 	// Note: This has to be done before gApp.Init() since that changes where the config.toml file is read from.
 	if (auto working_dir = args.Find("-working_dir"); working_dir != args.End())
@@ -243,6 +244,21 @@ int WinMain(
 		TempString abs_working_dir = gGetAbsolutePath(working_dir->mValue);
 		if (!SetCurrentDirectoryA(abs_working_dir.AsCStr()))
 			gAppFatalError(R"(Failed to set working directory to "%s")", abs_working_dir.AsCStr());
+	}
+
+	// Check if we want to set a custom config file path.
+	// Note: This has to be done before gApp.Init() since that changes where the config.toml file is read from.
+	if (auto config_file = args.Find("-config_file"); config_file != args.End())
+	{
+		StringView abs_path = gGetAbsolutePath(config_file->mValue);
+		TempString dir		= gGetDirPart(abs_path);
+		if (!SetCurrentDirectoryA(dir.AsCStr()))
+			gAppFatalError(R"(Failed to set working directory to "%s")", dir.AsCStr());
+
+		if (gGetFileNamePart(abs_path).Empty())
+			gAppFatalError(R"(Config file name cannot be empty)");
+
+		gApp.mConfigFilePath = abs_path;
 	}
 
 	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.

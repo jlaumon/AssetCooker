@@ -93,6 +93,16 @@ constexpr StringView gGetFileNamePart(StringView inPath)
 }
 
 
+constexpr StringView gGetDirPart(StringView inPath)
+{
+	int file_start = inPath.FindLastOf("\\/");
+	if (file_start == -1)
+		return inPath;
+
+	return inPath.SubStr(0, file_start);
+}
+
+
 constexpr StringView gNoTrailingSlash(StringView inPath)
 {
 	if (inPath.Back() == '\\' || inPath.Back() == '/')
