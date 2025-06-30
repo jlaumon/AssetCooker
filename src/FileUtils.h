@@ -20,19 +20,20 @@ struct OwnedHandle : NoCopy
 	OwnedHandle& operator=(OwnedHandle&& ioOther)	{ Close(); mHandle = ioOther.mHandle; ioOther.mHandle = cInvalid; return *this; }
 
 	operator void*() const							{ return mHandle; }
-	bool IsValid() const							{ return mHandle != cInvalid; }
+	bool IsValid() const							{ return mHandle != nullptr && mHandle != cInvalid; }
 	void Close();									// Close the handle.
 
 	void* mHandle = cInvalid;
 };
 
 
-constexpr MutStringView  gNormalizePath(MutStringView ioPath); // Replace / by \.
-constexpr bool           gIsNormalized(StringView inPath);     // Return true if path only contains backslashes.
-TempString               gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
-constexpr bool           gIsAbsolute(StringView inPath);       // Return true if the path is absolute and canonical.
-constexpr StringView     gGetFileNamePart(StringView inPath);  // Get the filename part of a path.
-constexpr StringView     gNoTrailingSlash(StringView inPath);  // Remove the trailing slash if there is one.
+constexpr MutStringView	 gNormalizePath(MutStringView ioPath); // Replace / by \.
+constexpr bool			 gIsNormalized(StringView inPath);	   // Return true if path only contains backslashes.
+TempString				 gGetAbsolutePath(StringView inPath);  // Get the absolute and canonical version of this path.
+constexpr bool			 gIsAbsolute(StringView inPath);	   // Return true if the path is absolute and canonical.
+constexpr StringView	 gGetFileNamePart(StringView inPath);  // Get the filename part of a path.
+constexpr StringView	 gGetDirPart(StringView inPath);	   // Get the directory part of a path.
+constexpr StringView	 gNoTrailingSlash(StringView inPath);  // Remove the trailing slash if there is one.
 
 bool                     gCreateDirectoryRecursive(StringView inAbsolutePath);
 

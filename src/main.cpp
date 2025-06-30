@@ -435,7 +435,6 @@ int WinMain(
 			break;
 
 		// If the window is minimized, never draw.
-		gAssert(gApp.mMainWindowIsMinimized == (bool)IsIconic(hwnd));
 		if (gApp.mMainWindowIsMinimized)
 		{
 			// We're not going to call EndFrame, so reset the timer.
