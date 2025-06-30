@@ -8,26 +8,26 @@
 extern "C" {
 #endif
 
-struct asset_cooker_s;
-typedef struct asset_cooker_s* asset_cooker_handle;
+struct AssetCookerInternal;
+typedef struct AssetCookerInternal* AssetCookerHandle;
 
 
-enum assetcooker_option_e
+enum AssetCookerOptions
 {
-	assetcooker_option_start_minimized = 0x1,
+	AssetCookerOption_StartMinimized = 0x1,
 };
 
 
-int asset_cooker_launch(const char* exe_path, const char* config_file_path, int options, asset_cooker_handle* out_handle);
-int asset_cooker_detach(asset_cooker_handle* handle_ptr);
-int asset_cooker_kill(asset_cooker_handle* handle_ptr);
-int asset_cooker_pause(asset_cooker_handle handle, int pause);
-int asset_cooker_show_window(asset_cooker_handle handle);
-int asset_cooker_is_alive(asset_cooker_handle handle);
-int asset_cooker_is_idle(asset_cooker_handle handle);
-int asset_cooker_is_paused(asset_cooker_handle handle);
-int asset_cooker_has_errors(asset_cooker_handle handle);
-int asset_cooker_wait_for_idle(asset_cooker_handle handle);
+int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int inOptions, AssetCookerHandle* ouHandle);
+int AssetCooker_Detach(AssetCookerHandle* ioHandlePtr);
+int AssetCooker_Kill(AssetCookerHandle* ioHandlePtr);
+int AssetCooker_Pause(AssetCookerHandle inHandle, int inPause);
+int AssetCooker_ShowWindow(AssetCookerHandle inHandle);
+int AssetCooker_IsAlive(AssetCookerHandle inHandle);
+int AssetCooker_IsIdle(AssetCookerHandle inHandle);
+int AssetCooker_IsPaused(AssetCookerHandle inHandle);
+int AssetCooker_HasErrors(AssetCookerHandle inHandle);
+int AssetCooker_WaitForIdle(AssetCookerHandle inHandle);
 
 
 #if defined(__cplusplus)

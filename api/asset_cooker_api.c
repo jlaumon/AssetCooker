@@ -23,10 +23,10 @@ typedef unsigned long long uint64;
 
 #define STR_OUT(buffer) buffer, gElemCount(buffer)
 
-enum EventResetMode
+enum EventReset
 {
-	Event_ManualReset,
-	Event_AutoReset,
+	EventReset_Manual,
+	EventReset_Auto,
 };
 
 enum Events
@@ -40,7 +40,7 @@ enum Events
 };
 
 
-struct asset_cooker_s
+typedef struct AssetCookerInternal
 {
 	HANDLE mProcessHandle;
 
@@ -51,8 +51,7 @@ struct asset_cooker_s
 	HANDLE mEventIsPaused;
 	HANDLE mEventIsIdle;
 	HANDLE mEventHasErrors;
-};
-typedef struct asset_cooker_s asset_cooker_s;
+} AssetCookerInternal;
 
 
 struct AssetCookerSharedMemory
@@ -131,24 +130,24 @@ BOOL sFileExists(const char* inPath)
 }
 
 
-HANDLE sCreateSharedEvent(const char* inAssetCookerIdentifier, const char* inEventName, enum EventResetMode inResetMode)
+HANDLE sCreateSharedEvent(const char* inAssetCookerIdentifier, const char* inEventName, enum EventReset inResetMode)
 {
 	char event_name[MAX_PATH];
 	sStrConcat(inAssetCookerIdentifier, inEventName, STR_OUT(event_name));
 
-	return CreateEventA(NULL, inResetMode == Event_ManualReset, FALSE, event_name);
+	return CreateEventA(NULL, inResetMode == EventReset_Manual, FALSE, event_name);
 }
 
 
-int asset_cooker_launch(const char* exe_path, const char* config_file_path, int options, asset_cooker_handle* out_handle)
+int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int inOptions, AssetCookerHandle* ouHandle)
 {
 	// Make sure the config file exists.
-	if (!sFileExists(config_file_path))
+	if (!sFileExists(inConfigFilePath))
 		return -1;
 
 	// Get the asset cooker identifier.
 	char asset_cooker_id[MAX_PATH];
-	if (sGetAssetCookerIdentifier(config_file_path, STR_OUT(asset_cooker_id)) < 0)
+	if (sGetAssetCookerIdentifier(inConfigFilePath, STR_OUT(asset_cooker_id)) < 0)
 		return -1;
 
 	HANDLE process_handle = NULL;
@@ -193,7 +192,7 @@ int asset_cooker_launch(const char* exe_path, const char* config_file_path, int 
 			// Shared memory does not exist, Asset Cooker is probably not running.
 			// Launch it now.
 			char command_line[MAX_PATH + 32];
-			if (!sStrConcat("-config_file ", config_file_path, STR_OUT(command_line)))
+			if (!sStrConcat("-config_file ", inConfigFilePath, STR_OUT(command_line)))
 				return -1;
 
 			PROCESS_INFORMATION process_info;
@@ -201,14 +200,14 @@ int asset_cooker_launch(const char* exe_path, const char* config_file_path, int 
 			memset(&startup_info, 0, sizeof(startup_info));
 			startup_info.cb = sizeof(startup_info);
 
-			if (options & assetcooker_option_start_minimized)
+			if (inOptions & AssetCookerOption_StartMinimized)
 			{
 				startup_info.dwFlags |= STARTF_USESHOWWINDOW;
 				startup_info.wShowWindow = SW_SHOWMINIMIZED;
 			}
 
 			BOOL success = CreateProcessA(
-				exe_path,
+				inExePath,
 				command_line,
 				NULL,			// lpProcessAttributes, 
 				NULL,			// lpThreadAttributes,
@@ -232,18 +231,18 @@ int asset_cooker_launch(const char* exe_path, const char* config_file_path, int 
 	}
 	
 	// Allocate a handle.
-	asset_cooker_s* ac_handle = calloc(1, sizeof(asset_cooker_s));
-	*out_handle = calloc(1, sizeof(asset_cooker_s));
+	AssetCookerInternal* ac_handle = calloc(1, sizeof(AssetCookerInternal));
+	*ouHandle = calloc(1, sizeof(AssetCookerInternal));
 	ac_handle->mProcessHandle = process_handle;
 
 	// Open the shared events.
-	ac_handle->mEventKill		= sCreateSharedEvent(asset_cooker_id, " Kill", Event_AutoReset);
-	ac_handle->mEventPause		= sCreateSharedEvent(asset_cooker_id, " Pause", Event_AutoReset);
-	ac_handle->mEventUnpause	= sCreateSharedEvent(asset_cooker_id, " Unpause", Event_AutoReset);
-	ac_handle->mEventShowWindow	= sCreateSharedEvent(asset_cooker_id, " ShowWindow", Event_AutoReset);
-	ac_handle->mEventIsPaused	= sCreateSharedEvent(asset_cooker_id, " IsPaused", Event_ManualReset);
-	ac_handle->mEventIsIdle		= sCreateSharedEvent(asset_cooker_id, " IsIdle", Event_ManualReset);
-	ac_handle->mEventHasErrors	= sCreateSharedEvent(asset_cooker_id, " HasErrors", Event_ManualReset);
+	ac_handle->mEventKill		= sCreateSharedEvent(asset_cooker_id, " Kill", EventReset_Auto);
+	ac_handle->mEventPause		= sCreateSharedEvent(asset_cooker_id, " Pause", EventReset_Auto);
+	ac_handle->mEventUnpause	= sCreateSharedEvent(asset_cooker_id, " Unpause", EventReset_Auto);
+	ac_handle->mEventShowWindow	= sCreateSharedEvent(asset_cooker_id, " ShowWindow", EventReset_Auto);
+	ac_handle->mEventIsPaused	= sCreateSharedEvent(asset_cooker_id, " IsPaused", EventReset_Manual);
+	ac_handle->mEventIsIdle		= sCreateSharedEvent(asset_cooker_id, " IsIdle", EventReset_Manual);
+	ac_handle->mEventHasErrors	= sCreateSharedEvent(asset_cooker_id, " HasErrors", EventReset_Manual);
 
 	if (ac_handle->mEventKill		== NULL ||
 		ac_handle->mEventPause		== NULL ||
@@ -254,116 +253,116 @@ int asset_cooker_launch(const char* exe_path, const char* config_file_path, int 
 		ac_handle->mEventHasErrors	== NULL)
 	{
 		// Clean up.
-		asset_cooker_detach(&ac_handle);
+		AssetCooker_Detach(&ac_handle);
 		return -1;
 	}
 
 	// Return the handle.
-	*out_handle = ac_handle;
+	*ouHandle = ac_handle;
 	return 0;
 
 }
 
 
-int asset_cooker_is_alive(asset_cooker_handle handle)
+int AssetCooker_IsAlive(AssetCookerHandle inHandle)
 {
-	if (handle == NULL)
+	if (inHandle == NULL)
 		return 0;
 
-	return WaitForSingleObject(handle->mProcessHandle, 0) != WAIT_OBJECT_0;
+	return WaitForSingleObject(inHandle->mProcessHandle, 0) != WAIT_OBJECT_0;
 }
 
 
-int asset_cooker_kill(asset_cooker_handle* handle_ptr)
+int AssetCooker_Kill(AssetCookerHandle* ioHandlePtr)
 {
-	if (handle_ptr == NULL || *handle_ptr == NULL)
+	if (ioHandlePtr == NULL || *ioHandlePtr == NULL)
 		return 0;
 
-	BOOL success = SetEvent((*handle_ptr)->mEventKill);
+	BOOL success = SetEvent((*ioHandlePtr)->mEventKill);
 
-	asset_cooker_detach(handle_ptr);
+	AssetCooker_Detach(ioHandlePtr);
 
 	return success ? 0 : -1;
 }
 
 
-int asset_cooker_detach(asset_cooker_handle* handle_ptr)
+int AssetCooker_Detach(AssetCookerHandle* ioHandlePtr)
 {
-	if (handle_ptr == NULL || *handle_ptr == NULL)
+	if (ioHandlePtr == NULL || *ioHandlePtr == NULL)
 		return -1;
 
-	CloseHandle((*handle_ptr)->mEventKill);
-	CloseHandle((*handle_ptr)->mEventPause);
-	CloseHandle((*handle_ptr)->mEventUnpause);
-	CloseHandle((*handle_ptr)->mEventIsPaused);
-	CloseHandle((*handle_ptr)->mEventIsIdle);
-	CloseHandle((*handle_ptr)->mProcessHandle);
+	CloseHandle((*ioHandlePtr)->mEventKill);
+	CloseHandle((*ioHandlePtr)->mEventPause);
+	CloseHandle((*ioHandlePtr)->mEventUnpause);
+	CloseHandle((*ioHandlePtr)->mEventIsPaused);
+	CloseHandle((*ioHandlePtr)->mEventIsIdle);
+	CloseHandle((*ioHandlePtr)->mProcessHandle);
 	
-	free(*handle_ptr);
-	*handle_ptr = NULL;
+	free(*ioHandlePtr);
+	*ioHandlePtr = NULL;
 
 	return 0;
 }
 
 
-int asset_cooker_pause(asset_cooker_handle handle, int pause)
+int AssetCooker_Pause(AssetCookerHandle inHandle, int inPause)
 {
-	if (handle == NULL)
+	if (inHandle == NULL)
 		return -1;
 
 	BOOL success;
-	if (pause)
-		success = SetEvent(handle->mEventPause);
+	if (inPause)
+		success = SetEvent(inHandle->mEventPause);
 	else
-		success = SetEvent(handle->mEventUnpause);
+		success = SetEvent(inHandle->mEventUnpause);
 
 	return success ? 0 : -1;
 }
 
 
-int asset_cooker_show_window(asset_cooker_handle handle)
+int AssetCooker_ShowWindow(AssetCookerHandle inHandle)
 {
-	if (handle == NULL)
+	if (inHandle == NULL)
 		return -1;
 
-	BOOL success = SetEvent(handle->mEventShowWindow);
+	BOOL success = SetEvent(inHandle->mEventShowWindow);
 
 	return success ? 0 : -1;
 }
 
 
-int asset_cooker_is_paused(asset_cooker_handle handle)
+int AssetCooker_IsPaused(AssetCookerHandle inHandle)
 {
-	if (handle == NULL)
+	if (inHandle == NULL)
 		return 0;
 
-	return (WaitForSingleObject(handle->mEventIsPaused, 0) == WAIT_OBJECT_0);
+	return (WaitForSingleObject(inHandle->mEventIsPaused, 0) == WAIT_OBJECT_0);
 }
 
 
-int asset_cooker_has_errors(asset_cooker_handle handle)
+int AssetCooker_HasErrors(AssetCookerHandle inHandle)
 {
-	if (handle == NULL)
+	if (inHandle == NULL)
 		return 0;
 
-	return (WaitForSingleObject(handle->mEventHasErrors, 0) == WAIT_OBJECT_0);
+	return (WaitForSingleObject(inHandle->mEventHasErrors, 0) == WAIT_OBJECT_0);
 }
 
 
-int asset_cooker_is_idle(asset_cooker_handle handle)
+int AssetCooker_IsIdle(AssetCookerHandle inHandle)
 {
-	if (handle == NULL)
+	if (inHandle == NULL)
 		return 0;
 
-	return (WaitForSingleObject(handle->mEventIsIdle, 0) == WAIT_OBJECT_0);
+	return (WaitForSingleObject(inHandle->mEventIsIdle, 0) == WAIT_OBJECT_0);
 }
 
 
-int asset_cooker_wait_for_idle(asset_cooker_handle handle)
+int AssetCooker_WaitForIdle(AssetCookerHandle inHandle)
 {
-	if (handle == NULL)
+	if (inHandle == NULL)
 		return -1;
 
-	int success = (WaitForSingleObject(handle->mEventIsIdle, INFINITE) == WAIT_OBJECT_0);
+	int success = (WaitForSingleObject(inHandle->mEventIsIdle, INFINITE) == WAIT_OBJECT_0);
 	return success ? 0 : -1;
 }
