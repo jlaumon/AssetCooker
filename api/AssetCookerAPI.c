@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Unlicense
-#include "asset_cooker_api.h"
+#include "AssetCookerAPI.h"
 
 #include <stdio.h>
 #include <stdlib.h>
