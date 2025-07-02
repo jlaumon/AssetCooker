@@ -1,0 +1,7 @@
+[[Repo]]
+Name = "Source"
+Path = 'data/source'
+
+[[Repo]]
+Name = "Bin"
+Path = 'data/bin'
