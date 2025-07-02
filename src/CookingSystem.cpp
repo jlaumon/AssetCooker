@@ -943,7 +943,11 @@ void CookingSystem::StartCooking()
 		}, [this](Thread&) { TimeOutUpdateThread(); });
 
 	// Initialize cooking paused bool.
-	mCookingPaused = mCookingStartPaused;
+	if (mCookingPaused != mCookingStartPaused)
+	{
+		mCookingPaused = mCookingStartPaused;
+		gRemoteControlOnIsPausedChange(mCookingPaused);
+	}
 
 	// If the cooking isn't paused, queue the dirty commands.
 	if (!IsCookingPaused())
@@ -1002,6 +1006,7 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 		QueueDirtyCommands();
 	}
 
+	// Update the remote control state.
 	gRemoteControlOnIsPausedChange(inPaused);
 }
 

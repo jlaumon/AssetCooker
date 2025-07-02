@@ -190,6 +190,7 @@ void gRemoteControlInit(StringView inAssetCookerID)
 
 	// Check if the Pause/Unpause actions were already set.
 	// We want to make sure they are applied before we start cooking.
+	// Note: Cooking hasn't started yet, until then IsCookingPaused() return true even if we call SetCookingPaused(false).
 	{
 		if (WaitForSingleObject(sRemoteControl.GetEvent(Action::Unpause), 0) == WAIT_OBJECT_0)
 			gCookingSystem.SetCookingPaused(false);
@@ -198,7 +199,7 @@ void gRemoteControlInit(StringView inAssetCookerID)
 			gCookingSystem.SetCookingPaused(true);
 	}
 
-	// IsIdle and HasErrors are always false at this point, but IsPaused might already be set to true (by user settings). Update if necessary.
+	// IsIdle and HasErrors are always false at this point, but IsPaused is true until cooking starts. Update if necessary.
 	if (gCookingSystem.IsCookingPaused())
 		gRemoteControlOnIsPausedChange(true);
 
