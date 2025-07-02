@@ -403,9 +403,10 @@ int WinMain(
 			while (true)
 			{
 				// Wait for either a window event (QS_ALLINPUT), exit being requested, or one second.
+				// TODO: add a mDrawRequestedEvent that we could set whenever we want to force a redraw (eg. added a log, or remote control paused/unpaused)
 				constexpr int timeout_ms = 1000;
 				HANDLE		  handles[]	 = { gApp.mExitRequestedEvent.GetOSHandle() };
-				if (MsgWaitForMultipleObjects(1, handles, FALSE, timeout_ms, QS_ALLINPUT) != WAIT_TIMEOUT)
+				if (MsgWaitForMultipleObjects(gElemCount(handles), handles, FALSE, timeout_ms, QS_ALLINPUT) != WAIT_TIMEOUT)
 					break; // Something happened, stop idling!
 
 				// After one second, check if the cooking system is still idle (files may have been modified).

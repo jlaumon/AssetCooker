@@ -97,8 +97,8 @@ StringView gToStringView(Status inEnum)
 }
 
 
-RemoteControl gRemoteControl;
-Thread		  gRemoteControlThread;
+static RemoteControl sRemoteControl;
+static Thread		 sRemoteControlThread;
 
 
 static HANDLE sCreateSharedEvent(StringView inAssetCookerID, StringView inEventName, Event::ResetMode inResetMode)
@@ -121,6 +121,10 @@ static HANDLE sCreateSharedEvent(StringView inAssetCookerID, StringView inEventN
 
 void gRemoteControlInit(StringView inAssetCookerID)
 {
+	// Remote control should be init before we start monitoring/cooking,
+	// to make sure the pause/unpause actions are applied first.
+	gAssert(!gFileSystem.IsMonitoringStarted());
+
 	// Initialize the shared memory.
 	{
 		TempString shared_memory_name = inAssetCookerID;
@@ -128,14 +132,14 @@ void gRemoteControlInit(StringView inAssetCookerID)
 
 		constexpr int cSharedMemorySize	= (int)sizeof(AssetCookerSharedMemory);
 
-		gRemoteControl.mSharedMemoryHandle = CreateFileMappingA(
+		sRemoteControl.mSharedMemoryHandle = CreateFileMappingA(
 			INVALID_HANDLE_VALUE,
 			nullptr,
 			PAGE_READWRITE, 
 			0, cSharedMemorySize,
 			shared_memory_name.AsCStr());
 
-		if (gRemoteControl.mSharedMemoryHandle == nullptr)
+		if (sRemoteControl.mSharedMemoryHandle == nullptr)
 		{
 			gAppLogError("RemoteControl Init Failed - OpenFileMappingA failed for %s - %s", 
 				shared_memory_name.AsCStr(),
@@ -143,63 +147,75 @@ void gRemoteControlInit(StringView inAssetCookerID)
 			goto init_error;
 		}
 
-		gRemoteControl.mSharedMemoryPtr = MappedPtr<AssetCookerSharedMemory>((AssetCookerSharedMemory*)MapViewOfFile(
-			gRemoteControl.mSharedMemoryHandle, 
+		sRemoteControl.mSharedMemoryPtr = MappedPtr<AssetCookerSharedMemory>((AssetCookerSharedMemory*)MapViewOfFile(
+			sRemoteControl.mSharedMemoryHandle, 
 			FILE_MAP_READ | FILE_MAP_WRITE, 
 			0, 0, cSharedMemorySize));
 
-		if (gRemoteControl.mSharedMemoryPtr == nullptr)
+		if (sRemoteControl.mSharedMemoryPtr == nullptr)
 		{
 			gAppLogError("RemoteControl Init Failed - MapViewOfFile failed - %s", GetLastErrorString().AsCStr());
 			goto init_error;
 		}
 
 		// Initialize the shared memory.
-		gRemoteControl.mSharedMemoryPtr->mVersion	= 0;
-		gRemoteControl.mSharedMemoryPtr->mProcessID = GetCurrentProcessId();
+		sRemoteControl.mSharedMemoryPtr->mVersion	= 0;
+		sRemoteControl.mSharedMemoryPtr->mProcessID = GetCurrentProcessId();
 	}
 
 	// Open the shared events.
-	for (int i = 0; i < (int)Action::_Count; i++)
 	{
-		gRemoteControl.mActionEvents[i] = sCreateSharedEvent(
-			inAssetCookerID, 
-			gToStringView((Action)i), 
-			Event::AutoReset);
+		for (int i = 0; i < (int)Action::_Count; i++)
+		{
+			sRemoteControl.mActionEvents[i] = sCreateSharedEvent(
+				inAssetCookerID, 
+				gToStringView((Action)i), 
+				Event::AutoReset);
 
-		if (gRemoteControl.mActionEvents[i] == nullptr)
-			goto init_error;
+			if (sRemoteControl.mActionEvents[i] == nullptr)
+				goto init_error;
+		}
+
+		for (int i = 0; i < (int)Status::_Count; i++)
+		{
+			sRemoteControl.mStatusEvents[i] = sCreateSharedEvent(
+				inAssetCookerID, 
+				gToStringView((Status)i), 
+				Event::AutoReset);
+
+			if (sRemoteControl.mStatusEvents[i] == nullptr)
+				goto init_error;
+		}
 	}
 
-	for (int i = 0; i < (int)Status::_Count; i++)
+	// Check if the Pause/Unpause actions were already set.
+	// We want to make sure they are applied before we start cooking.
 	{
-		gRemoteControl.mStatusEvents[i] = sCreateSharedEvent(
-			inAssetCookerID, 
-			gToStringView((Status)i), 
-			Event::AutoReset);
+		if (WaitForSingleObject(sRemoteControl.GetEvent(Action::Unpause), 0) == WAIT_OBJECT_0)
+			gCookingSystem.SetCookingPaused(false);
 
-		if (gRemoteControl.mStatusEvents[i] == nullptr)
-			goto init_error;
+		if (WaitForSingleObject(sRemoteControl.GetEvent(Action::Pause), 0) == WAIT_OBJECT_0)
+			gCookingSystem.SetCookingPaused(true);
 	}
 
-	// IsIdle and HasErrors are always false at this point, but IsPaused might already be set to true. Update if necessary.
+	// IsIdle and HasErrors are always false at this point, but IsPaused might already be set to true (by user settings). Update if necessary.
 	if (gCookingSystem.IsCookingPaused())
 		gRemoteControlOnIsPausedChange(true);
 
-	gRemoteControlThread.Create({ "RemoteControl", 16_KiB, 0_KiB, EThreadPriority::AboveNormal }, [](Thread& inThread)
+	sRemoteControlThread.Create({ "RemoteControl", 16_KiB, 0_KiB, EThreadPriority::AboveNormal }, [](Thread& inThread)
 	{
 		while (true)
 		{
 			// Wait until one of the events gets signaled.
 			DWORD result = WaitForMultipleObjects(
-				gElemCount(gRemoteControl.mActionEvents), 
-				&gRemoteControl.mActionEvents[0].mHandle, 
+				gElemCount(sRemoteControl.mActionEvents), 
+				&sRemoteControl.mActionEvents[0].mHandle, 
 				FALSE, INFINITE);
 
 			if (inThread.IsStopRequested())
 				return;
 
-			if (result < WAIT_OBJECT_0 || result >= WAIT_OBJECT_0 + gElemCount(gRemoteControl.mActionEvents)) [[unlikely]]
+			if (result < WAIT_OBJECT_0 || result >= WAIT_OBJECT_0 + gElemCount(sRemoteControl.mActionEvents)) [[unlikely]]
 			{
 				gAppLogError("RemoteControl Thread Failed - WaitForMultipleObjects returned %u - %s",
 					result, GetLastErrorString().AsCStr());
@@ -253,24 +269,27 @@ void gRemoteControlInit(StringView inAssetCookerID)
 
 void gRemoteControlExit()
 {
-	if (gRemoteControlThread.IsJoinable())
+	if (sRemoteControlThread.IsJoinable())
 	{
-		gRemoteControlThread.RequestStop();
-		SetEvent(gRemoteControl.GetEvent(Action::Kill)); // Set any event to wake up the thread.
-		gRemoteControlThread.Join();
+		sRemoteControlThread.RequestStop();
+		SetEvent(sRemoteControl.GetEvent(Action::Kill)); // Set any event to wake up the thread.
+		sRemoteControlThread.Join();
 	}
 
-	// Reset all the status events on exit to avoid leaving an inconsistent state.
-	for (int i = 0; i < (int)Status::_Count; i++)
-		ResetEvent(gRemoteControl.mStatusEvents[i]);
+	// Reset all the events on exit to avoid leaving an inconsistent state (mostly important for statuses).
+	for (HANDLE event : sRemoteControl.mActionEvents)
+		ResetEvent(event);
+	for (HANDLE event : sRemoteControl.mStatusEvents)
+		ResetEvent(event);
 
-	gRemoteControl = {};
+	// Close all the handles.
+	sRemoteControl = {};
 }
 
 
 static void sUpdateStatusEvent(Status inStatus, bool inSet)
 {
-	OwnedHandle& event = gRemoteControl.GetEvent(inStatus);
+	OwnedHandle& event = sRemoteControl.GetEvent(inStatus);
 	if (!event.IsValid())
 		return; // Not initialized, or init failed?
 

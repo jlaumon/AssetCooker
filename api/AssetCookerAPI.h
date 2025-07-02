@@ -10,13 +10,14 @@ extern "C" {
 
 struct AssetCookerInternal;
 typedef struct AssetCookerInternal* AssetCookerHandle;
-
+#define AssetCookerHandle_Invalid NULL
 
 enum AssetCookerOptions
 {
-	AssetCookerOption_StartMinimized = 0x1,
+	AssetCookerOption_StartMinimized	= 1 << 0,	// Start with the window minimized (or hidden depending on Asset Cooker's settings).
+	AssetCookerOption_StartPaused		= 1 << 1,	// Start with cooking paused.
+	AssetCookerOption_StartUnpaused		= 1 << 2,	// Start with cooking unpaused.
 };
-
 
 int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int inOptions, AssetCookerHandle* ouHandle);
 int AssetCooker_Detach(AssetCookerHandle* ioHandlePtr);

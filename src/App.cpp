@@ -173,6 +173,7 @@ void App::Init()
 	if (!HasInitError())
 	{
 		// Initilialize the remote control.
+		// Note: Do this before starting monitoring/cooking because the remote control might want to pause cooking immediately.
 		gRemoteControlInit(asset_cooker_id);
 
 		// Start scanning files.

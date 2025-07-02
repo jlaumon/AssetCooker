@@ -150,13 +150,48 @@ int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int 
 	if (sGetAssetCookerIdentifier(inConfigFilePath, STR_OUT(asset_cooker_id)) < 0)
 		return -1;
 
-	HANDLE process_handle = NULL;
+	// Allocate a handle.
+	AssetCookerInternal* ac_handle = calloc(1, sizeof(AssetCookerInternal));
 
-	// Try to open the shared memory.
+	// Create the shared events that will be used to communicate with Asset Cooker.
+	{
+		// Actions
+		ac_handle->mEventKill		= sCreateSharedEvent(asset_cooker_id, " Kill", EventReset_Auto);
+		ac_handle->mEventPause		= sCreateSharedEvent(asset_cooker_id, " Pause", EventReset_Auto);
+		ac_handle->mEventUnpause	= sCreateSharedEvent(asset_cooker_id, " Unpause", EventReset_Auto);
+		ac_handle->mEventShowWindow	= sCreateSharedEvent(asset_cooker_id, " ShowWindow", EventReset_Auto);
+
+		// Statuses
+		ac_handle->mEventIsPaused	= sCreateSharedEvent(asset_cooker_id, " IsPaused", EventReset_Manual);
+		ac_handle->mEventIsIdle		= sCreateSharedEvent(asset_cooker_id, " IsIdle", EventReset_Manual);
+		ac_handle->mEventHasErrors	= sCreateSharedEvent(asset_cooker_id, " HasErrors", EventReset_Manual);
+
+		if (ac_handle->mEventKill		== NULL ||
+			ac_handle->mEventPause		== NULL ||
+			ac_handle->mEventUnpause	== NULL ||
+			ac_handle->mEventShowWindow == NULL ||
+			ac_handle->mEventIsPaused	== NULL ||
+			ac_handle->mEventIsIdle		== NULL ||
+			ac_handle->mEventHasErrors	== NULL)
+		{
+			goto launch_error;
+		}
+	}
+
+	// If we want to start paused (or unpaused), set the event before even starting the Asset Cooker process.
+	{
+		if (inOptions & AssetCookerOption_StartUnpaused)
+			AssetCooker_Pause(ac_handle, 0);
+
+		if (inOptions & AssetCookerOption_StartPaused)
+		AssetCooker_Pause(ac_handle, 1);
+	}
+
+	// Now we need to check if Asset Cooker is already running. We can do that by trying to open its shared memory file.
 	{
 		char shared_memory_name[MAX_PATH];
 		if (!sStrConcat(asset_cooker_id, " SharedMemory", STR_OUT(shared_memory_name)))
-			return -1;
+			goto launch_error;
 
 		HANDLE shared_memory_handle = OpenFileMappingA(FILE_MAP_READ, FALSE, shared_memory_name);
 		if (shared_memory_handle != NULL)
@@ -172,20 +207,20 @@ int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int 
 			if (shared_memory_ptr == NULL)
 			{
 				CloseHandle(shared_memory_handle);
-				return -1;
+				goto launch_error;
 			}
 
-			// Get the process handle.
+			// Get the process ID.
 			DWORD process_id = shared_memory_ptr->mProcessID;
 
 			// Unmap & close the shared memory.
 			UnmapViewOfFile(shared_memory_ptr);
 			CloseHandle(shared_memory_handle);
 
-			// Get a handle to Asset Cooker's process.
-			process_handle = OpenProcess(SYNCHRONIZE, FALSE, process_id);
-			if (process_handle == NULL)
-				return -1;
+			// Get the process handle from the ID.
+			ac_handle->mProcessHandle = OpenProcess(SYNCHRONIZE, FALSE, process_id);
+			if (ac_handle->mProcessHandle == NULL)
+				goto launch_error;
 		}
 		else
 		{
@@ -193,11 +228,10 @@ int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int 
 			// Launch it now.
 			char command_line[MAX_PATH + 32];
 			if (!sStrConcat("-config_file ", inConfigFilePath, STR_OUT(command_line)))
-				return -1;
+				goto launch_error;
 
 			PROCESS_INFORMATION process_info;
-			STARTUPINFOA startup_info;
-			memset(&startup_info, 0, sizeof(startup_info));
+			STARTUPINFOA startup_info = {0};
 			startup_info.cb = sizeof(startup_info);
 
 			if (inOptions & AssetCookerOption_StartMinimized)
@@ -220,47 +254,24 @@ int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int 
 			);
 
 			if (!success)
-				return -1;
+				goto launch_error;
 
-			process_handle = process_info.hProcess;
+			// Store the process handle.
+			ac_handle->mProcessHandle = process_info.hProcess;
 
 			// Don't need the thread handle, close it now.
 			CloseHandle(process_info.hThread);
 		}
-
 	}
 	
-	// Allocate a handle.
-	AssetCookerInternal* ac_handle = calloc(1, sizeof(AssetCookerInternal));
-	*ouHandle = calloc(1, sizeof(AssetCookerInternal));
-	ac_handle->mProcessHandle = process_handle;
-
-	// Open the shared events.
-	ac_handle->mEventKill		= sCreateSharedEvent(asset_cooker_id, " Kill", EventReset_Auto);
-	ac_handle->mEventPause		= sCreateSharedEvent(asset_cooker_id, " Pause", EventReset_Auto);
-	ac_handle->mEventUnpause	= sCreateSharedEvent(asset_cooker_id, " Unpause", EventReset_Auto);
-	ac_handle->mEventShowWindow	= sCreateSharedEvent(asset_cooker_id, " ShowWindow", EventReset_Auto);
-	ac_handle->mEventIsPaused	= sCreateSharedEvent(asset_cooker_id, " IsPaused", EventReset_Manual);
-	ac_handle->mEventIsIdle		= sCreateSharedEvent(asset_cooker_id, " IsIdle", EventReset_Manual);
-	ac_handle->mEventHasErrors	= sCreateSharedEvent(asset_cooker_id, " HasErrors", EventReset_Manual);
-
-	if (ac_handle->mEventKill		== NULL ||
-		ac_handle->mEventPause		== NULL ||
-		ac_handle->mEventUnpause	== NULL ||
-		ac_handle->mEventShowWindow == NULL ||
-		ac_handle->mEventIsPaused	== NULL ||
-		ac_handle->mEventIsIdle		== NULL ||
-		ac_handle->mEventHasErrors	== NULL)
-	{
-		// Clean up.
-		AssetCooker_Detach(&ac_handle);
-		return -1;
-	}
-
 	// Return the handle.
 	*ouHandle = ac_handle;
 	return 0;
 
+launch_error:
+	// Cleanup.
+	AssetCooker_Detach(&ac_handle);
+	return -1;
 }
 
 
@@ -276,7 +287,7 @@ int AssetCooker_IsAlive(AssetCookerHandle inHandle)
 int AssetCooker_Kill(AssetCookerHandle* ioHandlePtr)
 {
 	if (ioHandlePtr == NULL || *ioHandlePtr == NULL)
-		return 0;
+		return -1;
 
 	BOOL success = SetEvent((*ioHandlePtr)->mEventKill);
 
