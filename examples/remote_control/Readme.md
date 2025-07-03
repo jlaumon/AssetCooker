@@ -18,3 +18,7 @@ It also animates when Asset Cooker is busy:
 
 ![animated icon](readme_animated_icon.gif)
 
+The other imgui window is a very basic example of what the Asset Cooker API allows:
+
+![screenshot of the basic example window](readme_example.png)
+
