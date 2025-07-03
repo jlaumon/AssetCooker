@@ -14,14 +14,13 @@
 #include <tchar.h>
 
 #include <AssetCookerAPI.h>
+#include <AssetCookerStatus.h>
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <imgui_internal.h>
 
+#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define _USE_MATH_DEFINES
-#include <math.h>
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -37,209 +36,6 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-
-struct AssetCookerStatus
-{
-	~AssetCookerStatus()
-	{
-		AssetCooker_Detach(&mHandle);
-	}
-
-	void Launch()
-	{
-		// If there already was a handle, destroy it.
-		AssetCooker_Detach(&mHandle);
-
-		int options = AssetCookerOption_StartUnpaused;
-		if (mStartMinimized)
-			options |= AssetCookerOption_StartMinimized;
-
-		// Launch Asset Cooker
-		AssetCooker_Launch(mExecutablePath, mConfigFilePath, options, &mHandle);
-
-		// Reset internal values.
-		mIconAngle = 0.f;
-		mIconIdleTimer = 0.f;
-	}
-
-	void Draw(ImVec2 inSize = { 64.f, 64.f });
-
-	char				mExecutablePath[260] = {};
-	char				mConfigFilePath[260] = {};
-	bool				mStartMinimized = false;
-	ImTextureRef		mIcon = {};
-
-private:
-
-	AssetCookerHandle	mHandle = nullptr;
-	float				mIconAngle = 0.f;
-	float				mIconIdleTimer = 0.f;
-};
-
-
-void AssetCookerStatus::Draw(ImVec2 inSize)
-{
-	mIconIdleTimer += ImGui::GetIO().DeltaTime;
-
-	ImGui::Begin("Asset Cooker Status Bar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDocking);
-
-	bool is_alive = AssetCooker_IsAlive(mHandle);
-	bool is_idle = AssetCooker_IsIdle(mHandle);
-	bool has_errors = AssetCooker_HasErrors(mHandle);
-	bool is_paused = AssetCooker_IsPaused(mHandle);
-
-	bool want_spin = is_alive && !is_idle;
-	if (want_spin)
-		mIconIdleTimer = 0;
-
-	// Update the rotation of the icon.
-	if (want_spin 
-		|| mIconAngle != 0.f) // If we're already spinning, always continue until we reach angle zero.
-	{
-		constexpr float pi = 3.14159265358979323846f;
-
-		float base_rot_speed = 2.5f * pi;
-		float extra_rot_speed = (cosf(mIconAngle * 0.5f + pi) + 1.0f) * 1.2f * pi;
-
-		float angle_before = mIconAngle;
-
-		mIconAngle += (base_rot_speed + extra_rot_speed) * ImGui::GetIO().DeltaTime;
-		mIconAngle = fmodf(mIconAngle, 4.0f * pi);
-
-		// Keep spinning until we've made a full cycle, then stop.
-		if (!want_spin && mIconAngle < angle_before)
-			mIconAngle = 0.f;
-	}
-
-	ImU32 color_alive	= IM_COL32(255, 255, 255, 255);
-	ImU32 color_dead	= IM_COL32(100, 100, 100, 255);
-	ImU32 color_errors	= IM_COL32(255, 100, 100, 255);
-
-	// Choose a color depending on status.
-	ImU32 color = 0;
-	if (!is_alive)
-		color = color_dead;
-	else if (has_errors)
-		color = color_errors;
-	else
-		color = color_alive;
-
-	// If the icon was idle for long enough, fade it out.
-	constexpr float fadeout_start = 1.0f;
-	constexpr float fadeout_duration = 0.5f;
-	constexpr float fadeout_min_alpha = 0.5f;
-	if (mIconIdleTimer > fadeout_start)
-	{
-		float fadeout_strength = (mIconIdleTimer - fadeout_start) / fadeout_duration;
-		if (fadeout_strength > 1.0f) fadeout_strength = 1.0f;
-
-		ImColor color4f(color);
-		color4f.Value.w = 1.0f - (1.0f - fadeout_min_alpha) * fadeout_strength;
-
-		color = color4f;
-	}
-
-	// Draw the icon.
-	{
-		ImVec2 p1 = ImGui::GetCursorScreenPos();
-		ImVec2 p2 = { p1.x + inSize.x, p1.y            };
-		ImVec2 p3 = { p1.x + inSize.x, p1.y + inSize.y };
-		ImVec2 p4 = { p1.x           , p1.y + inSize.y };
-
-		ImVec2 center = (p1 + p3) / 2.0f;
-
-		float cos_a = cosf(mIconAngle);
-		float sin_a = sinf(mIconAngle);
-
-		p1 = ImRotate(p1 - center, cos_a, sin_a) + center;
-		p2 = ImRotate(p2 - center, cos_a, sin_a) + center;
-		p3 = ImRotate(p3 - center, cos_a, sin_a) + center;
-		p4 = ImRotate(p4 - center, cos_a, sin_a) + center;
-
-		ImGui::GetWindowDrawList()->AddImageQuad(mIcon, 
-			p1, p2, p3, p4, 
-			{ 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 }, 
-			color);
-	}
-
-	// Add an invisible button where the icon is.
-	bool clicked = ImGui::InvisibleButton("AssetCookerIcon", inSize);
-
-	// Add a popup menu if right-clicking the icon.
-	if (ImGui::BeginPopupContextItem())
-	{
-		mIconIdleTimer = 0;
-
-		if (is_alive)
-		{
-			if (ImGui::MenuItem("Show Window"))
-				AssetCooker_ShowWindow(mHandle);
-
-			if (is_paused)
-			{
-				if (ImGui::MenuItem("Unpause"))
-					AssetCooker_Pause(mHandle, false);
-			}
-			else
-			{
-				if (ImGui::MenuItem("Pause"))
-					AssetCooker_Pause(mHandle, true);
-			}
-		}
-		else
-		{
-			if (ImGui::MenuItem("Launch"))
-				Launch();
-
-			ImGui::MenuItem("Start Minimized", {}, &mStartMinimized);
-		}
-
-		ImGui::EndPopup();
-	}
-
-	// Add a tooltip when hovering the icon.
-	if (ImGui::IsItemHovered())
-	{
-		mIconIdleTimer = 0;
-
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0))
-		{
-			ImGui::StartMouseMovingWindow(ImGui::GetCurrentWindow());
-		}
-
-		// Choose a tootip depending on status.
-		const char* tooltip = "";
-		if (!is_alive)
-			tooltip = "Not running";
-		else if (has_errors)
-		{
-			if (is_idle)
-				tooltip = "Cooking errors!";
-			else
-				tooltip = "Cooking errors! But still cooking...";
-		}
-		else if (is_paused)
-			tooltip = "Cooking paused";
-		else if (!is_idle)
-			tooltip = "Still cooking...";
-		else
-			tooltip = "All caught up!";
-
-		ImGui::SetTooltip(tooltip);
-	}
-
-	if (clicked)
-	{
-		mIconIdleTimer = 0;
-
-		if (is_alive)
-			AssetCooker_ShowWindow(mHandle);
-	}
-
-	ImGui::End();
-}
-
 
 // Main code
 int WinMain(
@@ -327,29 +123,34 @@ int WinMain(
 	bool show_another_window = false;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-	
-	FILE* f = nullptr;
-	fopen_s(&f, "chef-hat-heart.png", "rb");
-	int x, y, channels;
-	auto pixels = stbi_load_from_file(f, &x, &y, &channels, 0);
+	// Load the Asset Cooker icon.
+	ImTextureData asset_cooker_icon;
+	{
+		FILE* png_file = nullptr;
+		fopen_s(&png_file, "asset-cooker.png", "rb");
+		int x, y, channels;
+		auto pixels = stbi_load_from_file(png_file, &x, &y, &channels, 0);
 
-	ImTextureData texture_data;
-	texture_data.RefCount++;
-	texture_data.Create(ImTextureFormat_RGBA32, x, y);
-	memcpy(texture_data.GetPixels(), pixels, texture_data.GetSizeInBytes());
+		asset_cooker_icon.RefCount++;
+		asset_cooker_icon.Create(ImTextureFormat_RGBA32, x, y);
+		memcpy(asset_cooker_icon.GetPixels(), pixels, asset_cooker_icon.GetSizeInBytes());
 
-	stbi_image_free(pixels);
-	fclose(f);
+		stbi_image_free(pixels);
+		fclose(png_file);
 
-	texture_data.SetStatus(ImTextureStatus_WantCreate);
+		asset_cooker_icon.SetStatus(ImTextureStatus_WantCreate);
 
-	ImGui::RegisterUserTexture(&texture_data);
+		ImGui::RegisterUserTexture(&asset_cooker_icon);
+	}
 
+	const char*	asset_cooker_path = "../../bin/x64/Release/AssetCooker.exe";
+	const char*	config_file_path  = "config.toml";
+
+	// Initialize the Asset Cooker widget.
 	AssetCookerStatus ac_status;
-	strcpy_s(ac_status.mExecutablePath, "../../bin/x64/Debug/AssetCookerDebug.exe");
-	strcpy_s(ac_status.mConfigFilePath, "config.toml");
-	ac_status.mIcon = texture_data.GetTexRef();
-
+	strcpy_s(ac_status.mExecutablePath, asset_cooker_path);
+	strcpy_s(ac_status.mConfigFilePath, config_file_path);
+	ac_status.mIcon = asset_cooker_icon.GetTexRef();
 
 	// Main loop
 	bool done = false;
@@ -389,7 +190,8 @@ int WinMain(
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
-		
+
+		// Draw the Asset Cooker widget.
 		ac_status.Draw();
 		
 		static AssetCookerHandle ac_handle = {};
@@ -403,7 +205,7 @@ int WinMain(
 				if (ac_handle)
 					AssetCooker_Detach(&ac_handle);
 
-				AssetCooker_Launch("../../bin/x64/Debug/AssetCookerDebug.exe", "config.toml", 
+				AssetCooker_Launch(asset_cooker_path, config_file_path, 
 					start_minimized ? AssetCookerOption_StartMinimized : 0, 
 					&ac_handle);
 			}
