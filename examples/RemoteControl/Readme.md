@@ -1,6 +1,6 @@
 # Remote Control
 
-This examples shows how to control Asset Cooker from another process.
+This example shows how to control Asset Cooker from another process.
 
 The idea is that your game can easily launch Asset Cooker when it starts, wait for it to finish cooking, and even open its window.
 
