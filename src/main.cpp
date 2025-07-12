@@ -323,6 +323,12 @@ int WinMain(
 	::ShowWindow(hwnd, gApp.mStartMinimized ? SW_SHOWMINIMIZED : SW_SHOWDEFAULT);
 	::UpdateWindow(hwnd);
 
+	// If there's an init error, make sure the window is not minimized.
+	// Note: calling ShowWindow a second time is necessary. AssetCooker_Launch uses STARTF_USESHOWWINDOW with CreateProcess
+	// which means the first call to ShowWindow ignores the show command we pass to it.
+	if (gApp.HasInitError())
+		::ShowWindow(hwnd, SW_SHOWNORMAL);
+
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
