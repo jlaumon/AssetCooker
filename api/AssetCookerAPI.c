@@ -88,6 +88,15 @@ static BOOL sStrConcat(const char* inStr1, const char* inStr2, char* outBuffer, 
 }
 
 
+static BOOL sStrConcat3(const char* inStr1, const char* inStr2, const char* inStr3, char* outBuffer, int inBufferSize)
+{
+	int str_len = _snprintf_s(outBuffer, inBufferSize, _TRUNCATE, "%s%s%s", inStr1, inStr2, inStr3);
+
+	ASSERT_COOKER_ASSERT(str_len >= 0);
+	return str_len >= 0;
+}
+
+
 // Build a unique name to use with shared Win32 objects (Events, Mutex, etc.)
 static int sGetAssetCookerIdentifier(const char* inConfigFilePath, char* outBuffer, int inBufferSize)
 {
@@ -184,7 +193,7 @@ int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int 
 			AssetCooker_Pause(ac_handle, 0);
 
 		if (inOptions & AssetCookerOption_StartPaused)
-		AssetCooker_Pause(ac_handle, 1);
+			AssetCooker_Pause(ac_handle, 1);
 	}
 
 	// Now we need to check if Asset Cooker is already running. We can do that by trying to open its shared memory file.
@@ -226,8 +235,8 @@ int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int 
 		{
 			// Shared memory does not exist, Asset Cooker is probably not running.
 			// Launch it now.
-			char command_line[MAX_PATH + 32];
-			if (!sStrConcat("-config_file ", inConfigFilePath, STR_OUT(command_line)))
+			char command_line[MAX_PATH];
+			if (!sStrConcat3(inExePath, " -config_file ", inConfigFilePath, STR_OUT(command_line)))
 				goto launch_error;
 
 			PROCESS_INFORMATION process_info;
@@ -241,8 +250,8 @@ int AssetCooker_Launch(const char* inExePath, const char* inConfigFilePath, int 
 			}
 
 			BOOL success = CreateProcessA(
-				inExePath,
-				command_line,
+				NULL,			// lpApplicationName
+				command_line,	// lpCommandLine
 				NULL,			// lpProcessAttributes, 
 				NULL,			// lpThreadAttributes,
 				FALSE,			// bInheritHandles,
