@@ -250,7 +250,7 @@ int WinMain(
 	// Note: This has to be done before gApp.Init() since that changes where the config.toml file is read from.
 	if (auto config_file = args.Find("-config_file"); config_file != args.End())
 	{
-		StringView abs_path = gGetAbsolutePath(config_file->mValue);
+		TempString abs_path = gGetAbsolutePath(config_file->mValue);
 		TempString dir		= gGetDirPart(abs_path);
 		if (!SetCurrentDirectoryA(dir.AsCStr()))
 			gAppFatalError(R"(Failed to set working directory to "%s")", dir.AsCStr());
