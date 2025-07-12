@@ -369,11 +369,18 @@ int AssetCooker_IsIdle(AssetCookerHandle inHandle)
 }
 
 
-int AssetCooker_WaitForIdle(AssetCookerHandle inHandle)
+int AssetCooker_WaitForIdle(AssetCookerHandle inHandle, int inTimeoutMS)
 {
 	if (inHandle == NULL)
 		return -1;
 
-	int success = (WaitForSingleObject(inHandle->mEventIsIdle, INFINITE) == WAIT_OBJECT_0);
-	return success ? 0 : -1;
+	int timeout = inTimeoutMS < 0 ? INFINITE : inTimeoutMS;
+
+	int result = WaitForSingleObject(inHandle->mEventIsIdle, timeout);
+	if (result == WAIT_TIMEOUT)
+		return 1;	// Timeout
+	else if (result == WAIT_OBJECT_0)
+		return 0;	// Success
+	else
+		return -1;	// Failure
 }

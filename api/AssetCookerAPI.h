@@ -75,8 +75,9 @@ int AssetCooker_HasErrors(AssetCookerHandle inHandle);
 
 /// @brief Wait for the Asset Cooker instance to become idle.
 /// @param inHandle The Asset Cooker instance handle.
-/// @return Zero on success.
-int AssetCooker_WaitForIdle(AssetCookerHandle inHandle);
+/// @param inTimeoutMS The maximum time to wait before giving up, in milliseconds. Negative value means infinite.
+/// @return Zero on success, positive value on timeout, negative value on error.
+int AssetCooker_WaitForIdle(AssetCookerHandle inHandle, int inTimeoutMS);
 
 
 #if defined(__cplusplus)
