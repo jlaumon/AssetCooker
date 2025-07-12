@@ -6,6 +6,10 @@
 // For example, your game can use it to launch Asset Cooker on start-up and wait for
 // all assets to be cooked.
 // More info about Asset Cooker on github: https://github.com/jlaumon/AssetCooker
+// API Version 1.0.0
+//
+// Changelog:
+// - 1.0.0: Initial version!
 
 #if defined(__cplusplus)
 extern "C" {
