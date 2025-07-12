@@ -1753,7 +1753,9 @@ void gDrawMain()
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-		if (ImGui::BeginPopupModal("Getting Started?", nullptr, ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove))
+		static bool popup_open = true;
+		if (ImGui::BeginPopupModal("Getting Started?", &popup_open, 
+			ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove))
 		{
 			ImGui::TextUnformatted("You need to create Config.toml and Rules.toml.");
 			ImGui::TextUnformatted("Have a look at the docs!");
