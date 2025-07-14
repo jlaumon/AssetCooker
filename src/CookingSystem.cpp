@@ -190,8 +190,6 @@ FileID CookingCommand::GetDepFile() const
 
 void CookingCommand::UpdateDirtyState()
 {
-	// TODO there is no dedicated dirty state for the case where an output is outdated (ie. was not written), instead it's just an nondescript error and it's very confusing
-
 	// Dirty state should not be updated while still cooking!
 	gAssert(!mLastCookingLog || mLastCookingLog->mCookingState.Load() > CookingState::Cooking);
 
@@ -254,7 +252,12 @@ void CookingCommand::UpdateDirtyState()
 		// Note: if the last change USN is equal to the last cook USN, it means this output wasn't written (again) during last cook.
 		// See mLastCookUSN calculation including the previous outputs USNs in CookCommand.
 		if (file.mLastChangeUSN <= mLastCookUSN)
+		{
 			all_output_written = false;
+
+			if (!file.IsDeleted())
+				dirty_state |= OutputOutdated;
+		}
 	}
 	
 	if (all_output_missing)

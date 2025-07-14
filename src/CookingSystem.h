@@ -149,13 +149,14 @@ struct CookingCommand : NoCopy
 	enum DirtyState : uint8
 	{
 		NotDirty               = 0,
-		InputMissing           = 0b0000001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
-		InputChanged           = 0b0000010,
-		OutputMissing          = 0b0000100,
-		AllStaticInputsMissing = 0b0001000, // Command needs to be cleaned up.
-		AllOutputsMissing      = 0b0010000,
-		Error                  = 0b0100000, // Last cook errored.
-		VersionMismatch        = 0b1000000, // Rule version changed.
+		InputMissing           = 0b00000001, // Inputs can be missing because they'll be created by an earlier command. If they're still missing by the time we try to cook, it's an error.
+		InputChanged           = 0b00000010,
+		OutputMissing          = 0b00000100, // Output file does not exist.
+		OutputOutdated         = 0b00001000, // Output file exists but was not written.
+		AllStaticInputsMissing = 0b00010000, // Command needs to be cleaned up.
+		AllOutputsMissing      = 0b00100000,
+		Error                  = 0b01000000, // Last cook errored.
+		VersionMismatch        = 0b10000000, // Rule version changed.
 	};
 
 	DirtyState                      mDirtyState          = NotDirty;

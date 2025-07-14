@@ -692,6 +692,8 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 					dirty_details.Append("Input Changed|");
 				if (inCommand.mDirtyState & CookingCommand::OutputMissing)
 					dirty_details.Append("Output Missing|");
+				if (inCommand.mDirtyState & CookingCommand::OutputOutdated)
+					dirty_details.Append("Output Outdated|");
 
 				// Replace the last | with )
 				dirty_details.Back() = ')'; 
