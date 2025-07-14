@@ -615,7 +615,7 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 				ImGui::TableNextColumn(); ImGui::TextUnformatted(inFile.mLastChangeTime.ToString());
 				
 				ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Change USN");
-				ImGui::TableNextColumn(); ImGui::TextUnformatted(gTempFormat("%llu", inFile.mLastChangeUSN));
+				ImGui::TableNextColumn(); ImGui::TextUnformatted(gUSNToString(inFile.mLastChangeUSN));
 			}
 
 			ImGui::EndTable();
@@ -729,7 +729,7 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 		ImGui::TableNextColumn(); ImGui::TextUnformatted(inCommand.mLastCookTime.ToString());
 
 		ImGui::TableNextColumn(); ImGui::TextUnformatted("Last Cook USN");
-		ImGui::TableNextColumn(); ImGui::TextUnformatted(gTempFormat("%llu", inCommand.mLastCookUSN));
+		ImGui::TableNextColumn(); ImGui::TextUnformatted(gUSNToString(inCommand.mLastCookUSN));
 		
 		ImGui::EndTable();
 	}

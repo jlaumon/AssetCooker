@@ -14,6 +14,7 @@
 #include <Bedrock/Ticks.h>
 #include <Bedrock/Random.h>
 #include <Bedrock/StringFormat.h>
+#include <Bedrock/Test.h>
 
 #include "win32/misc.h"
 #include "win32/file.h"
@@ -2075,3 +2076,14 @@ void FileSystem::SaveCache()
 		gFormatSizeInBytes(file_size).AsCStr(), 
 		gTicksToSeconds(timer.GetTicks()));
 }
+
+
+REGISTER_TEST("USNToString")
+{
+	TEST_TRUE(gUSNToString(0) == "0");
+	TEST_TRUE(gUSNToString(123) == "123");
+	TEST_TRUE(gUSNToString(1'234) == "1'234");
+	TEST_TRUE(gUSNToString(12'345) == "12'345");
+	TEST_TRUE(gUSNToString(123'456) == "123'456");
+	TEST_TRUE(gUSNToString(1'234'567) == "1'234'567");
+};

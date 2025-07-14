@@ -419,7 +419,17 @@ inline FileRepo& FileID::GetRepo() const
 }
 
 
-inline TempString gToString(FileRefNumber inRefNumber)
+// Turn USN 123456 into "123'456"
+inline TempString gUSNToString(USN inUSN)
 {
-	return gTempFormat("0x%llX%016llX", inRefNumber.mData[1], inRefNumber.mData[0]);
+	TempString str = gTempFormat("%llu", inUSN);
+
+	int num_leading_chars = str.Size() % 3;
+	if (num_leading_chars == 0)
+		num_leading_chars = 3;
+
+	for (int i = num_leading_chars; i < str.Size(); i += 4)
+		str.Insert(i, "'");
+	
+	return str;
 }
