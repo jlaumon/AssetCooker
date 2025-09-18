@@ -133,6 +133,7 @@ struct CookingLogEntry
 	FileTime                  mTimeStart;
 	FileTime                  mTimeEnd;		// Unsafe to read unless CookingState is > Cooking. TODO add getters that assert this
 	StringView                mOutput;		// Unsafe to read unless CookingState is > Cooking.
+	Vector<FormatSpan>        mOutputFormatSpans; // Unsafe to read unless CookingState is > Cooking.
 };
 
 

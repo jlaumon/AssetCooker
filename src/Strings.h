@@ -7,6 +7,7 @@
 
 #include "Core.h"
 
+#include <optional>
 #include <string_view>
 
 #include <Strings.h>
@@ -183,3 +184,17 @@ bool gStringViewToEnum(StringView inStrValue, taEnumType& outValue)
 
 	return false;
 }
+
+struct FormatColor
+{
+	uint8 r, g, b;
+};
+
+struct FormatSpan
+{
+	const char*			  mBegin = nullptr;
+	const char*			  mEnd	 = nullptr;
+	Optional<FormatColor> mColor;
+};
+
+void gPreprocessStringViewFormatting(StringView inStr, Vector<FormatSpan>& outSpans);

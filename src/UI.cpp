@@ -1122,9 +1122,31 @@ void gDrawSelectedCookingLogEntry()
 		// If it's finished cooking, it's safe to read the log output.
 		if (log_entry.mCookingState.Load() > CookingState::Cooking)
 		{
-			//ImGui::PushTextWrapPos();
-			ImGui::TextUnformatted(log_entry.mOutput);
-			//ImGui::PopTextWrapPos();
+			if (log_entry.mOutputFormatSpans.Empty())
+			{
+				//ImGui::PushTextWrapPos();
+				ImGui::TextUnformatted(log_entry.mOutput);
+				//ImGui::PopTextWrapPos();
+			}
+			else
+			{
+				for (const FormatSpan& format_span : log_entry.mOutputFormatSpans)
+				{
+					if (format_span.mColor.has_value())
+					{
+						FormatColor color = format_span.mColor.value();
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1.0f));
+					}
+
+					ImStrv span_text = { format_span.mBegin, format_span.mEnd };
+					ImGui::TextUnformatted(span_text);
+
+					if (format_span.mColor.has_value())
+					{
+						ImGui::PopStyleColor();
+					}
+				}
+			}
 		}
 	}
 	ImGui::EndChild();

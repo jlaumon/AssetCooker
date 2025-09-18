@@ -96,6 +96,127 @@ WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 }
 
 
+void gPreprocessStringViewFormatting(StringView inStr, Vector<FormatSpan>& outSpans)
+{
+	int					  cursor		= 0;
+	Optional<FormatColor> current_color = Optional<FormatColor>();
+
+	do
+	{
+		int sequence_start = inStr.Find("\x1b[", cursor);
+		if (sequence_start == -1)
+		{
+			// If we have format spans, output the final one
+			if (outSpans.Size() > 0 && cursor < inStr.Size())
+			{
+				FormatSpan span;
+				span.mBegin = inStr.AsCStr() + cursor;
+				span.mEnd	= inStr.End();
+				span.mColor = current_color;
+				outSpans.PushBack(span);
+			}
+
+			return;
+		}
+		else
+		{
+			int sequence_end = inStr.Find('m', sequence_start);
+			if (sequence_end == -1)
+			{
+				// Error, missing end of ANSI escape sequence, no obvious way to parse
+				outSpans.ClearAndFreeMemory();
+				return;
+			}
+			else
+			{
+				if (cursor < sequence_start)
+				{
+					// Emit current span
+					FormatSpan span;
+					span.mBegin = inStr.AsCStr() + cursor;
+					span.mEnd	= inStr.AsCStr() + sequence_start;
+					span.mColor = current_color;
+					outSpans.PushBack(span);
+				}
+
+				cursor = sequence_start + 2; // skip over "\x1b["
+
+				// Parse ANSI escape sequence
+
+				Vector<long> numbers;
+				char*		 parse_end;
+				do
+				{
+					long parsed_number = strtol(inStr.AsCStr() + cursor, &parse_end, 10);
+					if (parse_end != inStr.AsCStr())
+					{
+						numbers.PushBack(parsed_number);
+						cursor = parse_end - inStr.AsCStr();
+
+						if (*parse_end == ';')
+						{
+							cursor++;
+						}
+					}
+				} while (parse_end != inStr.End() && *parse_end != 'm');
+
+				// Handle supported sequences
+
+				if (numbers.Size() == 5 && numbers[0] == 38 && numbers[1] == 2)
+				{
+					// rgb color
+					current_color = FormatColor{ .r = (uint8)numbers[2], .g = (uint8)numbers[3], .b = (uint8)numbers[4] };
+				}
+				else if (numbers.Size() > 0)
+				{
+					// regular / old style style specifiers
+
+					int num_idx = 0;
+					switch (numbers[num_idx++])
+					{
+					case 0:	 // reset all styles
+						current_color = {};
+						break;
+					case 30: // black
+						current_color = FormatColor{ .r = 0, .g = 0, .b = 0 };
+						break;
+					case 31: // red
+						current_color = FormatColor{ .r = 255, .g = 0, .b = 0 };
+						break;
+					case 32: // green
+						current_color = FormatColor{ .r = 0, .g = 255, .b = 0 };
+						break;
+					case 33: // yellow
+						current_color = FormatColor{ .r = 255, .g = 255, .b = 0 };
+						break;
+					case 34: // blue
+						current_color = FormatColor{ .r = 0, .g = 0, .b = 255 };
+						break;
+					case 35: // magenta
+						current_color = FormatColor{ .r = 255, .g = 0, .b = 255 };
+						break;
+					case 36: // cyan
+						current_color = FormatColor{ .r = 0, .g = 255, .b = 255 };
+						break;
+					case 37: // white
+						current_color = FormatColor{ .r = 255, .g = 255, .b = 255 };
+						break;
+					case 39: // default color
+						current_color = {};
+						break;
+					default:
+						// Unhandled command
+						break;
+					}
+				}
+
+				cursor = sequence_end + 1;
+			}
+		}
+	} while (true);
+}
+
+
 REGISTER_TEST("gRemoveTrailing")
 {
 	StringView test = "test !!";
