@@ -1248,6 +1248,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Store the log output.
 	log_entry.mOutput = output_str.AsStringView();
+	gPreprocessStringViewFormatting(log_entry.mOutput, log_entry.mOutputFormatSpans);
 
 	if (!success)
 	{
@@ -1293,6 +1294,8 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 	}
 
 	log_entry.mOutput       = output_str.AsStringView();
+	log_entry.mOutputFormatSpans.ClearAndFreeMemory();
+
 	log_entry.mTimeEnd      = gGetSystemTimeAsFileTime();
 
 	if (error)
