@@ -98,8 +98,11 @@ WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 
 void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 {
-	int					  cursor		= 0;
-	Optional<FormatColor> current_color = Optional<FormatColor>();
+	// If there are no ANSI colors there's no need to generate any spans and inStr can be used as is
+	bool				  generate_spans = false;
+
+	int					  cursor		 = 0;
+	Optional<FormatColor> current_color	 = Optional<FormatColor>();
 
 	do
 	{
@@ -107,7 +110,7 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 		if (sequence_start == -1)
 		{
 			// If we have format spans, output the final one
-			if (outSpans.Size() > 0 && cursor < inStr.Size())
+			if (generate_spans && cursor < inStr.Size())
 			{
 				FormatSpan span;
 				span.mSpan	= inStr.SubStr(cursor);
@@ -128,6 +131,9 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 			}
 			else
 			{
+				// At least one ANSI escape sequence, do generate
+				generate_spans = true;
+
 				if (cursor < sequence_start)
 				{
 					// Emit current span
@@ -146,7 +152,7 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 				do
 				{
 					long parsed_number = strtol(inStr.AsCStr() + cursor, &parse_end, 10);
-					if (parse_end != inStr.AsCStr())
+					if (parse_end != inStr.AsCStr() + cursor)
 					{
 						numbers.PushBack(parsed_number);
 						cursor = parse_end - inStr.AsCStr();
@@ -156,7 +162,18 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 							cursor++;
 						}
 					}
-				} while (parse_end != inStr.End() && *parse_end != 'm');
+					else if (*parse_end == 'm')
+					{
+						cursor++;
+						break;
+					}
+					else
+					{
+						// Error, broken ANSI escape sequence, no obvious way to parse
+						outSpans.ClearAndFreeMemory();
+						return;
+					}
+				} while (parse_end != inStr.End());
 
 				// Handle supported sequences
 
@@ -240,4 +257,53 @@ REGISTER_TEST("gRemoveLeading")
 
 	gRemoveLeading(test, "tes");
 	TEST_TRUE(test == "");
+};
+
+REGISTER_TEST("gParseANSIColors")
+{
+	StringView		   test;
+	Vector<FormatSpan> spans;
+
+	test = "";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 0);
+	spans.Clear();
+
+	test = "No escape sequences";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 0);
+	spans.Clear();
+
+	test = "\x1b[38;2;255;0;0mRed text specified as RGB\x1b[0m";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 1);
+	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 15); // should skip the parsed sequence itself
+	TEST_TRUE(spans[0].mSpan.End() == test.Begin() + 40);	// ensure it ends before the next sequence
+	TEST_TRUE(spans[0].mColor->r == 255 && spans[0].mColor->g == 0 && spans[0].mColor->b == 0);
+	spans.Clear();
+
+	test = "\x1b[32mGreen text\x1b[34mBlue text\x1b[0m";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 2);
+	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 5);
+	TEST_TRUE(spans[0].mColor->r == 0 && spans[0].mColor->g == 255 && spans[0].mColor->b == 0);
+	TEST_TRUE(spans[1].mSpan.Begin() == test.Begin() + 20);
+	TEST_TRUE(spans[1].mColor->r == 0 && spans[1].mColor->g == 0 && spans[1].mColor->b == 255);
+	spans.Clear();
+
+	test = "\x1b[0mEscape sequence but no colors";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 1);
+	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 4);
+	TEST_FALSE(spans[0].mColor.has_value());
+	spans.Clear();
+
+	test = "\x1b[38;2;255;0;0mBroken ANSI escape sequence 1 (missing m at end)\x1b[0";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 0);
+	spans.Clear();
+
+	test = "\x1b[38;2;255;0;0!Broken ANSI escape sequence 2 (missing m in first sequence)\x1b[0m";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 0);
 };
