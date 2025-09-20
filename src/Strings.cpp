@@ -96,7 +96,7 @@ WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 }
 
 
-void gPreprocessStringViewFormatting(StringView inStr, Vector<FormatSpan>& outSpans)
+void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 {
 	int					  cursor		= 0;
 	Optional<FormatColor> current_color = Optional<FormatColor>();

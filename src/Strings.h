@@ -197,4 +197,5 @@ struct FormatSpan
 	Optional<FormatColor> mColor;
 };
 
-void gPreprocessStringViewFormatting(StringView inStr, Vector<FormatSpan>& outSpans);
+// Parse the string for ANSI escape sequences with color codes
+void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans);
