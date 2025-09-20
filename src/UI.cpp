@@ -1138,8 +1138,7 @@ void gDrawSelectedCookingLogEntry()
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1.0f));
 					}
 
-					ImStrv span_text = { format_span.mBegin, format_span.mEnd };
-					ImGui::TextUnformatted(span_text);
+					ImGui::TextUnformatted(format_span.mSpan);
 
 					if (format_span.mColor.has_value())
 					{
