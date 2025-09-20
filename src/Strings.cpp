@@ -186,42 +186,44 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 				{
 					// regular / old style style specifiers
 
-					int num_idx = 0;
-					switch (numbers[num_idx++])
+					for (int num_idx = 0; num_idx < numbers.Size(); ++num_idx)
 					{
-					case 0:	 // reset all styles
-						current_color = {};
-						break;
-					case 30: // black
-						current_color = FormatColor{ .r = 0, .g = 0, .b = 0 };
-						break;
-					case 31: // red
-						current_color = FormatColor{ .r = 255, .g = 0, .b = 0 };
-						break;
-					case 32: // green
-						current_color = FormatColor{ .r = 0, .g = 255, .b = 0 };
-						break;
-					case 33: // yellow
-						current_color = FormatColor{ .r = 255, .g = 255, .b = 0 };
-						break;
-					case 34: // blue
-						current_color = FormatColor{ .r = 0, .g = 0, .b = 255 };
-						break;
-					case 35: // magenta
-						current_color = FormatColor{ .r = 255, .g = 0, .b = 255 };
-						break;
-					case 36: // cyan
-						current_color = FormatColor{ .r = 0, .g = 255, .b = 255 };
-						break;
-					case 37: // white
-						current_color = FormatColor{ .r = 255, .g = 255, .b = 255 };
-						break;
-					case 39: // default color
-						current_color = {};
-						break;
-					default:
-						// Unhandled command
-						break;
+						switch (numbers[num_idx])
+						{
+						case 0:	 // reset all styles
+							current_color = {};
+							break;
+						case 30: // black
+							current_color = FormatColor{ .r = 0, .g = 0, .b = 0 };
+							break;
+						case 31: // red
+							current_color = FormatColor{ .r = 255, .g = 0, .b = 0 };
+							break;
+						case 32: // green
+							current_color = FormatColor{ .r = 0, .g = 255, .b = 0 };
+							break;
+						case 33: // yellow
+							current_color = FormatColor{ .r = 255, .g = 255, .b = 0 };
+							break;
+						case 34: // blue
+							current_color = FormatColor{ .r = 0, .g = 0, .b = 255 };
+							break;
+						case 35: // magenta
+							current_color = FormatColor{ .r = 255, .g = 0, .b = 255 };
+							break;
+						case 36: // cyan
+							current_color = FormatColor{ .r = 0, .g = 255, .b = 255 };
+							break;
+						case 37: // white
+							current_color = FormatColor{ .r = 255, .g = 255, .b = 255 };
+							break;
+						case 39: // default color
+							current_color = {};
+							break;
+						default:
+							// Unhandled command
+							break;
+						}
 					}
 				}
 
@@ -289,6 +291,14 @@ REGISTER_TEST("gParseANSIColors")
 	TEST_TRUE(spans[0].mColor->r == 0 && spans[0].mColor->g == 255 && spans[0].mColor->b == 0);
 	TEST_TRUE(spans[1].mSpan.Begin() == test.Begin() + 20);
 	TEST_TRUE(spans[1].mColor->r == 0 && spans[1].mColor->g == 0 && spans[1].mColor->b == 255);
+	spans.Clear();
+
+	test = "\x1b[1;35mBold magenta text, except we don't support bold so ignored\x1b[0m";
+	gParseANSIColors(test, spans);
+	TEST_TRUE(spans.Size() == 1);
+	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 7);
+	TEST_TRUE(spans[0].mColor.has_value());
+	TEST_TRUE(spans[0].mColor->r == 255 && spans[0].mColor->g == 0 && spans[0].mColor->b == 255);
 	spans.Clear();
 
 	test = "\x1b[0mEscape sequence but no colors";
