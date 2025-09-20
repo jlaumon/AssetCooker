@@ -1248,7 +1248,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 
 	// Store the log output.
 	log_entry.mOutput = output_str.AsStringView();
-	gPreprocessStringViewFormatting(log_entry.mOutput, log_entry.mOutputFormatSpans);
+	gParseANSIColors(log_entry.mOutput, log_entry.mOutputFormatSpans);
 
 	if (!success)
 	{
