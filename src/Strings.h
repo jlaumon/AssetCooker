@@ -192,8 +192,7 @@ struct FormatColor
 
 struct FormatSpan
 {
-	const char*			  mBegin = nullptr;
-	const char*			  mEnd	 = nullptr;
+	StringView			  mSpan;
 	Optional<FormatColor> mColor;
 };
 

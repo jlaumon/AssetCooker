@@ -110,8 +110,7 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 			if (outSpans.Size() > 0 && cursor < inStr.Size())
 			{
 				FormatSpan span;
-				span.mBegin = inStr.AsCStr() + cursor;
-				span.mEnd	= inStr.End();
+				span.mSpan	= inStr.SubStr(cursor);
 				span.mColor = current_color;
 				outSpans.PushBack(span);
 			}
@@ -133,8 +132,7 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 				{
 					// Emit current span
 					FormatSpan span;
-					span.mBegin = inStr.AsCStr() + cursor;
-					span.mEnd	= inStr.AsCStr() + sequence_start;
+					span.mSpan	= inStr.SubStr(cursor, sequence_start - cursor);
 					span.mColor = current_color;
 					outSpans.PushBack(span);
 				}
