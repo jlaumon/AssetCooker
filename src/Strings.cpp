@@ -147,8 +147,8 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 
 				// Parse ANSI escape sequence
 
-				Vector<long> numbers;
-				char*		 parse_end;
+				TempVector<long> numbers;
+				char*			 parse_end;
 				do
 				{
 					long parsed_number = strtol(inStr.AsCStr() + cursor, &parse_end, 10);
