@@ -6,19 +6,29 @@
 #include "Notifications.h"
 #include "App.h"
 #include <windows.h>
+#include "xxHash/xxh3.h"
 
-// Lazy way of turning a string into a compile time GUID.
-class __declspec(uuid("cbdb5e17-ea19-4444-9947-7abf64f8c203")) NotifClass;
-constexpr GUID cNotifGUID = __uuidof(NotifClass);
 
+static GUID sNotifGUID;
 
 void gNotifInit(void* inHwnd)
 {
+	// Hash the asset cooker ID.
+	TempString		asset_cooker_id		 = gGetAssetCookerIdentifier(gApp.mConfigFilePath);
+	XXH128_hash_t	asset_cooker_id_hash = XXH3_128bits(asset_cooker_id.Data(), asset_cooker_id.Size());
+
+	// Make a GUID out of the hash.
+	// It's not a proper GUID, but it's good enough. We care about:
+	// - having the same GUID when restarting AC (to avoid accumulating zombie tray icons)
+	// - having a different GUID for multiple AC instances that use a different config.toml (might want to cook multiple projects at once)
+	static_assert(sizeof(asset_cooker_id_hash) == sizeof(sNotifGUID));
+	gMemCopy(&sNotifGUID, &asset_cooker_id_hash, sizeof(asset_cooker_id_hash));
+
 	NOTIFYICONDATAA nid  = {};
 	nid.cbSize           = sizeof(nid);
 	nid.hWnd             = (HWND)inHwnd;
 	nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP | NIF_GUID;
-	nid.guidItem         = cNotifGUID;
+	nid.guidItem         = sNotifGUID;
 	nid.hIcon            = LoadIconA(GetModuleHandleA(nullptr), "chef_hat_heart");
 	nid.uCallbackMessage = cNotifCallbackID;
 
@@ -48,7 +58,7 @@ void gNotifExit()
 	NOTIFYICONDATAA nid = {};
 	nid.cbSize          = sizeof(nid);
 	nid.uFlags          = NIF_GUID;
-	nid.guidItem        = cNotifGUID;
+	nid.guidItem        = sNotifGUID;
 
 	bool ret = Shell_NotifyIconA(NIM_DELETE, &nid);
 	gAssert(ret);
@@ -60,7 +70,7 @@ void gNotifAdd(NotifType inType, StringView inTitle, StringView inMessage)
 	NOTIFYICONDATAA nid = {};
 	nid.cbSize          = sizeof(nid);
 	nid.uFlags          = NIF_GUID | NIF_INFO;
-	nid.guidItem        = cNotifGUID;
+	nid.guidItem        = sNotifGUID;
 
 	nid.dwInfoFlags     = 0;
 	switch (inType)
@@ -94,7 +104,7 @@ void gNotifSetToolTip(StringView inMessage)
 	NOTIFYICONDATAA nid = {};
 	nid.cbSize          = sizeof(nid);
 	nid.uFlags          = NIF_GUID | NIF_SHOWTIP;
-	nid.guidItem        = cNotifGUID;
+	nid.guidItem        = sNotifGUID;
 
 	gStringCopy(nid.szTip, inMessage);
 

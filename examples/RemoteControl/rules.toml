@@ -1,0 +1,5 @@
+[[Rule]]
+Name = "Cat2Dog"
+InputFilters = [ { Repo = "Source", PathPattern = "animals/*.cat" } ]
+CommandLine = 'cmd /C echo WOOF > { Repo:Bin }{ Dir }{ File }.dog'
+OutputPaths = [ '{ Repo:Bin }{ Dir }{ File }.dog' ]

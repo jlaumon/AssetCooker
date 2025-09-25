@@ -916,8 +916,17 @@ void gDrawCookingQueue()
 		gCookingSystem.SetCookingPaused(!paused);
 
 	ImGui::SameLine();
-	if (ImGui::Button(ICON_FK_REPEAT " Cook Errored"))
+
+	// Disable the Cook Errored button if we know there are no errored commands.
+	int errored_command_count = gCookingSystem.GetErroredCommandCount();
+	if (errored_command_count == 0)
+		ImGui::BeginDisabled();
+
+	if (ImGui::Button(gTempFormat(ICON_FK_REPEAT " Cook Errored (%d) ##Cook Errored", errored_command_count).AsCStr()))
 		gCookingSystem.QueueErroredCommands();
+
+	if (errored_command_count == 0)
+		ImGui::EndDisabled();
 
 	// Lock the dirty command list while we're browsing it.
 	LockGuard lock(gCookingSystem.mCommandsDirty.mMutex);
@@ -1765,7 +1774,9 @@ void gDrawMain()
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-		if (ImGui::BeginPopupModal("Getting Started?", nullptr, ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove))
+		static bool popup_open = true;
+		if (ImGui::BeginPopupModal("Getting Started?", &popup_open, 
+			ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove))
 		{
 			ImGui::TextUnformatted("You need to create Config.toml and Rules.toml.");
 			ImGui::TextUnformatted("Have a look at the docs!");

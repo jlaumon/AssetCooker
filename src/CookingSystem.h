@@ -281,17 +281,18 @@ struct CookingSystem : NoCopy
 	bool                                  IsCookingPaused() const { return mCookingPaused; }
 	void                                  SetCookingThreadCount(int inThreadCount) { mWantedCookingThreadCount = inThreadCount; }
 	int                                   GetCookingThreadCount() const { return mWantedCookingThreadCount; }
-	int									  GetCookingErrorCount() const { return mCookingErrors.Load(); }
 
-	int                                   GetCommandCount() const { return mCommands.Size(); } // Total number of commands, for debug/display.
-	int									  GetDirtyCommandCount() const { return mCommandsDirty.GetSize(); }
-	int									  GetCookedCommandCount() const { return mCookingLog.Size(); }
+	int									  GetCommandCount() const { return mCommands.Size(); }					 // Total number of commands, for debug/display.
+	int									  GetDirtyCommandCount() const { return mCommandsDirty.GetSize(); }		 // Current number of dirty commands.
+	int									  GetErroredCommandCount() const { return mErroredCommandCount.Load(); } // Current number of (dirty) commands in error.
+	int									  GetCookedCommandCount() const { return mCookingLog.Size(); }			 // Total number of commands cooked since startup.
+	int									  GetCookingErrorCount() const { return mCookingErrors.Load(); }		 // Total number of commands that ended in error since startup.
 
 	void                                  QueueUpdateDirtyStates(FileID inFileID);
 	void                                  QueueUpdateDirtyState(CookingCommandID inCommandID);
 	bool                                  ProcessUpdateDirtyStates(); // Return true if there are still commands to update.
 	void                                  UpdateAllDirtyStates(); // Update the dirty state of all commands. Only needed during init.
-	void                                  UpdateNotifications();
+	void                                  UpdateNotifications(bool inIsCookingIdle);
 
 	void                                  ForceCook(CookingCommandID inCommandID);
 	bool                                  IsIdle() const; // Return true if nothing is happening. Used by the UI to decide if it needs to draw.
@@ -335,12 +336,14 @@ private:
 	bool                                  mCookingStartPaused     = false;
 	bool                                  mCookingPaused          = true;
 	int                                   mWantedCookingThreadCount = 0;	// Number of threads requested. Actual number of threads created might be lower. 
+	Mutex								  mCookingPausedMutex;
 
 	friend void                           gDrawCookingLog();
 	friend void                           gDrawSelectedCookingLogEntry();
 	VMemArray<CookingLogEntry>            mCookingLog;
 
-	AtomicInt32                           mCookingErrors           = 0; // Total number of commands that ended in error.
+	AtomicInt32							  mCookingErrors		   = 0; // Total number of commands that ended in error since startup.
+	AtomicInt32							  mErroredCommandCount	   = 0; // Current number of (dirty) commands in error.
 	int                                   mLastNotifCookingErrors  = 0;
 	int									  mLastNotifCookingLogSize = 0;
 	int64                                 mLastNotifTicks          = 0;
