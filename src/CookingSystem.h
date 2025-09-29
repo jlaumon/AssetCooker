@@ -273,7 +273,7 @@ struct CookingSystem : NoCopy
 	Span<const CookingRule>               GetRules() const { return { mRules }; }
 	Span<const CookingCommand>            GetCommands() const { return { mCommands }; }
 
-	bool                                  ValidateRules(); // Return false if problems were found (see log).
+	bool                                  ValidateRules() const; // Return false if problems were found (see log).
 	void                                  StartCooking();
 	void                                  StopCooking();
 	void                                  SetCookingPaused(bool inPaused);

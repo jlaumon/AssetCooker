@@ -788,11 +788,10 @@ CookingCommand* CookingSystem::FindCommandByMainInput(CookingRuleID inRule, File
 }
 
 
-bool CookingSystem::ValidateRules()
+bool CookingSystem::ValidateRules() const
 {
-	TempHashSet<StringView> all_names;
-	int                     errors = 0;
-	Span                    rules  = GetRules();
+	int	 errors = 0;
+	Span rules	= GetRules();
 
 	// TODO: This is a temporary limitation because the current code compares USN numbers from multiple drives (and that doesn't work).
 	//		 Solution are to either store one USN per drive involved in commands, etc. (but storing variable number of USN seems annoying/inefficent),
@@ -806,16 +805,7 @@ bool CookingSystem::ValidateRules()
 	for (const CookingRule& rule : rules)
 	{
 		// Validate the name.
-		if (!rule.mName.Empty())
-		{
-			auto [_, result] = all_names.Insert(rule.mName);
-			if (result == EInsertResult::Found)
-			{
-				errors++;
-				gAppLogError(R"(Found multiple rules with name "%s")", rule.mName.AsCStr());
-			}
-		}
-		else
+		if (rule.mName.Empty())
 		{
 			errors++;
 			gAppLogError(R"(Rule[%d] has no name)", rules.GetIndex(rule));

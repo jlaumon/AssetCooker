@@ -857,10 +857,10 @@ void gDrawCookingRulePopup(const CookingRule& inRule)
 
 void gDrawCookingRule(const CookingRule& inRule)
 {
-	ImGui::PushID(inRule.mName);
+	ImGui::PushID(inRule.mID.mIndex);
 	defer { ImGui::PopID(); };
 
-	bool clicked = ImGui::Selectable(gTempFormat("%s (%d Commands)##%s", inRule.mName.AsCStr(), inRule.mCommandCount.Load(), inRule.mName.AsCStr()), 
+	bool clicked = ImGui::Selectable(gTempFormat("#%d %s (%d Commands)##%d", inRule.mID.mIndex, inRule.mName.AsCStr(), inRule.mCommandCount.Load(), inRule.mID.mIndex), 
 		false, ImGuiSelectableFlags_NoAutoClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
