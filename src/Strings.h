@@ -187,7 +187,11 @@ bool gStringViewToEnum(StringView inStrValue, taEnumType& outValue)
 
 struct FormatColor
 {
-	uint8 r, g, b;
+	uint8 r = 0;
+	uint8 g = 0;
+	uint8 b = 0;
+
+	constexpr bool operator==(const FormatColor&) const = default;
 };
 
 struct FormatSpan

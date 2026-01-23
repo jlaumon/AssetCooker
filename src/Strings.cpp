@@ -96,6 +96,16 @@ WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 }
 
 
+constexpr FormatColor cBlack   = {   0,   0,   0 };
+constexpr FormatColor cRed	   = { 255,   0,   0 };
+constexpr FormatColor cGreen   = {   0, 255,   0 };
+constexpr FormatColor cYellow  = { 255, 255,   0 };
+constexpr FormatColor cBlue	   = {   0,   0, 255 };
+constexpr FormatColor cMagenta = { 255,   0, 255 };
+constexpr FormatColor cCyan	   = {   0, 255,   0 };
+constexpr FormatColor cWhite   = { 255, 255, 255 };
+
+
 void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 {
 	// If there are no ANSI colors there's no need to generate any spans and inStr can be used as is
@@ -190,39 +200,17 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 					{
 						switch (numbers[num_idx])
 						{
-						case 0:	 // reset all styles
-							current_color = {};
-							break;
-						case 30: // black
-							current_color = FormatColor{ .r = 0, .g = 0, .b = 0 };
-							break;
-						case 31: // red
-							current_color = FormatColor{ .r = 255, .g = 0, .b = 0 };
-							break;
-						case 32: // green
-							current_color = FormatColor{ .r = 0, .g = 255, .b = 0 };
-							break;
-						case 33: // yellow
-							current_color = FormatColor{ .r = 255, .g = 255, .b = 0 };
-							break;
-						case 34: // blue
-							current_color = FormatColor{ .r = 0, .g = 0, .b = 255 };
-							break;
-						case 35: // magenta
-							current_color = FormatColor{ .r = 255, .g = 0, .b = 255 };
-							break;
-						case 36: // cyan
-							current_color = FormatColor{ .r = 0, .g = 255, .b = 255 };
-							break;
-						case 37: // white
-							current_color = FormatColor{ .r = 255, .g = 255, .b = 255 };
-							break;
-						case 39: // default color
-							current_color = {};
-							break;
-						default:
-							// Unhandled command
-							break;
+						case 0:		current_color = {};			break;	// Reset all styles
+						case 30:	current_color = cBlack;		break;
+						case 31:	current_color = cRed;		break;
+						case 32:	current_color = cGreen;		break;
+						case 33:	current_color = cYellow;	break;
+						case 34:	current_color = cBlue;		break;
+						case 35:	current_color = cMagenta;	break;
+						case 36:	current_color = cCyan;		break;
+						case 37:	current_color = cWhite;		break;
+						case 39:	current_color = {};			break;	// Default color
+						default:								break;	// Unhandled command
 						}
 					}
 				}
@@ -281,24 +269,23 @@ REGISTER_TEST("gParseANSIColors")
 	TEST_TRUE(spans.Size() == 1);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 15); // should skip the parsed sequence itself
 	TEST_TRUE(spans[0].mSpan.End() == test.Begin() + 40);	// ensure it ends before the next sequence
-	TEST_TRUE(spans[0].mColor->r == 255 && spans[0].mColor->g == 0 && spans[0].mColor->b == 0);
+	TEST_TRUE(*spans[0].mColor == cRed);
 	spans.Clear();
 
 	test = "\x1b[32mGreen text\x1b[34mBlue text\x1b[0m";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 2);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 5);
-	TEST_TRUE(spans[0].mColor->r == 0 && spans[0].mColor->g == 255 && spans[0].mColor->b == 0);
+	TEST_TRUE(*spans[0].mColor == cGreen);
 	TEST_TRUE(spans[1].mSpan.Begin() == test.Begin() + 20);
-	TEST_TRUE(spans[1].mColor->r == 0 && spans[1].mColor->g == 0 && spans[1].mColor->b == 255);
+	TEST_TRUE(*spans[1].mColor == cBlue);
 	spans.Clear();
 
 	test = "\x1b[1;35mBold magenta text, except we don't support bold so ignored\x1b[0m";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 1);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 7);
-	TEST_TRUE(spans[0].mColor.has_value());
-	TEST_TRUE(spans[0].mColor->r == 255 && spans[0].mColor->g == 0 && spans[0].mColor->b == 255);
+	TEST_TRUE(*spans[0].mColor == cMagenta);
 	spans.Clear();
 
 	test = "\x1b[0mEscape sequence but no colors";
