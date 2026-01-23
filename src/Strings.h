@@ -187,17 +187,18 @@ bool gStringViewToEnum(StringView inStrValue, taEnumType& outValue)
 
 struct FormatColor
 {
-	uint8 r = 0;
-	uint8 g = 0;
-	uint8 b = 0;
+	uint8 mR	 = 0;
+	uint8 mG	 = 0;
+	uint8 mB	 = 0;
+	bool  mValid = false;
 
 	constexpr bool operator==(const FormatColor&) const = default;
 };
 
 struct FormatSpan
 {
-	StringView			  mSpan;
-	Optional<FormatColor> mColor;
+	StringView	mSpan;
+	FormatColor mColor;
 };
 
 // Parse the string for ANSI escape sequences with color codes

@@ -1132,15 +1132,15 @@ void gDrawSelectedCookingLogEntry()
 			{
 				for (const FormatSpan& format_span : log_entry.mOutputFormatSpans)
 				{
-					if (format_span.mColor.has_value())
+					if (format_span.mColor.mValid)
 					{
-						FormatColor color = format_span.mColor.value();
-						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1.0f));
+						FormatColor color = format_span.mColor;
+						ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(color.mR, color.mG, color.mB, 255));
 					}
 
 					ImGui::TextUnformatted(format_span.mSpan);
 
-					if (format_span.mColor.has_value())
+					if (format_span.mColor.mValid)
 					{
 						ImGui::PopStyleColor();
 					}

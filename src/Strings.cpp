@@ -96,23 +96,23 @@ WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 }
 
 
-constexpr FormatColor cBlack   = {   0,   0,   0 };
-constexpr FormatColor cRed	   = { 255,   0,   0 };
-constexpr FormatColor cGreen   = {   0, 255,   0 };
-constexpr FormatColor cYellow  = { 255, 255,   0 };
-constexpr FormatColor cBlue	   = {   0,   0, 255 };
-constexpr FormatColor cMagenta = { 255,   0, 255 };
-constexpr FormatColor cCyan	   = {   0, 255,   0 };
-constexpr FormatColor cWhite   = { 255, 255, 255 };
+constexpr FormatColor cBlack   = {   0,   0,   0, true };
+constexpr FormatColor cRed	   = { 255,   0,   0, true };
+constexpr FormatColor cGreen   = {   0, 255,   0, true };
+constexpr FormatColor cYellow  = { 255, 255,   0, true };
+constexpr FormatColor cBlue	   = {   0,   0, 255, true };
+constexpr FormatColor cMagenta = { 255,   0, 255, true };
+constexpr FormatColor cCyan	   = {   0, 255,   0, true };
+constexpr FormatColor cWhite   = { 255, 255, 255, true };
 
 
 void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 {
 	// If there are no ANSI colors there's no need to generate any spans and inStr can be used as is
-	bool				  generate_spans = false;
+	bool		generate_spans = false;
 
-	int					  cursor		 = 0;
-	Optional<FormatColor> current_color	 = Optional<FormatColor>();
+	int			cursor		   = 0;
+	FormatColor current_color  = {};
 
 	do
 	{
@@ -190,7 +190,7 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 				if (numbers.Size() == 5 && numbers[0] == 38 && numbers[1] == 2)
 				{
 					// rgb color
-					current_color = FormatColor{ .r = (uint8)numbers[2], .g = (uint8)numbers[3], .b = (uint8)numbers[4] };
+					current_color = { (uint8)numbers[2], (uint8)numbers[3], (uint8)numbers[4], true };
 				}
 				else if (numbers.Size() > 0)
 				{
@@ -269,30 +269,30 @@ REGISTER_TEST("gParseANSIColors")
 	TEST_TRUE(spans.Size() == 1);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 15); // should skip the parsed sequence itself
 	TEST_TRUE(spans[0].mSpan.End() == test.Begin() + 40);	// ensure it ends before the next sequence
-	TEST_TRUE(*spans[0].mColor == cRed);
+	TEST_TRUE(spans[0].mColor == cRed);
 	spans.Clear();
 
 	test = "\x1b[32mGreen text\x1b[34mBlue text\x1b[0m";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 2);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 5);
-	TEST_TRUE(*spans[0].mColor == cGreen);
+	TEST_TRUE(spans[0].mColor == cGreen);
 	TEST_TRUE(spans[1].mSpan.Begin() == test.Begin() + 20);
-	TEST_TRUE(*spans[1].mColor == cBlue);
+	TEST_TRUE(spans[1].mColor == cBlue);
 	spans.Clear();
 
 	test = "\x1b[1;35mBold magenta text, except we don't support bold so ignored\x1b[0m";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 1);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 7);
-	TEST_TRUE(*spans[0].mColor == cMagenta);
+	TEST_TRUE(spans[0].mColor == cMagenta);
 	spans.Clear();
 
 	test = "\x1b[0mEscape sequence but no colors";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 1);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 4);
-	TEST_FALSE(spans[0].mColor.has_value());
+	TEST_FALSE(spans[0].mColor.mValid);
 	spans.Clear();
 
 	test = "\x1b[38;2;255;0;0mBroken ANSI escape sequence 1 (missing m at end)\x1b[0";
