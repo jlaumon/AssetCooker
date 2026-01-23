@@ -1204,7 +1204,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		}
 	}
 
-	bool success = false;
+	bool command_success = false;
 	if (rule.mCommandType == CommandType::CommandLine)
 	{
 		// Build the command line.
@@ -1218,7 +1218,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		}
 
 		// Run the command line.
-		success = sRunCommandLine(command_line, output_str, mJobObject);
+		command_success = sRunCommandLine(command_line, output_str, mJobObject);
 	}
 	else
 	{
@@ -1226,20 +1226,20 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		switch (rule.mCommandType)
 		{
 		case CommandType::CopyFile:
-			success = sRunCopyFile(ioCommand, output_str);
+			command_success = sRunCopyFile(ioCommand, output_str);
 			break;
 		default:
 			gAssert(false);
-			success = false;
+			command_success = false;
 			break;
 		}
 	}
 
 	// If there's a dep file command line, run it next.
-	if (success && !dep_command_line.Empty())
+	if (command_success && !dep_command_line.Empty())
 	{
 		output_str.Append("\nDep File "); // No end line on purpose, we want to prepend the line added inside the sRunCommandLine.
-		success = sRunCommandLine(dep_command_line, output_str, mJobObject);
+		command_success = sRunCommandLine(dep_command_line, output_str, mJobObject);
 	}
 
 	// Set the end time and add the duration at the end of the log.
@@ -1250,7 +1250,7 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	log_entry.mOutput = output_str.AsStringView();
 	gParseANSIColors(log_entry.mOutput, log_entry.mOutputFormatSpans);
 
-	if (!success)
+	if (!command_success)
 	{
 		log_entry.mCookingState.Store(CookingState::Error);
 	}
@@ -1279,7 +1279,7 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 
 	StringPool::ResizableStringView output_str = ioThread.mStringPool.CreateResizableString();
 
-	bool error = false;
+	bool cleanup_success = true;
 	for (FileID output_id : ioCommand.mOutputs)
 	{
 		if (gFileSystem.DeleteFile(output_id))
@@ -1289,7 +1289,7 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 		else
 		{
 			gAppendFormat(output_str, "[error] Failed to delete %s%s\n", output_id.GetRepo().mRootPath.AsCStr(), output_id.GetFile().mPath.AsCStr());
-			error = true;
+			cleanup_success = false;
 		}
 	}
 
@@ -1298,7 +1298,7 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 
 	log_entry.mTimeEnd      = gGetSystemTimeAsFileTime();
 
-	if (error)
+	if (!cleanup_success)
 	{
 		log_entry.mCookingState.Store(CookingState::Error);
 	}
