@@ -193,6 +193,16 @@ struct FormatColor
 	bool  mValid = false;
 
 	constexpr bool operator==(const FormatColor&) const = default;
+	
+	static constexpr FormatColor sBlack()		{ return {   0,   0,   0, true }; }
+	static constexpr FormatColor sRed()			{ return { 255,   0,   0, true }; }
+	static constexpr FormatColor sGreen()		{ return {   0, 255,   0, true }; }
+	static constexpr FormatColor sYellow()		{ return { 255, 255,   0, true }; }
+	static constexpr FormatColor sBlue()		{ return {   0,   0, 255, true }; }
+	static constexpr FormatColor sMagenta()		{ return { 255,   0, 255, true }; }
+	static constexpr FormatColor sCyan()		{ return {   0, 255,   0, true }; }
+	static constexpr FormatColor sWhite()		{ return { 255, 255, 255, true }; }
+	static constexpr FormatColor sBrightRed()	{ return { 255, 100, 100, true }; }
 };
 
 struct FormatSpan

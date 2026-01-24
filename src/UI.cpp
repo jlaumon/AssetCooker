@@ -63,6 +63,10 @@ constexpr uint32	  cColorTextInputModified = IM_COL32(65, 171, 240, 255);
 constexpr uint32	  cColorTextOuputOutdated = IM_COL32(255, 100, 100, 255);
 
 
+// BrightRed should be the same as the Error color because we use the corresponding ANSI escape code for coloring errors in the command output logs.
+static_assert(cColorTextError == IM_COL32(FormatColor::sBrightRed().mR, FormatColor::sBrightRed().mG, FormatColor::sBrightRed().mB, 255));
+
+
 // A silly hack to keep track of in-function static variables and be able to re-initialize them.
 // This is useful when reloading config/rules files, because we want to reinitialize everything.
 struct StaticStorageManager
@@ -696,9 +700,16 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 					dirty_details.Append("Output Outdated|");
 
 				// Replace the last | with )
-				dirty_details.Back() = ')'; 
+				dirty_details.Back() = ')';
+
+				if (inCommand.mDirtyState & CookingCommand::Error)
+					ImGui::PushStyleColor(ImGuiCol_Text, cColorTextError);
 				
 				ImGui::TextUnformatted(dirty_details);
+
+				if (inCommand.mDirtyState & CookingCommand::Error)
+					ImGui::PopStyleColor();
+
 			}
 			else if (inCommand.IsCleanedUp())
 				ImGui::TextUnformatted("Cleaned Up");
@@ -1146,6 +1157,16 @@ void gDrawSelectedCookingLogEntry()
 					}
 				}
 			}
+		}
+
+		if (log_entry.mNotAllOutputWrittenError)
+		{
+			gAssert(log_entry.mCookingState.Load() == CookingState::Error);
+
+			ImGui::NewLine();
+			ImGui::PushStyleColor(ImGuiCol_Text, cColorTextError);
+			ImGui::TextUnformatted("[error] Not all the outputs declared by the command were written.");
+			ImGui::PopStyleColor();
 		}
 	}
 	ImGui::EndChild();

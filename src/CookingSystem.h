@@ -130,10 +130,12 @@ struct CookingLogEntry
 	CookingCommandID          mCommandID;
 	Atomic<CookingState>      mCookingState = CookingState::Unknown;
 	bool                      mIsCleanup    = false;
+	bool					  mNotAllOutputWrittenError = false; // Can only be detected too late to append to the output log
 	FileTime                  mTimeStart;
-	FileTime                  mTimeEnd;		// Unsafe to read unless CookingState is > Cooking. TODO add getters that assert this
-	StringView                mOutput;		// Unsafe to read unless CookingState is > Cooking.
-	Vector<FormatSpan>        mOutputFormatSpans; // Unsafe to read unless CookingState is > Cooking.
+	FileTime				  mTimeEnd;			  // Unsafe to read unless CookingState is > Cooking. TODO add getters that assert this
+	StringView				  mOutput;			  // Unsafe to read unless CookingState is > Cooking.
+	Vector<FormatSpan>		  mOutputFormatSpans; // Unsafe to read unless CookingState is > Cooking.
+	void					  SetOutput(StringView inOutput);
 };
 
 

@@ -96,14 +96,6 @@ WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 }
 
 
-constexpr FormatColor cBlack   = {   0,   0,   0, true };
-constexpr FormatColor cRed	   = { 255,   0,   0, true };
-constexpr FormatColor cGreen   = {   0, 255,   0, true };
-constexpr FormatColor cYellow  = { 255, 255,   0, true };
-constexpr FormatColor cBlue	   = {   0,   0, 255, true };
-constexpr FormatColor cMagenta = { 255,   0, 255, true };
-constexpr FormatColor cCyan	   = {   0, 255,   0, true };
-constexpr FormatColor cWhite   = { 255, 255, 255, true };
 
 
 void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
@@ -200,17 +192,18 @@ void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans)
 					{
 						switch (numbers[num_idx])
 						{
-						case 0:		current_color = {};			break;	// Reset all styles
-						case 30:	current_color = cBlack;		break;
-						case 31:	current_color = cRed;		break;
-						case 32:	current_color = cGreen;		break;
-						case 33:	current_color = cYellow;	break;
-						case 34:	current_color = cBlue;		break;
-						case 35:	current_color = cMagenta;	break;
-						case 36:	current_color = cCyan;		break;
-						case 37:	current_color = cWhite;		break;
-						case 39:	current_color = {};			break;	// Default color
-						default:								break;	// Unhandled command
+						case 0:		current_color = {};							break;	// Reset all styles
+						case 30:	current_color = FormatColor::sBlack();		break;
+						case 31:	current_color = FormatColor::sRed();		break;
+						case 32:	current_color = FormatColor::sGreen();		break;
+						case 33:	current_color = FormatColor::sYellow();		break;
+						case 34:	current_color = FormatColor::sBlue();		break;
+						case 35:	current_color = FormatColor::sMagenta();	break;
+						case 36:	current_color = FormatColor::sCyan();		break;
+						case 37:	current_color = FormatColor::sWhite();		break;
+						case 39:	current_color = {};							break;	// Default color
+						case 91:	current_color = FormatColor::sBrightRed();	break;
+						default:												break;	// Unhandled command
 						}
 					}
 				}
@@ -269,23 +262,23 @@ REGISTER_TEST("gParseANSIColors")
 	TEST_TRUE(spans.Size() == 1);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 15); // should skip the parsed sequence itself
 	TEST_TRUE(spans[0].mSpan.End() == test.Begin() + 40);	// ensure it ends before the next sequence
-	TEST_TRUE(spans[0].mColor == cRed);
+	TEST_TRUE(spans[0].mColor == FormatColor::sRed());
 	spans.Clear();
 
 	test = "\x1b[32mGreen text\x1b[34mBlue text\x1b[0m";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 2);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 5);
-	TEST_TRUE(spans[0].mColor == cGreen);
+	TEST_TRUE(spans[0].mColor == FormatColor::sGreen());
 	TEST_TRUE(spans[1].mSpan.Begin() == test.Begin() + 20);
-	TEST_TRUE(spans[1].mColor == cBlue);
+	TEST_TRUE(spans[1].mColor == FormatColor::sBlue());
 	spans.Clear();
 
 	test = "\x1b[1;35mBold magenta text, except we don't support bold so ignored\x1b[0m";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 1);
 	TEST_TRUE(spans[0].mSpan.Begin() == test.Begin() + 7);
-	TEST_TRUE(spans[0].mColor == cMagenta);
+	TEST_TRUE(spans[0].mColor == FormatColor::sMagenta());
 	spans.Clear();
 
 	test = "\x1b[0mEscape sequence but no colors";
