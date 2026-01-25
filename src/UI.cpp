@@ -54,13 +54,12 @@ int64				  gCurrentTimeInTicks			   = 0;
 int64				  gUIStartTicks					   = gProcessStartTicks;
 
 // TODO these colors are terrible
-constexpr uint32	  cColorTextError		  = IM_COL32(255, 100, 100, 255);
-constexpr uint32	  cColorTextSuccess		  = IM_COL32(98, 214, 86, 255);
-constexpr uint32	  cColorFrameBgError	  = IM_COL32(150, 60, 60, 255);
+constexpr uint32 cColorTextError	= IM_COL32(255, 100, 100, 255);
+constexpr uint32 cColorTextSuccess	= IM_COL32(98, 214, 86, 255);
+constexpr uint32 cColorFrameBgError = IM_COL32(150, 60, 60, 255);
 
-constexpr uint32	  cColorTextFileDeleted	  = IM_COL32(170, 170, 170, 255);
-constexpr uint32	  cColorTextInputModified = IM_COL32(65, 171, 240, 255);
-constexpr uint32	  cColorTextOuputOutdated = IM_COL32(255, 100, 100, 255);
+constexpr uint32 cColorTextGray		= IM_COL32(170, 170, 170, 255);
+constexpr uint32 cColorTextBlue		= IM_COL32(65, 171, 240, 255);
 
 
 // BrightRed should be the same as the Error color because we use the corresponding ANSI escape code for coloring errors in the command output logs.
@@ -382,7 +381,7 @@ void gDrawMainMenuBar()
 
 struct FileContext;
 
-void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, FileContext inContext);
+void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, const FileContext& inContext);
 void gDrawCookingCommandSpan(StringView inListName, Span<const CookingCommandID> inCommandIDs);
 
 
@@ -442,7 +441,7 @@ void gDrawInputFilters(const FileInfo& inFile)
 					// Set the color.
 					uint32 icon_color;
 					if (already_passed)
-						icon_color = cColorTextFileDeleted;
+						icon_color = cColorTextGray;
 					else if (pass)
 						icon_color = cColorTextSuccess;
 					else
@@ -479,41 +478,26 @@ enum class DependencyType
 
 struct FileContext
 {
-	DependencyType mDepType  = DependencyType::Unknown;
-	USN            mLastCook = 0;
+	DependencyType mDepType	  = DependencyType::Unknown;
+	USN			   mLastCook  = 0;
+	bool		   mIsCleanup = false;
 };
 
 
-void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
+void gDrawFileInfo(const FileInfo& inFile, const FileContext& inContext = {})
 {
 	ImGui::PushID(gTempFormat("File %u", inFile.mID.AsUInt()));
 	defer { ImGui::PopID(); };
 
-	enum
-	{
-		None = -1,
-		Deleted = 0,
-		Modified,
-		Outdated
-	} file_state = None;
+	uint32	   color   = 0;
+	StringView tooltip = "";
 
-	constexpr struct
-	{
-		uint32 mColor;
-		StringView mTooltip;
-	} cFileStateData[] = 
-	{
-		{ cColorTextFileDeleted, "Deleted" },
-		{ cColorTextInputModified, "Modified" },
-		{ cColorTextOuputOutdated, "Outdated" },
-	};
-
-	int pushed_colors = 0;
 	if (inFile.IsDeleted())
 	{
-		file_state = Deleted;
+		tooltip = "Deleted";
+		color	= inContext.mIsCleanup ? cColorTextGray : cColorTextError;
 	}
-	else if (inContext.mLastCook != 0) // Zero means we have no info.
+	else
 	{
 		switch (inContext.mDepType)
 		{
@@ -522,26 +506,32 @@ void gDrawFileInfo(const FileInfo& inFile, FileContext inContext = {})
 
 		case DependencyType::Input:
 			if (inFile.mLastChangeUSN > inContext.mLastCook)
-				file_state = Modified;
+			{
+				tooltip = "Modified since Last Cook";
+				color	= cColorTextBlue;
+			}
 			break;
 
 		case DependencyType::Output:
 			if (inFile.mLastChangeUSN <= inContext.mLastCook)
-				file_state = Outdated;
+			{
+				tooltip = "Outdated";
+				color	= cColorTextError;
+			}
 			break;
 		}
 	}
 
-	if (file_state != None)
-		ImGui::PushStyleColor(ImGuiCol_Text, cFileStateData[file_state].mColor);
+	if (color != 0)
+		ImGui::PushStyleColor(ImGuiCol_Text, color);
 
 	bool clicked = ImGui::Selectable(inFile.ToString(), false, ImGuiSelectableFlags_NoAutoClosePopups);
 	bool open    = ImGui::IsItemHovered() && ImGui::IsMouseClicked(1);
 
-	if (file_state != None && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
-		ImGui::SetTooltip(cFileStateData[file_state].mTooltip.AsCStr());
+	if (!tooltip.Empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+		ImGui::SetTooltip(tooltip.AsCStr());
 
-	if (file_state != None)
+	if (color != 0)
 		ImGui::PopStyleColor();
 
 	if (open)
@@ -721,12 +711,26 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 		ImGui::TableNextColumn();
 		{
 			StringView last_cook_status = "Unknown";
+			uint32 color = 0;
 			if (inCommand.mDirtyState & CookingCommand::Error)
+			{
 				last_cook_status = "Error";
+				color			 = cColorTextError;
+			}
 			else if (inCommand.mLastCookingLog != nullptr)
+			{
 				last_cook_status = "Success";
+				color			 = cColorTextSuccess;
+			}
+
+			if (color != 0)
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
 
 			ImGui::TextUnformatted(last_cook_status);
+
+			if (color != 0)
+				ImGui::PopStyleColor();
+
 			if (inCommand.mLastCookingLog)
 			{
 				ImGui::SameLine();
@@ -747,15 +751,17 @@ void gDrawCookingCommandPopup(const CookingCommand& inCommand)
 
 	ImGui::SeparatorText("Related Files");
 
-	gDrawFileInfoSpan("Inputs", inCommand.mInputs, { DependencyType::Input, inCommand.mLastCookUSN });
+	bool is_cleanup = inCommand.NeedsCleanup() || inCommand.IsCleanedUp();
+
+	gDrawFileInfoSpan("Inputs", inCommand.mInputs, { DependencyType::Input, inCommand.mLastCookUSN, is_cleanup });
 	
 	if (!inCommand.mDepFileInputs.Empty())
-		gDrawFileInfoSpan("DepFile Inputs", inCommand.mDepFileInputs, { DependencyType::Input, inCommand.mLastCookUSN });
+		gDrawFileInfoSpan("DepFile Inputs", inCommand.mDepFileInputs, { DependencyType::Input, inCommand.mLastCookUSN, is_cleanup });
 
-	gDrawFileInfoSpan("Outputs", inCommand.mOutputs, { DependencyType::Output, inCommand.mLastCookUSN });
+	gDrawFileInfoSpan("Outputs", inCommand.mOutputs, { DependencyType::Output, inCommand.mLastCookUSN, is_cleanup });
 
 	if (!inCommand.mDepFileOutputs.Empty())
-		gDrawFileInfoSpan("DepFile Outputs", inCommand.mDepFileOutputs, { DependencyType::Output, inCommand.mLastCookUSN });
+		gDrawFileInfoSpan("DepFile Outputs", inCommand.mDepFileOutputs, { DependencyType::Output, inCommand.mLastCookUSN, is_cleanup });
 
 	ImGui::PopStyleVar();
 }
@@ -882,7 +888,7 @@ void gDrawCookingRule(const CookingRule& inRule)
 }
 
 
-void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, FileContext inContext)
+void gDrawFileInfoSpan(StringView inListName, Span<const FileID> inFileIDs, const FileContext& inContext)
 {
 	constexpr int cMaxItemsForOpenByDefault = 10;
 	ImGui::SetNextItemOpen(inFileIDs.Size() <= cMaxItemsForOpenByDefault, ImGuiCond_Appearing);
