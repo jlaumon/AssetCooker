@@ -1303,6 +1303,10 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 	bool cleanup_success = true;
 	for (FileID output_id : ioCommand.mOutputs)
 	{
+		// Skip the file if it's already deleted (it would fail to delete and trigger an error)
+		if (output_id.GetFile().IsDeleted())
+			continue;
+
 		if (gFileSystem.DeleteFile(output_id))
 		{
 			gAppendFormat(output_str, "Deleted %s\n", output_id.GetFile().ToString().AsCStr());
