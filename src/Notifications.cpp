@@ -7,20 +7,17 @@
 #include "App.h"
 #include <windows.h>
 
-// Lazy way of turning a string into a compile time GUID.
-class __declspec(uuid("cbdb5e17-ea19-4444-9947-7abf64f8c203")) NotifClass;
-constexpr GUID cNotifGUID = __uuidof(NotifClass);
-
+NOTIFYICONDATAA nid;
 
 void gNotifInit(void* inHwnd)
 {
-	NOTIFYICONDATAA nid  = {};
+	nid                  = NOTIFYICONDATAA{};
 	nid.cbSize           = sizeof(nid);
 	nid.hWnd             = (HWND)inHwnd;
-	nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP | NIF_GUID;
-	nid.guidItem         = cNotifGUID;
+	nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
 	nid.hIcon            = LoadIconA(GetModuleHandleA(nullptr), "chef_hat_heart");
 	nid.uCallbackMessage = cNotifCallbackID;
+	nid.uID				 = 1;
 
 	// Set the app title as default tooltip.
 	gStringCopy(nid.szTip, gApp.mMainWindowTitle);
@@ -45,11 +42,6 @@ void gNotifInit(void* inHwnd)
 
 void gNotifExit()
 {
-	NOTIFYICONDATAA nid = {};
-	nid.cbSize          = sizeof(nid);
-	nid.uFlags          = NIF_GUID;
-	nid.guidItem        = cNotifGUID;
-
 	bool ret = Shell_NotifyIconA(NIM_DELETE, &nid);
 	gAssert(ret);
 }
@@ -57,12 +49,9 @@ void gNotifExit()
 
 void gNotifAdd(NotifType inType, StringView inTitle, StringView inMessage)
 {
-	NOTIFYICONDATAA nid = {};
-	nid.cbSize          = sizeof(nid);
-	nid.uFlags          = NIF_GUID | NIF_INFO;
-	nid.guidItem        = cNotifGUID;
-
+	nid.uFlags          = NIF_INFO;
 	nid.dwInfoFlags     = 0;
+
 	switch (inType)
 	{
 	case NotifType::Info:
@@ -91,10 +80,7 @@ void gNotifAdd(NotifType inType, StringView inTitle, StringView inMessage)
 
 void gNotifSetToolTip(StringView inMessage)
 {
-	NOTIFYICONDATAA nid = {};
-	nid.cbSize          = sizeof(nid);
-	nid.uFlags          = NIF_GUID | NIF_SHOWTIP;
-	nid.guidItem        = cNotifGUID;
+	nid.uFlags          = NIF_SHOWTIP;
 
 	gStringCopy(nid.szTip, inMessage);
 
