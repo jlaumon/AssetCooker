@@ -95,6 +95,8 @@ solution "AssetCooker"
 			"thirdparty/minilua/*.h",
 			"data/**.rc",
 			"data/**.h",
+			"api/*.h",
+			"api/*.c",
 		}
 		
 		includedirs 

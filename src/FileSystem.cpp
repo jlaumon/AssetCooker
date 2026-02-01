@@ -10,6 +10,7 @@
 #include "DepFile.h"
 #include "BinaryReadWriter.h"
 #include "Strings.h"
+#include "RemoteControl.h"
 #include <Bedrock/Algorithm.h>
 #include <Bedrock/Ticks.h>
 #include <Bedrock/Random.h>
@@ -1385,6 +1386,8 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 	// Once the scan is finished, start cooking.
 	gCookingSystem.StartCooking();
 
+	bool is_cooking_idle = false;
+
 	while (!inThread.IsStopRequested())
 	{
 		bool any_work_done = false;
@@ -1447,14 +1450,22 @@ void FileSystem::MonitorDirectoryThread(const Thread& inThread)
 		// Instead the cooking threads will wake this thread up any time a command finishes (which usually also means there are file changes to process).
 		gCookingSystem.ProcessUpdateDirtyStates();
 
+		// Check if cooking is idle.
+		bool was_idle	= is_cooking_idle;
+		is_cooking_idle = gCookingSystem.IsIdle();
+
+		// Notify RemoteControl if the idle state changed.
+		if (was_idle != is_cooking_idle)
+			gRemoteControlOnIsIdleChange(is_cooking_idle);
+
 		// Launch notifications if there are errors or cooking is finished.
-		gCookingSystem.UpdateNotifications();
+		gCookingSystem.UpdateNotifications(is_cooking_idle);
 
 		// If running without UI, we want to exit when cooking is finished.
 		if (gApp.mNoUI)
 		{
 			// Note: Cooking should probably never be paused when running without UI, but if it is don't exit (it's probably for debugging?)
-			if (gCookingSystem.IsIdle() && !gCookingSystem.IsCookingPaused())
+			if (is_cooking_idle && !gCookingSystem.IsCookingPaused())
 				gApp.RequestExit();
 		}
 
