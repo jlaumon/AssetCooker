@@ -648,7 +648,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 		
 	case cNotifCallbackID:
-		lParam = LOWORD(lParam);
+		lParam = LOWORD(lParam);			// High word contains uID of the icon
 		if (lParam == WM_LBUTTONDOWN ||     // Click on the notif icon
 			lParam == NIN_BALLOONUSERCLICK) // Click on the notif popup
 		{

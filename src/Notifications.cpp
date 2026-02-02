@@ -7,17 +7,20 @@
 #include "App.h"
 #include <windows.h>
 
-NOTIFYICONDATAA nid;
+constexpr UINT cNotifUID = 1;
+static    HWND sNotifHWND;
 
 void gNotifInit(void* inHwnd)
 {
-	nid                  = NOTIFYICONDATAA{};
+	sNotifHWND           = (HWND)inHwnd;
+
+	NOTIFYICONDATAA nid  = {};
 	nid.cbSize           = sizeof(nid);
-	nid.hWnd             = (HWND)inHwnd;
+	nid.hWnd             = sNotifHWND;
 	nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
 	nid.hIcon            = LoadIconA(GetModuleHandleA(nullptr), "chef_hat_heart");
 	nid.uCallbackMessage = cNotifCallbackID;
-	nid.uID				 = 1;
+	nid.uID              = cNotifUID;
 
 	// Set the app title as default tooltip.
 	gStringCopy(nid.szTip, gApp.mMainWindowTitle);
@@ -42,6 +45,11 @@ void gNotifInit(void* inHwnd)
 
 void gNotifExit()
 {
+	NOTIFYICONDATAA nid = {};
+	nid.cbSize          = sizeof(nid);
+	nid.uID             = cNotifUID;
+	nid.hWnd            = sNotifHWND;
+
 	bool ret = Shell_NotifyIconA(NIM_DELETE, &nid);
 	gAssert(ret);
 }
@@ -49,9 +57,13 @@ void gNotifExit()
 
 void gNotifAdd(NotifType inType, StringView inTitle, StringView inMessage)
 {
+	NOTIFYICONDATAA nid = {};
+	nid.cbSize          = sizeof(nid);
 	nid.uFlags          = NIF_INFO;
-	nid.dwInfoFlags     = 0;
+	nid.uID             = cNotifUID;
+	nid.hWnd            = sNotifHWND;
 
+	nid.dwInfoFlags     = 0;
 	switch (inType)
 	{
 	case NotifType::Info:
@@ -80,7 +92,11 @@ void gNotifAdd(NotifType inType, StringView inTitle, StringView inMessage)
 
 void gNotifSetToolTip(StringView inMessage)
 {
-	nid.uFlags          = NIF_SHOWTIP;
+	NOTIFYICONDATAA nid = {};
+	nid.cbSize          = sizeof(nid);
+	nid.uFlags          = NIF_GUID | NIF_SHOWTIP;
+	nid.uID             = cNotifUID;
+	nid.hWnd            = sNotifHWND;
 
 	gStringCopy(nid.szTip, inMessage);
 
