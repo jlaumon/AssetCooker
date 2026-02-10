@@ -57,8 +57,8 @@ TempString gWideCharToUtf8(WStringView inWString)
 
 	int written_bytes = WideCharToMultiByte(CP_UTF8, 0, inWString.data(), (int)inWString.size(), out_str.Data(), available_bytes, nullptr, nullptr);
 
-	if (written_bytes == 0 && !inWString.empty())
-		return {}; // Failed to convert.
+	if (written_bytes == 0)
+		return {}; // Either inWString is empty or we failed to convert.
 
 	if (written_bytes == available_bytes)
 		return {}; // Might be cropped, consider failed.
@@ -78,6 +78,8 @@ TempString gWideCharToUtf8(WStringView inWString)
 // Convert utf8 string to wide char. Always returns a null terminated string. Return an empty string on failure.
 WStringView gUtf8ToWideChar(StringView inString, Span<wchar_t> ioBuffer)
 {
+	gAssert(ioBuffer.Size() > 0);
+
 	// Reserve 1 byte for the null terminator.
 	int available_wchars = ioBuffer.Size() - 1;
 
@@ -296,4 +298,22 @@ REGISTER_TEST("gParseANSIColors")
 	test = "\x1b[38;2;255;0;0!Broken ANSI escape sequence 2 (missing m in first sequence)\x1b[0m";
 	gParseANSIColors(test, spans);
 	TEST_TRUE(spans.Size() == 0);
+};
+
+
+REGISTER_TEST("gWideCharToUtf8")
+{
+	TEST_TRUE(gWideCharToUtf8(L"HELLO") == "HELLO");
+	TEST_TRUE(gWideCharToUtf8(L"") == "");
+	TEST_TRUE(gWideCharToUtf8(L"αλφάβητοà") == "αλφάβητοà");
+};
+
+
+REGISTER_TEST("gUtf8ToWideChar")
+{
+	wchar_t buffer[64];
+
+	TEST_TRUE(gUtf8ToWideChar("HELLO", buffer) == L"HELLO");
+	TEST_TRUE(gUtf8ToWideChar("", buffer) == L"");
+	TEST_TRUE(gUtf8ToWideChar("αλφάβητοà", buffer) == L"αλφάβητοà");
 };
