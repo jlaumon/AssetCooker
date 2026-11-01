@@ -1,7 +1,10 @@
 ---
 BasedOnStyle: Microsoft
 AccessModifierOffset: '-4'
-AlignConsecutiveAssignments: AcrossEmptyLines
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveMacros: Consecutive
+AlignConsecutiveBitFields: Consecutive
 AlignEscapedNewlines: Left
 Cpp11BracedListStyle: 'false'
 PointerAlignment: Left
@@ -12,8 +15,5 @@ AlignTrailingComments:
   Kind: Always
   OverEmptyLines: 2
 AllowShortFunctionsOnASingleLine: All
-AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
-AlignConsecutiveMacros: AcrossEmptyLinesAndComments
-AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
 AllowShortBlocksOnASingleLine: Always
 ...

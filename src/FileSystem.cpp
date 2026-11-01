@@ -1590,15 +1590,9 @@ void FileSystem::LoadCache()
 		USN next_usn = 0;
 		bin.Read(next_usn);
 
-		FileDrive* drive         = FindDrive(drive_letter);
-		bool       drive_valid   = true;
-		bool       rescan_needed = false;
-		if (drive == nullptr)
-		{
-			gAppLogError(R"(Drive %c:\ is listed in the cache but isn't used anymore, ignoring cache.)", drive_letter);
-			drive_valid = false;
-		}
-		else
+		bool drive_valid   = true;
+		bool rescan_needed = false;
+		if (FileDrive* drive = FindDrive(drive_letter))
 		{
 			if (drive->mUSNJournalID != journal_id)
 			{
@@ -1620,13 +1614,18 @@ void FileSystem::LoadCache()
 				// We'll need to consider all the files from the cache to be deleted, then run the initial scan to see what actually exists.
 				rescan_needed = true;
 			}
-		}
 
-		if (!rescan_needed)
+			if (!rescan_needed)
+			{
+				// Set the next USN we should read.
+				// (If a rescan is needed, don't overwrite mNextUSN. next_usn is too old and we're going to read everything anyway).
+				drive->mNextUSN = next_usn;
+			}
+		}
+		else
 		{
-			// Set the next USN we should read.
-			// (If a rescan is needed, don't overwrite mNextUSN. next_usn is too old and we're going to read everything anyway).
-			drive->mNextUSN = next_usn;
+			gAppLogError(R"(Drive %c:\ is listed in the cache but isn't used anymore, ignoring cache.)", drive_letter);
+			drive_valid = false;
 		}
 
 		uint16 repo_count = 0;
@@ -1866,7 +1865,7 @@ void FileSystem::LoadCache()
 
 			CookingLogEntry& log_entry = gCookingSystem.AllocateCookingLogEntry(command_id);
 			log_entry.mTimeStart       = command.mLastCookTime;
-			log_entry.mOutput          = output_log;
+			log_entry.SetOutput(output_log);
 			log_entry.mCookingState.Store(CookingState::Error);
 
 			command.mLastCookingLog    = &log_entry;

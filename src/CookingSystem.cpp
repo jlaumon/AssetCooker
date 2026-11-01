@@ -27,6 +27,10 @@
 bool gDebugFailCookingRandomly = false;
 
 
+#define ANSI_BRIGHTRED	"\x1b[91m"
+#define ANSI_END		"\x1b[0m"
+
+
 // Helper to add a value to a vector-like container only if it's not already in it.
 template<typename taValue, typename taContainer>
 constexpr bool gPushBackUnique(taContainer& ioContainer, const taValue& inElem)
@@ -264,9 +268,16 @@ void CookingCommand::UpdateDirtyState()
 	if (all_output_missing)
 		dirty_state |= AllOutputsMissing;
 
-	bool last_cook_is_waiting = mLastCookingLog && mLastCookingLog->mCookingState.Load() == CookingState::Waiting;
-	bool last_cook_is_cleanup = mLastCookingLog && mLastCookingLog->mIsCleanup;
-	bool last_cook_is_error   = mLastCookingLog && mLastCookingLog->mCookingState.Load() == CookingState::Error;
+	bool last_cook_is_waiting = false;
+	bool last_cook_is_cleanup = false;
+	bool last_cook_is_error   = false;
+	if (mLastCookingLog)
+	{
+		auto cooking_state	 = mLastCookingLog->mCookingState.Load();
+		last_cook_is_cleanup = mLastCookingLog->mIsCleanup;
+		last_cook_is_waiting = cooking_state == CookingState::Waiting;
+		last_cook_is_error   = cooking_state == CookingState::Error;
+	}
 
 	if (last_cook_is_error)
 		dirty_state |= Error;
@@ -1043,6 +1054,17 @@ void CookingSystem::QueueErroredCommands()
 }
 
 
+void CookingLogEntry::SetOutput(StringView inOutput)
+{
+	// This needs to happen while the state is still cooking, otherwise other threads might try to read the output.
+	// TODO: would be nice to be able to incrementally add to the output log instead (doable with atomics but the format spans make this more difficult)
+	gAssert(mCookingState.Load() == CookingState::Cooking);
+
+	mOutput = inOutput;
+	gParseANSIColors(inOutput, mOutputFormatSpans);
+}
+
+
 static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStringView& ioOutput, HANDLE inJobObject)
 {
 	gAppendFormat(ioOutput, "Command Line: %s\n\n", inCommandLine.AsCStr());
@@ -1057,7 +1079,7 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 	const char*  command_line_array[] = { inCommandLine.AsCStr(), nullptr };
 	if (subprocess_create(command_line_array, options, &process))
 	{
-		gAppendFormat(ioOutput, "[error] Failed to create process - %s\n", GetLastErrorString().AsCStr());
+		gAppendFormat(ioOutput, ANSI_BRIGHTRED "[error] Failed to create process - %s\n" ANSI_END, GetLastErrorString().AsCStr());
 		return false;
 	}
 
@@ -1091,7 +1113,7 @@ static bool sRunCommandLine(StringView inCommandLine, StringPool::ResizableStrin
 	// Log the exit code if we have it.
 	if (!got_exit_code)
 	{
-		gAppendFormat(ioOutput, "[error] Failed to get exit code - %s\n", GetLastErrorString().AsCStr());
+		gAppendFormat(ioOutput, ANSI_BRIGHTRED "[error] Failed to get exit code - %s\n" ANSI_END, GetLastErrorString().AsCStr());
 		success = false;
 	}
 	else
@@ -1174,13 +1196,13 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 			if (input.IsDeleted())
 			{
 				all_inputs_exist = false;
-				gAppendFormat(output_str, "[error] Input missing: %s\n", input.ToString().AsCStr());
+				gAppendFormat(output_str, ANSI_BRIGHTRED "[error] Input missing: %s\n" ANSI_END, input.ToString().AsCStr());
 			}
 		}
 
 		if (!all_inputs_exist)
 		{
-			log_entry.mOutput = output_str.AsStringView();
+			log_entry.SetOutput(output_str.AsStringView());
 			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
@@ -1196,13 +1218,13 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 			if (!success)
 			{
 				all_dirs_exist = false;
-				gAppendFormat(output_str, "[error] Failed to create directory for %s\n", output_file.GetFile().ToString().AsCStr());
+				gAppendFormat(output_str, ANSI_BRIGHTRED "[error] Failed to create directory for %s\n" ANSI_END, output_file.GetFile().ToString().AsCStr());
 			}
 		}
 
 		if (!all_dirs_exist)
 		{
-			log_entry.mOutput = output_str.AsStringView();
+			log_entry.SetOutput(output_str.AsStringView());
 			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
@@ -1211,8 +1233,8 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	// Fake random failures for debugging.
 	if (gDebugFailCookingRandomly && (gRand32() % 5) == 0)
 	{
-		output_str.Append("Uh oh! This is a fake failure for debug purpose!\n");
-		log_entry.mOutput = output_str.AsStringView();
+		output_str.Append(ANSI_BRIGHTRED "Uh oh! This is a fake failure for debug purpose!\n" ANSI_END);
+		log_entry.SetOutput(output_str.AsStringView());
 		log_entry.mCookingState.Store(CookingState::Error);
 		return;
 	}
@@ -1224,28 +1246,28 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	{
 		if (!gFormatCommandString(rule.mDepFileCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()), dep_command_line))
 		{
-			output_str.Append("[error] Failed to format dep file command line.\n");
-			log_entry.mOutput = output_str.AsStringView();
+			output_str.Append(ANSI_BRIGHTRED "[error] Failed to format dep file command line.\n" ANSI_END);
+			log_entry.SetOutput(output_str.AsStringView());
 			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
 	}
 
-	bool success = false;
+	bool command_success = false;
 	if (rule.mCommandType == CommandType::CommandLine)
 	{
 		// Build the command line.
 		TempString command_line;
 		if (!gFormatCommandString(rule.mCommandLine, gFileSystem.GetFile(ioCommand.GetMainInput()), command_line))
 		{
-			output_str.Append("[error] Failed to format command line.\n");
-			log_entry.mOutput = output_str.AsStringView();
+			output_str.Append(ANSI_BRIGHTRED "[error] Failed to format command line.\n" ANSI_END);
+			log_entry.SetOutput(output_str.AsStringView());
 			log_entry.mCookingState.Store(CookingState::Error);
 			return;
 		}
 
 		// Run the command line.
-		success = sRunCommandLine(command_line, output_str, mJobObject);
+		command_success = sRunCommandLine(command_line, output_str, mJobObject);
 	}
 	else
 	{
@@ -1253,20 +1275,20 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 		switch (rule.mCommandType)
 		{
 		case CommandType::CopyFile:
-			success = sRunCopyFile(ioCommand, output_str);
+			command_success = sRunCopyFile(ioCommand, output_str);
 			break;
 		default:
 			gAssert(false);
-			success = false;
+			command_success = false;
 			break;
 		}
 	}
 
 	// If there's a dep file command line, run it next.
-	if (success && !dep_command_line.Empty())
+	if (command_success && !dep_command_line.Empty())
 	{
 		output_str.Append("\nDep File "); // No end line on purpose, we want to prepend the line added inside the sRunCommandLine.
-		success = sRunCommandLine(dep_command_line, output_str, mJobObject);
+		command_success = sRunCommandLine(dep_command_line, output_str, mJobObject);
 	}
 
 	// Set the end time and add the duration at the end of the log.
@@ -1274,9 +1296,9 @@ void CookingSystem::CookCommand(CookingCommand& ioCommand, CookingThread& ioThre
 	gAppendFormat(output_str, "\nDuration: %.3f seconds\n", (double)(log_entry.mTimeEnd - log_entry.mTimeStart) / 1'000'000'000.0);
 
 	// Store the log output.
-	log_entry.mOutput = output_str.AsStringView();
+	log_entry.SetOutput(output_str.AsStringView());
 
-	if (!success)
+	if (!command_success)
 	{
 		log_entry.mCookingState.Store(CookingState::Error);
 	}
@@ -1305,24 +1327,29 @@ void CookingSystem::CleanupCommand(CookingCommand& ioCommand, CookingThread& ioT
 
 	StringPool::ResizableStringView output_str = ioThread.mStringPool.CreateResizableString();
 
-	bool error = false;
+	bool cleanup_success = true;
 	for (FileID output_id : ioCommand.mOutputs)
 	{
+		// Skip the file if it's already deleted (it would fail to delete and trigger an error)
+		if (output_id.GetFile().IsDeleted())
+			continue;
+
 		if (gFileSystem.DeleteFile(output_id))
 		{
 			gAppendFormat(output_str, "Deleted %s\n", output_id.GetFile().ToString().AsCStr());
 		}
 		else
 		{
-			gAppendFormat(output_str, "[error] Failed to delete %s%s\n", output_id.GetRepo().mRootPath.AsCStr(), output_id.GetFile().mPath.AsCStr());
-			error = true;
+			gAppendFormat(output_str, ANSI_BRIGHTRED "[error] Failed to delete %s%s\n" ANSI_END, output_id.GetRepo().mRootPath.AsCStr(), output_id.GetFile().mPath.AsCStr());
+			cleanup_success = false;
 		}
 	}
 
-	log_entry.mOutput       = output_str.AsStringView();
+	log_entry.SetOutput(output_str.AsStringView());
+
 	log_entry.mTimeEnd      = gGetSystemTimeAsFileTime();
 
-	if (error)
+	if (!cleanup_success)
 	{
 		log_entry.mCookingState.Store(CookingState::Error);
 	}
@@ -1395,6 +1422,9 @@ void CookingSystem::TimeOutUpdateThread()
 				if (log_entry->mCookingState.Load() == CookingState::Waiting)
 				{
 					log_entry->mCookingState.Store(CookingState::Error);
+
+					// Since we can't append to the log output at this point, remember this is a timeout error and we'll something in the UI instead.
+					log_entry->mNotAllOutputWrittenError = true;
 
 					// Update the total count of errors.
 					mCookingErrors.Add(1);

@@ -7,6 +7,7 @@
 
 #include "Core.h"
 
+#include <optional>
 #include <string_view>
 
 #include <Strings.h>
@@ -183,3 +184,32 @@ bool gStringViewToEnum(StringView inStrValue, taEnumType& outValue)
 
 	return false;
 }
+
+struct FormatColor
+{
+	uint8 mR	 = 0;
+	uint8 mG	 = 0;
+	uint8 mB	 = 0;
+	bool  mValid = false;
+
+	constexpr bool operator==(const FormatColor&) const = default;
+	
+	static constexpr FormatColor sBlack()		{ return {   0,   0,   0, true }; }
+	static constexpr FormatColor sRed()			{ return { 255,   0,   0, true }; }
+	static constexpr FormatColor sGreen()		{ return {   0, 255,   0, true }; }
+	static constexpr FormatColor sYellow()		{ return { 255, 255,   0, true }; }
+	static constexpr FormatColor sBlue()		{ return {   0,   0, 255, true }; }
+	static constexpr FormatColor sMagenta()		{ return { 255,   0, 255, true }; }
+	static constexpr FormatColor sCyan()		{ return {   0, 255,   0, true }; }
+	static constexpr FormatColor sWhite()		{ return { 255, 255, 255, true }; }
+	static constexpr FormatColor sBrightRed()	{ return { 255, 100, 100, true }; }
+};
+
+struct FormatSpan
+{
+	StringView	mSpan;
+	FormatColor mColor;
+};
+
+// Parse the string for ANSI escape sequences with color codes
+void gParseANSIColors(StringView inStr, Vector<FormatSpan>& outSpans);

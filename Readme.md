@@ -187,7 +187,7 @@ In the texture compression example above, consider a setup where the Repo `Sourc
 | `{ Dir }`                 | The directory part of the input file path.                         | `textures\`                 |
 | `{ Dir_NoTrailingSlash }` | The directory part of the input file path, without trailing slash. | `textures`                  |
 | `{ Path }`                | The path of the input file.                                        | `textures\brick_albedo.png` |
-| `{ Repo:Bin }`            | The path of the Repo named "Source".                               | `D:\bin`                    |
+| `{ Repo:Bin }`            | The path of the Repo named "Bin".                               | `D:\bin`                    |
 
 So the OutputPath described as `'{ Repo:Bin }{ Dir }{ File }.dds'` will become `D:\bin\textures\brick_albedo.dds`.
 
