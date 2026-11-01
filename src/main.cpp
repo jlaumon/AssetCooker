@@ -236,6 +236,7 @@ int WinMain(
 		SetConsoleCtrlHandler(sCtrlHandler, TRUE);
 	}
 
+	// DEPRECATED! Use -config_file instead.
 	// Check if we want to change the working directory.
 	// Note: This has to be done before gApp.Init() since that changes where the config.toml file is read from.
 	if (auto working_dir = args.Find("-working_dir"); working_dir != args.End())
@@ -243,6 +244,21 @@ int WinMain(
 		TempString abs_working_dir = gGetAbsolutePath(working_dir->mValue);
 		if (!SetCurrentDirectoryA(abs_working_dir.AsCStr()))
 			gAppFatalError(R"(Failed to set working directory to "%s")", abs_working_dir.AsCStr());
+	}
+
+	// Check if we want to set a custom config file path.
+	// Note: This has to be done before gApp.Init() since that changes where the config.toml file is read from.
+	if (auto config_file = args.Find("-config_file"); config_file != args.End())
+	{
+		TempString abs_path = gGetAbsolutePath(config_file->mValue);
+		TempString dir		= gGetDirPart(abs_path);
+		if (!SetCurrentDirectoryA(dir.AsCStr()))
+			gAppFatalError(R"(Failed to set working directory to "%s")", dir.AsCStr());
+
+		if (gGetFileNamePart(abs_path).Empty())
+			gAppFatalError(R"(Config file name cannot be empty)");
+
+		gApp.mConfigFilePath = abs_path;
 	}
 
 	// Forward gTrace to gAppLog so we can see the test logs in Asset Cooker's logs.
@@ -306,6 +322,12 @@ int WinMain(
 	// Show the window
 	::ShowWindow(hwnd, gApp.mStartMinimized ? SW_SHOWMINIMIZED : SW_SHOWDEFAULT);
 	::UpdateWindow(hwnd);
+
+	// If there's an init error, make sure the window is not minimized.
+	// Note: calling ShowWindow a second time is necessary. AssetCooker_Launch uses STARTF_USESHOWWINDOW with CreateProcess
+	// which means the first call to ShowWindow ignores the show command we pass to it.
+	if (gApp.HasInitError())
+		::ShowWindow(hwnd, SW_SHOWNORMAL);
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -387,9 +409,10 @@ int WinMain(
 			while (true)
 			{
 				// Wait for either a window event (QS_ALLINPUT), exit being requested, or one second.
+				// TODO: add a mDrawRequestedEvent that we could set whenever we want to force a redraw (eg. added a log, or remote control paused/unpaused)
 				constexpr int timeout_ms = 1000;
 				HANDLE		  handles[]	 = { gApp.mExitRequestedEvent.GetOSHandle() };
-				if (MsgWaitForMultipleObjects(1, handles, FALSE, timeout_ms, QS_ALLINPUT) != WAIT_TIMEOUT)
+				if (MsgWaitForMultipleObjects(gElemCount(handles), handles, FALSE, timeout_ms, QS_ALLINPUT) != WAIT_TIMEOUT)
 					break; // Something happened, stop idling!
 
 				// After one second, check if the cooking system is still idle (files may have been modified).
@@ -419,7 +442,6 @@ int WinMain(
 			break;
 
 		// If the window is minimized, never draw.
-		gAssert(gApp.mMainWindowIsMinimized == (bool)IsIconic(hwnd));
 		if (gApp.mMainWindowIsMinimized)
 		{
 			// We're not going to call EndFrame, so reset the timer.

@@ -1,0 +1,19 @@
+---
+BasedOnStyle: Microsoft
+AccessModifierOffset: '-4'
+AlignConsecutiveAssignments: AcrossEmptyLines
+AlignEscapedNewlines: Left
+Cpp11BracedListStyle: 'false'
+PointerAlignment: Left
+TabWidth: '4'
+UseTab: Always
+ColumnLimit: 180
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
+AllowShortFunctionsOnASingleLine: All
+AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
+AlignConsecutiveMacros: AcrossEmptyLinesAndComments
+AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
+AllowShortBlocksOnASingleLine: Always
+...

@@ -116,3 +116,8 @@ inline App gApp;
 		(void)sizeof(printf(format, __VA_ARGS__)); \
 		gApp._FatalError(format, __VA_ARGS__);      \
 	} while (false)
+
+
+// Build a unique name to use with shared Win32 objects (Events, Mutex, etc.)
+// Note: This is duplicated in asset_cooker_api.c to be able to open shared objects from another process.
+TempString gGetAssetCookerIdentifier(StringView inConfigFilePath);

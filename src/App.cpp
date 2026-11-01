@@ -10,11 +10,11 @@
 #include "RuleReader.h"
 #include "Debug.h"
 #include "CookingSystem.h"
+#include "RemoteControl.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Mutex.h>
 #include <Bedrock/StringFormat.h>
 #include <Bedrock/String.h>
-#include "UI.h"
 
 
 #include "win32/dbghelp.h"
@@ -78,6 +78,40 @@ StringView gToStringView(SaveDumpOnCrash inVar)
 }
 
 
+static uint64 sHashStringFNV1a(StringView inString)
+{
+	uint64 hash = 0xcbf29ce484222325ULL;
+
+	for (uint8 c : inString)
+	{
+		hash ^= c;
+		hash += (hash << 1) + (hash << 4) + (hash << 5) + (hash << 7) + (hash << 8) + (hash << 40);
+	}
+
+	return hash;
+}
+
+
+// Build a unique name to use with shared Win32 objects (Events, Mutex, etc.)
+// Note: This is duplicated in asset_cooker_api.c to be able to open shared objects from another process.
+TempString gGetAssetCookerIdentifier(StringView inConfigFilePath)
+{
+	// The identifier is based on the absolute path of the config file.
+	TempString abs_path = gGetAbsolutePath(inConfigFilePath);
+
+	// Make it lower case and backwards slashes only to avoid ambiguous cases.
+	gToLowercase(abs_path);
+	gNormalizePath(abs_path);
+
+	// Hash it because it may be too long (names are limited to 260 chars).
+	uint64 config_file_path_hash = sHashStringFNV1a(abs_path.AsCStr());
+
+	// Add Asset Cooker in front.
+	return gTempFormat("Asset Cooker %016llX", config_file_path_hash);
+}
+
+
+
 void App::Init()
 {
 	mLog.mAutoAddTime = true;
@@ -123,10 +157,12 @@ void App::Init()
 	// Open the log file after reading the config since it can change the log directory.
 	OpenLogFile();
 
+	TempString asset_cooker_id = gGetAssetCookerIdentifier(mConfigFilePath);
+
 	// Lock a system-wide mutex to prevent multiple instances of the app from running at the same time.
 	// The name of the mutex is what matters, so make sure it's unique by including a UUID
 	// and the configurable window title (to allow multiple instances if they are cooking different projects).
-	mSingleInstanceMutex = CreateMutexA(nullptr, FALSE, gTempFormat("Asset Cooker eb835e40-e91e-4cfb-8e71-a68d3367bb7e %s", mMainWindowTitle.AsCStr()).AsCStr());
+	mSingleInstanceMutex = CreateMutexA(nullptr, FALSE, gTempFormat("%s %s", asset_cooker_id.AsCStr(), "mSingleInstanceMutex").AsCStr());
 	if (GetLastError() == ERROR_ALREADY_EXISTS)
 		gAppFatalError("An instance of Asset Cooker is already running. Too many Cooks!");
 
@@ -134,9 +170,15 @@ void App::Init()
 	if (!HasInitError())
 		gReadRuleFile(mRuleFilePath);
 
-	// If all is good, start scanning files.
 	if (!HasInitError())
+	{
+		// Initilialize the remote control.
+		// Note: Do this before starting monitoring/cooking because the remote control might want to pause cooking immediately.
+		gRemoteControlInit(asset_cooker_id);
+
+		// Start scanning files.
 		gFileSystem.StartMonitoring();
+	}
 }
 
 
@@ -145,6 +187,9 @@ void App::Exit()
 	// When running without UI, some user pref settings are overriden. Don't save the settings.
 	if (!mNoUI)
 		gWriteUserPreferencesFile(mUserPrefsFilePath);
+
+	// Shutdown the remote control.
+	gRemoteControlExit();
 
 	// Remove exception handler.
 	SetUnhandledExceptionFilter(nullptr);

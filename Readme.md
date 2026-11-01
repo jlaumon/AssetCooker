@@ -214,6 +214,12 @@ Command Variables also support a slice syntax similar to Python (eg. `{ File[1:3
 - `-no_ui`: Run without UI, cook everything then exit. Exit code is 0 on success. 
 - `-test`: Run unit tests then exit. Exit code is 0 on success. Note: Does nothing when Asset Cooker is compiled in Release mode (tests are disabled). 
 
+## Remote Control API
+
+It's possible to have basic control over Asset Cooker from another process through a C API. With this, your game can start Asset Cooker, wait for it to finish cooking, check if there were errors, etc.
+
+For more information, take a look at the [Remote Control example](examples/RemoteControl/Readme.md) and [AssetCookerAPI.h](api/AssetCookerAPI.h).
+
 ## Contributing 
 Open an issue before doing a pull request. It's a hobby project, please be nice.
 

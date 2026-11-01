@@ -10,6 +10,7 @@
 #include "Notifications.h"
 #include "CommandVariables.h"
 #include "UI.h"
+#include "RemoteControl.h"
 #include <Bedrock/Test.h>
 #include <Bedrock/Algorithm.h>
 #include <Bedrock/Ticks.h>
@@ -299,6 +300,33 @@ void CookingCommand::UpdateDirtyState()
 		}
 	}
 
+	// Update the current number of commands in error state.
+	{
+		bool was_error = (mDirtyState & Error) != 0;
+		bool is_error  = (dirty_state & Error) != 0;
+
+		// Check if we need to change the current number or errors.
+		int	 error_delta = 0;
+		if (was_error && !is_error)
+			error_delta = -1;
+		else if (!was_error && is_error)
+			error_delta = +1;
+
+		if (error_delta != 0)
+		{
+			// Update the error count.
+			int prev_error_count = gCookingSystem.mErroredCommandCount.Add(error_delta);
+			int curr_error_count = prev_error_count + error_delta;
+
+			// Update the has-error state of remote control if necessary.
+			if (curr_error_count == 0)
+				gRemoteControlOnHasErrorsChange(false);
+			else if (curr_error_count == 1)
+				gRemoteControlOnHasErrorsChange(true);
+		}
+	}
+
+	// Store the new dirty state.
 	mDirtyState = dirty_state;
 
 	// Wait until the last cook is finished before re-adding to the queue (or removing it from the queue).
@@ -771,11 +799,10 @@ CookingCommand* CookingSystem::FindCommandByMainInput(CookingRuleID inRule, File
 }
 
 
-bool CookingSystem::ValidateRules()
+bool CookingSystem::ValidateRules() const
 {
-	TempHashSet<StringView> all_names;
-	int                     errors = 0;
-	Span                    rules  = GetRules();
+	int	 errors = 0;
+	Span rules	= GetRules();
 
 	// TODO: This is a temporary limitation because the current code compares USN numbers from multiple drives (and that doesn't work).
 	//		 Solution are to either store one USN per drive involved in commands, etc. (but storing variable number of USN seems annoying/inefficent),
@@ -789,16 +816,7 @@ bool CookingSystem::ValidateRules()
 	for (const CookingRule& rule : rules)
 	{
 		// Validate the name.
-		if (!rule.mName.Empty())
-		{
-			auto [_, result] = all_names.Insert(rule.mName);
-			if (result == EInsertResult::Found)
-			{
-				errors++;
-				gAppLogError(R"(Found multiple rules with name "%s")", rule.mName.AsCStr());
-			}
-		}
-		else
+		if (rule.mName.Empty())
 		{
 			errors++;
 			gAppLogError(R"(Rule[%d] has no name)", rules.GetIndex(rule));
@@ -926,7 +944,11 @@ void CookingSystem::StartCooking()
 		}, [this](Thread&) { TimeOutUpdateThread(); });
 
 	// Initialize cooking paused bool.
-	mCookingPaused = mCookingStartPaused;
+	if (mCookingPaused != mCookingStartPaused)
+	{
+		mCookingPaused = mCookingStartPaused;
+		gRemoteControlOnIsPausedChange(mCookingPaused);
+	}
 
 	// If the cooking isn't paused, queue the dirty commands.
 	if (!IsCookingPaused())
@@ -956,6 +978,9 @@ void CookingSystem::StopCooking()
 
 void CookingSystem::SetCookingPaused(bool inPaused)
 {
+	// Cooking can be paused/unpaused by multiple threads so it needs a lock (main thread/UI and RemoteControl thread)
+	LockGuard lock(mCookingPausedMutex);
+
 	// If cooking isn't started yet, only change the start paused bool.
 	// Setting mCookingPaused to true before starting the cooking would cause dirty commands to be queued twice.
 	if (!mTimeOutUpdateThread.IsJoinable())
@@ -973,7 +998,6 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 
 		// Empty the cooking queue.
 		mCommandsToCook.Clear();
-
 	}
 	else
 	{
@@ -982,6 +1006,9 @@ void CookingSystem::SetCookingPaused(bool inPaused)
 		// Queue all the dirty commands that need to cook.
 		QueueDirtyCommands();
 	}
+
+	// Update the remote control state.
+	gRemoteControlOnIsPausedChange(inPaused);
 }
 
 
@@ -1595,7 +1622,7 @@ bool CookingSystem::IsIdle() const
 }
 
 
-void CookingSystem::UpdateNotifications()
+void CookingSystem::UpdateNotifications(bool inIsCookingIdle)
 {
 	// The code below doesn't check if the cooking is finished because the queue is empty or because cooking is paused.
 	// To make things simpler, never do notifications when cooking is paused (we don't need them anyway).
@@ -1622,7 +1649,7 @@ void CookingSystem::UpdateNotifications()
 	}
 
 	// Cooking system being idle is equivalent to cooking being finished.
-	bool cooking_is_finished = IsIdle();
+	bool cooking_is_finished = inIsCookingIdle;
 	int  error_count         = mCookingErrors.Load() - mLastNotifCookingErrors;
 
 	if (cooking_is_finished)
